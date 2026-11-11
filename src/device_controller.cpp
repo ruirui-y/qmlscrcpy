@@ -82,8 +82,8 @@ void DeviceController::Connect(const QString &serial)
     qsc::session::ServerParams params;
     params.serial_ = serial.trimmed();
     params.server_local_path_ = QCoreApplication::applicationDirPath() + "/scrcpy-server";
-    params.max_size_ = 720;
-    params.bit_rate_ = 8000000;                                                                 // 2 Mbps 在 720p 下偏糊，给到 8 Mbps
+    params.max_size_ = 0;                                                                       // 0 = 不缩放，用设备原生分辨率；720 拉到全屏窗口就是糊的
+    params.bit_rate_ = 12000000;                                                                // 原生分辨率下 8 Mbps 也不够，给到 12 Mbps
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下。

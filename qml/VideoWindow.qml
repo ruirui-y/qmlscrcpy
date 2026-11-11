@@ -127,19 +127,43 @@ Window {
         }
     }
 
-    // 右下角拖拽改尺寸：无边框窗口没有系统的边角
-    MouseArea {
+    // 右下角拖拽改尺寸：无边框窗口没有系统的边角，所以画一个看得见的把手
+    Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        width: 14
-        height: 14
+        width: 16
+        height: 16
+        color: "transparent"
+
+        // 三条斜线当把手图案，比纯隐形的热区好找
+        Repeater {
+            model: 3
+
+            Rectangle {
+                width: 11
+                height: 1
+                color: "#6a6a6a"
+                rotation: -45
+                x: 3 + index * 4
+                y: 11 - index * 4
+            }
+        }
+    }
+
+    MouseArea {
+        id: resizeArea
+
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        width: 16
+        height: 16
         cursorShape: Qt.SizeFDiagCursor
         property point pressGlobal
-        property size pressSize_h
+        property size pressSize
 
         onPressed: {
             pressGlobal = mapToGlobal(mouse.x, mouse.y)
-            pressSize_h = Qt.size(videoWindow.width, videoWindow.height)
+            pressSize = Qt.size(videoWindow.width, videoWindow.height)
         }
         onPositionChanged: {
             if (!pressed) {
@@ -147,10 +171,18 @@ Window {
             }
             const current = mapToGlobal(mouse.x, mouse.y)
             videoWindow.width = Math.max(videoWindow.minimumWidth,
-                                         pressSize_h.width + (current.x - pressGlobal.x))
+                                         pressSize.width + (current.x - pressGlobal.x))
             videoWindow.height = Math.max(videoWindow.minimumHeight,
-                                          pressSize_h.height + (current.y - pressGlobal.y))
+                                          pressSize.height + (current.y - pressGlobal.y))
         }
+    }
+
+    // 最外层一圈细边框：无边框窗口没有系统边框，不加这个看不出窗口边界在哪
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.color: "#3f3f3f"
+        border.width: 1
     }
 
     Component.onCompleted: {
@@ -171,15 +203,19 @@ Window {
         ready = saved.width > 0
     }
 
-    // 第一帧到了、用户又没定过尺寸：窗口调成和帧一样的物理像素，纹理 1:1 不插值
+    // 第一帧到了、用户又没定过尺寸：窗口调成和帧一样的物理像素，纹理 1:1 不插值。
+    // 再按屏幕可用宽度封个顶，免得原生分辨率把窗口撑到屏幕外面去。
     onFrameSizeChanged: {
         if (frameSize.width <= 0 || appSettings.VideoGeometry("video").width > 0) {
             return
         }
         const ratio = Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
+        const maxWidth = Math.round(Screen.desktopAvailableWidth * 0.8)
+        const wanted = Math.round(frameSize.width / ratio)
+        const targetWidth = Math.min(wanted, maxWidth)
         applying = true
-        width = Math.round(frameSize.width / ratio)
-        height = Math.round(frameSize.height / ratio) + titleBar.height
+        width = targetWidth
+        height = Math.round(targetWidth * frameSize.height / frameSize.width) + titleBar.height
         applying = false
         ready = true
     }

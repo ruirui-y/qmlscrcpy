@@ -48,3 +48,23 @@ void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width,
     store.endGroup();
     store.sync();
 }
+
+QPoint AppSettings::VideoPosition(const QString &key) const
+{
+    QSettings &store = Store();
+    store.beginGroup(key);
+    const int x = store.value(QStringLiteral("x"), -1).toInt();
+    const int y = store.value(QStringLiteral("y"), -1).toInt();
+    store.endGroup();
+    return QPoint(x, y);
+}
+
+void AppSettings::SaveVideoPosition(const QString &key, int x, int y)
+{
+    QSettings &store = Store();
+    store.beginGroup(key);
+    store.setValue(QStringLiteral("x"), x);
+    store.setValue(QStringLiteral("y"), y);
+    store.endGroup();
+    store.sync();
+}
