@@ -1,7 +1,6 @@
-#include "qsc/protocol/DeviceMessage.h"
+#include "protocol/device_message.h"
 
-#include "qsc/protocol/ControlMessage.h"
-#include "qsc/protocol/Wire.h"
+#include "protocol/wire.h"
 
 namespace qsc::protocol {
 

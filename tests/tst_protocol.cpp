@@ -3,10 +3,10 @@
 #include <QByteArray>
 #include <QString>
 
-#include "qsc/protocol/ControlMessage.h"
-#include "qsc/protocol/DeviceMessage.h"
-#include "qsc/protocol/VideoPacket.h"
-#include "qsc/protocol/Wire.h"
+#include "protocol/control_message.h"
+#include "protocol/device_message.h"
+#include "protocol/video_packet.h"
+#include "protocol/wire.h"
 
 using namespace qsc::protocol;
 

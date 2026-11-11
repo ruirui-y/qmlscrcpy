@@ -1,6 +1,6 @@
-#include "qsc/protocol/ControlMessage.h"
+#include "protocol/control_message.h"
 
-#include "qsc/protocol/Wire.h"
+#include "protocol/wire.h"
 
 namespace qsc::protocol {
 namespace {

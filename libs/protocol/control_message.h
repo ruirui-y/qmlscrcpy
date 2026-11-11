@@ -6,6 +6,8 @@
 #include <QString>
 #include <QtGlobal>
 
+#include "protocol/wire.h"
+
 namespace qsc::protocol {
 
 // 客户端发给设备的控制消息，走控制 socket。
@@ -26,9 +28,6 @@ enum class ControlType : quint8
     SetDisplayPower = 10,
     RotateDevice = 11,
 };
-
-// 设备端按"整条消息不超过 256 KiB"分配接收缓冲区，超了会直接断连接
-inline constexpr int kMaxMessageBytes = 1 << 18;
 
 // 注文本一次最多 300 字节。注文本很慢，超长的打字体验反而更差
 inline constexpr int kMaxInjectTextBytes = 300;

@@ -1,4 +1,4 @@
-#include "qsc/adb/AdbRunner.h"
+#include "adb/adb_runner.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>

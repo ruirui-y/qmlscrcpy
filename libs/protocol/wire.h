@@ -5,6 +5,10 @@
 
 namespace qsc::protocol {
 
+// 设备端按"整条消息不超过 256 KiB"分配接收缓冲区，超了直接断连接。
+// 控制消息和设备消息都受这个上限约束，所以放在最底层这个头里。
+inline constexpr int kMaxMessageBytes = 1 << 18;
+
 // 协议里所有整数都是大端（网络字节序）。
 // 这里不用 QDataStream：它的字节序是可以改的成员状态，读代码时看不出到底按哪种写的。
 inline void AppendU8(QByteArray &out, quint8 value)

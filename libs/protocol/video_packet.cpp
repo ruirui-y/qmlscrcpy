@@ -1,6 +1,6 @@
-#include "qsc/protocol/VideoPacket.h"
+#include "protocol/video_packet.h"
 
-#include "qsc/protocol/Wire.h"
+#include "protocol/wire.h"
 
 namespace qsc::protocol {
 

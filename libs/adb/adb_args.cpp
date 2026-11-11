@@ -1,4 +1,4 @@
-#include "qsc/adb/AdbArgs.h"
+#include "adb/adb_args.h"
 
 namespace qsc::adb {
 

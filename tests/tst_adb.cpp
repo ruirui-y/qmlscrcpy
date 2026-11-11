@@ -5,8 +5,8 @@
 
 #include <initializer_list>
 
-#include "qsc/adb/AdbArgs.h"
-#include "qsc/adb/AdbRunner.h"
+#include "adb/adb_args.h"
+#include "adb/adb_runner.h"
 
 using namespace qsc::adb;
 

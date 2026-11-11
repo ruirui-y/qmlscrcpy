@@ -1,15 +1,17 @@
-# 只在 Windows 上把 adb.exe 拷到输出目录，省得每次手动配 PATH。
-# adb 二进制还没入库：先把 SetAdbPath / QS_ADB_PATH 当兜底，等 P2b 接真机时再把
-# 官方 platform-tools 里的 adb.exe 放进 third_party/adb/win/。
-
+# adb 命令层：只依赖 QtCore（QProcess + QStringList），不碰界面也不碰协议。
+#
+# adb.exe 本身不入库（5.8 MB，Google platform-tools 里随时下），运行时按这个顺序找：
+#   1. SetAdbPath() 显式设置
+#   2. 环境变量 QS_ADB_PATH
+#   3. 程序目录下的 adb.exe
+#   4. PATH 里的 adb
 add_library(qsc_adb STATIC
-    src/AdbArgs.cpp
-    src/AdbRunner.cpp
-    include/qsc/adb/AdbArgs.h
-    include/qsc/adb/AdbRunner.h
+    adb_args.cpp
+    adb_runner.cpp
+    adb_args.h
+    adb_runner.h
 )
 
-target_include_directories(qsc_adb PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(qsc_adb PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-# adb 层只依赖 QtCore：QProcess + QStringList，不碰界面也不碰协议
 target_link_libraries(qsc_adb PUBLIC Qt5::Core qs_options)
