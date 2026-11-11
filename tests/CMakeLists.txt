@@ -1,12 +1,15 @@
 find_package(Qt5 5.15 REQUIRED COMPONENTS Test)
 
-# 每个测试文件一个可执行文件，ctest 里按名字跑
+# 每个测试文件一个可执行文件，ctest 里按名字单独跑
 add_executable(tst_protocol tst_protocol.cpp)
 target_link_libraries(tst_protocol PRIVATE qsc_protocol Qt5::Test)
-
 add_test(NAME protocol COMMAND tst_protocol)
+
+add_executable(tst_adb tst_adb.cpp)
+target_link_libraries(tst_adb PRIVATE qsc_adb Qt5::Test)
+add_test(NAME adb COMMAND tst_adb)
 
 # 测试程序运行时也要能找到 Qt5Core.dll；path_list_prepend 是 CMake 3.22 的写法，
 # 不用手动转义 PATH 里的分号
-set_tests_properties(protocol PROPERTIES
+set_tests_properties(protocol adb PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QS_QT_ROOT}/bin")
