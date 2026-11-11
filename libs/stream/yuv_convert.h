@@ -24,14 +24,14 @@ public:
     YuvConvert(const YuvConvert &) = delete;
     YuvConvert &operator=(const YuvConvert &) = delete;
 
-    QImage Convert(const Frame &frame);    // 转一帧，返回的 QImage 自己持有像素内存
+    QImage Convert(const Frame &frame);                                                         // 转一帧，返回的 QImage 自己持有像素内存
 
 private:
-    bool EnsureBuffers(const QSize &size);    // 尺寸变了就重建转换上下文和目标帧
+    bool EnsureBuffers(const QSize &size);                                                      // 尺寸变了就重建转换上下文和目标帧
 
-    SwsContext *context_ = nullptr;    // 转换上下文，帧尺寸变了才重建
-    AVFrame *rgb_frame_ = nullptr;    // 目标帧，像素由 FFmpeg 自己分配（见下面注释）
-    QSize size_;    // context_ 和 rgb_frame_ 对应的帧尺寸
+    SwsContext *context_ = nullptr;                                                             // 转换上下文，帧尺寸变了才重建
+    AVFrame *rgb_frame_ = nullptr;                                                              // 目标帧，像素由 FFmpeg 自己分配（见下面注释）
+    QSize size_;                                                                                // context_ 和 rgb_frame_ 对应的帧尺寸
 };
 
 } // namespace qsc::stream

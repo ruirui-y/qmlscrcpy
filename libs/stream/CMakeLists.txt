@@ -2,11 +2,13 @@
 # 只依赖 QtCore + Qt5::Network（读 socket）+ 协议层（包头）+ FFmpeg，不碰界面。
 add_library(qsc_stream STATIC
     h264_decoder.cpp
+    perf_stats.cpp
     video_reader.cpp
     yuv_convert.cpp
     h264_decoder.h
     video_reader.h
     yuv_convert.h
+    perf_stats.h
     frame.h
 )
 

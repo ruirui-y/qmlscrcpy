@@ -1,14 +1,30 @@
 #include "ui/video_item.h"
 
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QMutexLocker>
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
+#include <QTimer>
+
+#include "stream/perf_stats.h"
 
 VideoItem::VideoItem(QQuickItem *parent) : QQuickItem(parent)
 {
     setFlag(QQuickItem::ItemHasContents, true);
-    fps_timer_.start();
+
+    // 重绘请求由 GUI 线程的定时器发起：视频线程只负责存图，
+    // 一旦从视频线程投递事件，拖窗口时就会被 GUI 线程反过来堵死。
+    refresh_timer_ = new QTimer(this);
+    refresh_timer_->setInterval(8);
+    QObject::connect(refresh_timer_, &QTimer::timeout, this, &VideoItem::OnRefreshTimer);
+    refresh_timer_->start();
+
+    // 帧率统计同样在 GUI 线程
+    fps_timer_ = new QTimer(this);
+    fps_timer_->setInterval(1000);
+    QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::UpdateFps);
+    fps_timer_->start();
 }
 
 QSize VideoItem::FrameSize() const
@@ -19,7 +35,7 @@ QSize VideoItem::FrameSize() const
 
 bool VideoItem::KeepAspect() const
 {
-    return keep_aspect_;
+    return keep_aspect_.load();
 }
 
 int VideoItem::Fps() const
@@ -29,56 +45,80 @@ int VideoItem::Fps() const
 
 void VideoItem::SetKeepAspect(bool keep_aspect)
 {
-    if (keep_aspect_ == keep_aspect) {
+    if (keep_aspect_.exchange(keep_aspect) == keep_aspect) {
         return;
     }
-    keep_aspect_ = keep_aspect;
     emit KeepAspectChanged();
     update();
 }
 
-void VideoItem::Present(const qsc::stream::Frame &frame)
+void VideoItem::Present(const QImage &image)
 {
-    if (!frame.IsValid()) {
-        return;
-    }
-
-    // 帧率：每满一秒结算一次，界面拿 fps 属性显示
-    ++frames_in_window_;
-    if (fps_timer_.elapsed() >= 1000) {
-        fps_ = frames_in_window_;
-        frames_in_window_ = 0;
-        fps_timer_.restart();
-        emit FpsChanged();
-    }
-
-    // 转换放在主线程做：720p 大约 3~4 ms，换来渲染线程只做上传、不碰 FFmpeg
-    const QImage image = convert_.Convert(frame);
     if (image.isNull()) {
         return;
     }
 
-    bool size_changed = false;
     {
         QMutexLocker locker(&mutex_);
+        // 只留最新一张：视频线程比渲染快的时候，旧帧直接覆盖，不排队
         image_ = image;
         has_image_ = true;
-        if (frame_size_ != frame.Size()) {
-            frame_size_ = frame.Size();
-            size_changed = true;
-        }
+        frame_size_ = image.size();
     }
+    frames_arrived_.ref();
 
-    if (size_changed) {
-        emit FrameSizeChanged();
+    // 这里故意什么都不投递：重绘交给 OnRefreshTimer 在 GUI 线程里发
+}
+
+void VideoItem::Clear()
+{
+    {
+        QMutexLocker locker(&mutex_);
+        image_ = QImage();
+        has_image_ = false;
     }
     update();
+}
+
+void VideoItem::OnRefreshTimer()
+{
+    QSize current_size;
+    {
+        QMutexLocker locker(&mutex_);
+        current_size = frame_size_;
+    }
+
+    // 尺寸变了（设备旋转）才通知 QML；在 GUI 线程 emit，跨线程的事一点都不做
+    if (current_size != notified_size_) {
+        notified_size_ = current_size;
+        emit FrameSizeChanged();
+    }
+
+    // 有新图就请一次重绘
+    const int arrived = frames_arrived_.loadAcquire();
+    if (arrived != frames_painted_) {
+        frames_painted_ = arrived;
+        update();
+    }
+}
+
+void VideoItem::UpdateFps()
+{
+    static int last_arrived = 0;
+    const int arrived = frames_arrived_.loadAcquire();
+    const int frames = arrived - last_arrived;
+    last_arrived = arrived;
+    if (frames == fps_) {
+        return;
+    }
+    fps_ = frames;
+    emit FpsChanged();
 }
 
 QRectF VideoItem::TargetRect() const
 {
     const QSize frame_size = FrameSize();
-    if (!keep_aspect_ || frame_size.isEmpty()) {
+    if (!KeepAspect() || frame_size.isEmpty()) {
         return QRectF(0, 0, width(), height());
     }
 
@@ -115,11 +155,13 @@ QSGNode *VideoItem::updatePaintNode(QSGNode *old_node, UpdatePaintNodeData *)
         return old_node;
     }
 
+    QElapsedTimer upload_timer;
+    upload_timer.start();
+
     QSGTexture *texture = window()->createTextureFromImage(image, QQuickWindow::TextureIsOpaque);
     if (texture == nullptr) {
-        // 渲染上下文还没就绪，这张建不出来；丢掉节点，等下一帧再试
-        delete old_node;
-        return nullptr;
+        // 渲染上下文还没就绪，这张建不出来；保留旧节点，等下一帧再试
+        return old_node;
     }
 
     auto *node = static_cast<QSGSimpleTextureNode *>(old_node);
@@ -133,5 +175,7 @@ QSGNode *VideoItem::updatePaintNode(QSGNode *old_node, UpdatePaintNodeData *)
     node->setTexture(texture);
     node->setRect(TargetRect());
     node->markDirty(QSGNode::DirtyMaterial);
+
+    qsc::stream::PerfStats::Get().upload_us.fetchAndAddRelaxed(upload_timer.nsecsElapsed() / 1000);
     return node;
 }

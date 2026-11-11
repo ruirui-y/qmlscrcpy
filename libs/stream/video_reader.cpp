@@ -5,6 +5,7 @@
 
 #include "protocol/video_packet.h"
 #include "stream/h264_decoder.h"
+#include "stream/perf_stats.h"
 
 namespace qsc::stream {
 
@@ -13,6 +14,7 @@ using protocol::VideoPacketHeader;
 VideoReader::VideoReader(QTcpSocket *socket, H264Decoder *decoder, QObject *parent)
     : QThread(parent), socket_(socket), decoder_(decoder)
 {
+    report_timer_.start();
 }
 
 void VideoReader::Stop()
@@ -49,8 +51,12 @@ void VideoReader::run()
     QByteArray buffer;
     QVector<Frame> frames;
     QString error;
+    PerfStats &perf = PerfStats::Get();
+    QElapsedTimer stage_timer;
+    QElapsedTimer read_timer;
 
     for (;;) {
+        read_timer.start();
         if (!FillBuffer(buffer, VideoPacketHeader::kSize, &error)) {
             if (!stop_.load()) {
                 emit Failed(error);
@@ -78,16 +84,34 @@ void VideoReader::run()
         const QByteArray payload =
             buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
         buffer.remove(0, total);
+        perf.read_us.fetchAndAddRelaxed(read_timer.nsecsElapsed() / 1000);
 
         frames.clear();
-        if (!decoder_->Push(payload, header.IsConfig(), header.PtsUs(), frames, &error)) {
+        stage_timer.start();
+        const bool pushed =
+            decoder_->Push(payload, header.IsConfig(), header.PtsUs(), frames, &error);
+        perf.decode_us.fetchAndAddRelaxed(stage_timer.nsecsElapsed() / 1000);
+        if (!pushed) {
             emit Failed(error);
             emit Ended();
             return;
         }
 
         for (const Frame &frame : frames) {
-            emit FrameReady(frame);
+            stage_timer.start();
+            const QImage image = convert_.Convert(frame);
+            perf.convert_us.fetchAndAddRelaxed(stage_timer.nsecsElapsed() / 1000);
+
+            if (!image.isNull()) {
+                perf.frames.fetchAndAddRelaxed(1);
+                emit ImageReady(image);
+            }
+        }
+
+        // 每秒把各段耗时打一行，enabled 为 false 时这个函数立刻返回
+        if (report_timer_.elapsed() >= 1000) {
+            perf.ReportAndReset();
+            report_timer_.restart();
         }
     }
 }

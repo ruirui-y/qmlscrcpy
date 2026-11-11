@@ -13,6 +13,7 @@
 #include "app_settings.h"
 #include "device_controller.h"
 #include "stream/frame.h"
+#include "stream/perf_stats.h"
 #include "ui/video_item.h"
 
 namespace {
@@ -45,9 +46,9 @@ int main(int argc, char *argv[])
 
     // 视频帧最终走 OpenGL 纹理上传，先把默认格式定死，免得每台机器默认值不一样
     QSurfaceFormat format = QSurfaceFormat::defaultFormat();
-    format.setVersion(2, 0);                        // GL 2.0：老核显也能跑的最低线
-    format.setProfile(QSurfaceFormat::NoProfile);   // 不要求核心模式，兼容面最大
-    format.setSwapInterval(0);                      // 关垂直同步：投屏延迟第一刀
+    format.setVersion(2, 0);                                                                    // GL 2.0：老核显也能跑的最低线
+    format.setProfile(QSurfaceFormat::NoProfile);                                               // 不要求核心模式，兼容面最大
+    format.setSwapInterval(0);                                                                  // 关垂直同步：投屏延迟第一刀
     QSurfaceFormat::setDefaultFormat(format);
 
     QGuiApplication app(argc, argv);
@@ -56,6 +57,9 @@ int main(int argc, char *argv[])
 
     // Frame 要跨线程用信号槽传，先注册类型；VideoItem 暴露给 QML
     qRegisterMetaType<qsc::stream::Frame>("qsc::stream::Frame");
+
+    // QS_PERF=1 时每秒打一行链路耗时，用来定位拖窗口卡在哪一段
+    qsc::stream::PerfStats::Get().enabled = qEnvironmentVariableIsSet("QS_PERF");
     qmlRegisterType<VideoItem>("QmlScrcpy", 1, 0, "VideoSurface");
 
     // 连接/断开这套逻辑放控制器里，界面只负责点按钮和绑状态文字

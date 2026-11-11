@@ -83,7 +83,7 @@ void DeviceController::Connect(const QString &serial)
     params.serial_ = serial.trimmed();
     params.server_local_path_ = QCoreApplication::applicationDirPath() + "/scrcpy-server";
     params.max_size_ = 720;
-    params.bit_rate_ = 8000000;    // 2 Mbps 在 720p 下偏糊，给到 8 Mbps
+    params.bit_rate_ = 8000000;                                                                 // 2 Mbps 在 720p 下偏糊，给到 8 Mbps
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下。
@@ -91,7 +91,7 @@ void DeviceController::Connect(const QString &serial)
     // 在工作线程建、回主线程 Stop() 就会给别的线程的对象发事件，Qt 直接断言崩掉。
     // P4 会把它改成"一个专门的连接线程，session 从头到尾属于那个线程"。
     SetStatus(QStringLiteral("正在连接 %1 …").arg(params.serial_));
-    QCoreApplication::processEvents();    // 让状态文字先画出来
+    QCoreApplication::processEvents();                                                          // 让状态文字先画出来
 
     session_ = std::make_unique<qsc::session::ServerSession>(params);
     const qsc::session::ConnectResult result = session_->Start();
@@ -132,7 +132,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     video->setParent(nullptr);
     video->moveToThread(reader_);
 
-    QObject::connect(reader_, &qsc::stream::VideoReader::FrameReady, surface_, &VideoItem::Present);
+    QObject::connect(reader_, &qsc::stream::VideoReader::ImageReady, surface_, &VideoItem::Present);
     QObject::connect(reader_, &qsc::stream::VideoReader::Failed, this, [this](const QString &reason) {
         SetStatus(QStringLiteral("视频出错：%1").arg(reason));
     });

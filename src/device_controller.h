@@ -29,12 +29,12 @@ public:
     ~DeviceController();
 
     QString Status() const;
-    QString ProposedSerial() const;    // 刷新后建议填进输入框的序列号
+    QString ProposedSerial() const;                                                             // 刷新后建议填进输入框的序列号
 
-    Q_INVOKABLE void SetSurface(QObject *surface);    // QML 里把 VideoSurface 传进来
+    Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
-    Q_INVOKABLE void RefreshDevices();    // adb devices，刷新后填 proposedSerial
-    Q_INVOKABLE void Connect(const QString &serial);    // 同步阻塞，连完才返回
+    Q_INVOKABLE void RefreshDevices();                                                          // adb devices，刷新后填 proposedSerial
+    Q_INVOKABLE void Connect(const QString &serial);                                            // 同步阻塞，连完才返回
     Q_INVOKABLE void Disconnect();
 
 signals:
@@ -42,15 +42,15 @@ signals:
     void ProposedSerialChanged();
 
 private:
-    void ApplyConnected(const qsc::session::ConnectResult &result);    // 连接结果落地：接解码器和读线程
-    void TearDown();    // 停线程、关解码器、拆隧道
+    void ApplyConnected(const qsc::session::ConnectResult &result);                             // 连接结果落地：接解码器和读线程
+    void TearDown();                                                                            // 停线程、关解码器、拆隧道
     void SetStatus(const QString &status);
 
-    VideoItem *surface_ = nullptr;    // QML 那条视频画布，由 main 注入
-    QString status_;    // 给界面绑定的状态文字
-    QString proposed_serial_;    // 刷新出来的第一台设备序列号
+    VideoItem *surface_ = nullptr;                                                              // QML 那条视频画布，由 main 注入
+    QString status_;                                                                            // 给界面绑定的状态文字
+    QString proposed_serial_;                                                                   // 刷新出来的第一台设备序列号
 
-    std::unique_ptr<qsc::session::ServerSession> session_;    // 连接成功后一直持有
-    std::unique_ptr<qsc::stream::H264Decoder> decoder_;    // 解码器，和读线程一一对应
-    qsc::stream::VideoReader *reader_ = nullptr;    // 读线程，连着的时候存在
+    std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
+    std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应
+    qsc::stream::VideoReader *reader_ = nullptr;                                                // 读线程，连着的时候存在
 };
