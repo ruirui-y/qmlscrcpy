@@ -14,20 +14,11 @@ namespace qsc::adb {
 // 后者是命令本身失败（设备没连、端口被占），排查方向完全不同。
 struct AdbResult
 {
-    // 进程有没有起来
-    bool started_ = false;
-
-    // 是不是超时被杀掉的
-    bool timed_out_ = false;
-
-    // 进程退出码，没起来时是 -1
-    int exit_code_ = -1;
-
-    // 标准输出原文
-    QByteArray std_out_;
-
-    // 标准错误原文，出错时给界面显示用
-    QByteArray std_err_;
+    bool started_ = false;                                                                      // 进程有没有起来
+    bool timed_out_ = false;                                                                    // 是不是超时被杀掉的
+    int exit_code_ = -1;                                                                        // 进程退出码，没起来时是 -1
+    QByteArray std_out_;                                                                        // 标准输出原文
+    QByteArray std_err_;                                                                        // 标准错误原文，出错时给界面显示用
 
     bool Ok() const { return started_ && !timed_out_ && exit_code_ == 0; }
 
@@ -39,11 +30,8 @@ struct AdbResult
 // adb devices 输出里的一行
 struct AdbDevice
 {
-    // 序列号，或者 wifi 模式下的 "192.168.0.174:5555"
-    QString serial_;
-
-    // device / offline / unauthorized
-    QString state_;
+    QString serial_;                                                                            // 序列号，或者 wifi 模式下的 "192.168.0.174:5555"
+    QString state_;                                                                             // device / offline / unauthorized
 };
 
 // 解析 adb devices 的输出。

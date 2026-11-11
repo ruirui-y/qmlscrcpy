@@ -17,13 +17,9 @@ struct DeviceMessage
         UhidOutput = 3,        // 虚拟键鼠的输出事件，P4 之前不支持
     };
 
-    Type type_ = Type::Clipboard;
-
-    // Type::Clipboard 时有值，UTF-8 解出来的文本
-    QString text_ = QString();
-
-    // Type::AckClipboard 时有值，对应我们发出去的那个序号
-    quint64 sequence_ = 0;
+    Type type_ = Type::Clipboard;                                                               // 刚解出来的这条是哪一种
+    QString text_ = QString();                                                                  // Clipboard 时有值，UTF-8 解出来的文本
+    quint64 sequence_ = 0;                                                                      // AckClipboard 时有值，对应我们发出去的序号
 
     // 从缓冲区头部尝试解一条消息。
     // 返回 >0：解出一条，值是消耗掉的字节数（调用方据此从缓冲区里删掉这段）

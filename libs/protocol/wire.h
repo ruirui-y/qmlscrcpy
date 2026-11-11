@@ -97,8 +97,7 @@ public:
         return true;
     }
 
-    // 跳过不关心的字节，比如设备信息里那 64 字节设备名
-    bool Skip(int count)
+    bool Skip(int count)                                                                        // 跳过不关心的字节，比如设备信息里那 64 字节设备名
     {
         if (count < 0 || !Ensure(count)) {
             return false;
@@ -121,14 +120,9 @@ private:
         return true;
     }
 
-    // 被读的原始缓冲区，调用方保证它活得比本对象长
-    const QByteArray &data_;
-
-    // 下一个要读的字节下标
-    int pos_ = 0;
-
-    // 是否已经读越界；置 false 之后所有读都失败
-    bool ok_ = true;
+    const QByteArray &data_;                                                                    // 被读的原始缓冲区，调用方保证它活得比本对象长
+    int pos_ = 0;                                                                               // 下一个要读的字节下标
+    bool ok_ = true;                                                                            // 是否已经读越界；置 false 后所有读都失败
 };
 
 } // namespace qsc::protocol

@@ -21,12 +21,8 @@ struct VideoPacketHeader
     //   │ 标志位 + 时间戳（64 位）             │ 负载长度（32 位）   │
     //   └────────────────────────────────────┴───────────────────┘
     //     bit63 = 配置包（SPS/PPS），bit62 = 关键帧，bit0..61 = 展示时间戳（微秒）
-    //
-    // pts_flags_ 是原始 8 字节，标志位和时间戳混在一起，用下面三个方法拆开看。
-    quint64 pts_flags_ = 0;
-
-    // 紧跟其后的 H.264 数据字节数
-    quint32 size_ = 0;
+    quint64 pts_flags_ = 0;                                                                     // 原始 8 字节，标志位和时间戳混在一起
+    quint32 size_ = 0;                                                                          // 紧跟其后的 H.264 数据字节数
 
     bool IsConfig() const { return (pts_flags_ & kConfigFlag) != 0; }
     bool IsKeyFrame() const { return (pts_flags_ & kKeyFrameFlag) != 0; }
@@ -35,8 +31,7 @@ struct VideoPacketHeader
     // 从缓冲区头部解一个头；不足 12 字节返回 false（数据还没收全）
     static bool Parse(const QByteArray &buffer, VideoPacketHeader &header);
 
-    // 反向序列化，测试和造假数据时用
-    QByteArray Serialize() const;
+    QByteArray Serialize() const;                                                               // 反向序列化，测试和造假数据时用
 };
 
 } // namespace qsc::protocol

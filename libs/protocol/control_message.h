@@ -37,62 +37,33 @@ inline constexpr int kMaxClipboardBytes = kMaxMessageBytes - 14;
 // 一次按键动作。action 取 0 按下、1 抬起（对应安卓 KeyEvent.ACTION_DOWN / ACTION_UP）。
 struct KeycodeEvent
 {
-    // 0 按下，1 抬起
-    quint32 action_ = 0;
-
-    // AndroidKeycode 数值，P4 才引入语义枚举
-    quint32 keycode_ = 0;
-
-    // 长按重复次数；Qt 只给布尔，必须自己数
-    quint32 repeat_ = 0;
-
-    // 修饰键位掩码：Shift / Ctrl / Alt / Meta
-    quint32 meta_state_ = 0;
+    quint32 action_ = 0;                                                                        // 0 按下，1 抬起
+    quint32 keycode_ = 0;                                                                       // AndroidKeycode 数值，P4 才引入语义枚举
+    quint32 repeat_ = 0;                                                                        // 长按重复次数；Qt 只给布尔，必须自己数
+    quint32 meta_state_ = 0;                                                                    // 修饰键位掩码：Shift / Ctrl / Alt / Meta
 };
 
 // 一次触摸。位置是"视频帧坐标系里的像素 + 视频帧尺寸"，设备端自己换算到真实屏幕。
 // 不能直接送 0..1 归一化值：设备端拿到的是 sc_position，换算全靠 screen_size。
 struct TouchEvent
 {
-    // 0 按下，1 抬起，2 移动
-    quint8 action_ = 0;
-
-    // 触摸点 id；鼠标固定用一个大值，多指才换
-    quint64 pointer_id_ = 0;
-
-    // 视频帧坐标系里的像素位置
-    QPoint position_ = QPoint(0, 0);
-
-    // 视频帧尺寸，设备端靠它把像素换算到真实屏幕
-    QSize screen_size_ = QSize(0, 0);
-
-    // 0..1，按下给 1.0
-    float pressure_ = 0.0f;
-
-    // 触发本次动作的那个按键
-    quint32 action_buttons_ = 0;
-
-    // 当前所有按键状态
-    quint32 buttons_ = 0;
+    quint8 action_ = 0;                                                                         // 0 按下，1 抬起，2 移动
+    quint64 pointer_id_ = 0;                                                                    // 触摸点 id；鼠标固定用一个大值，多指才换
+    QPoint position_ = QPoint(0, 0);                                                            // 视频帧坐标系里的像素位置
+    QSize screen_size_ = QSize(0, 0);                                                           // 视频帧尺寸，设备端靠它换算
+    float pressure_ = 0.0f;                                                                     // 0..1，按下给 1.0
+    quint32 action_buttons_ = 0;                                                                // 触发本次动作的那个按键
+    quint32 buttons_ = 0;                                                                       // 当前所有按键状态
 };
 
 // 一次滚轮。滚动量单位是"格"，协议里按 [-16, 16] 归一化后转定点数。
 struct ScrollEvent
 {
-    // 视频帧坐标系里的像素位置
-    QPoint position_ = QPoint(0, 0);
-
-    // 视频帧尺寸
-    QSize screen_size_ = QSize(0, 0);
-
-    // 水平滚动量，单位"格"
-    float h_scroll_ = 0.0f;
-
-    // 垂直滚动量，单位"格"
-    float v_scroll_ = 0.0f;
-
-    // 当前按下的鼠标键
-    quint32 buttons_ = 0;
+    QPoint position_ = QPoint(0, 0);                                                            // 视频帧坐标系里的像素位置
+    QSize screen_size_ = QSize(0, 0);                                                           // 视频帧尺寸
+    float h_scroll_ = 0.0f;                                                                     // 水平滚动量，单位"格"
+    float v_scroll_ = 0.0f;                                                                     // 垂直滚动量，单位"格"
+    quint32 buttons_ = 0;                                                                       // 当前按下的鼠标键
 };
 
 // 向设备取剪贴板时，是否顺手把设备上的内容"剪切"掉
@@ -112,23 +83,20 @@ public:
     static QByteArray InjectText(const QString &text);
     static QByteArray InjectTouch(const TouchEvent &event);
     static QByteArray InjectScroll(const ScrollEvent &event);
+    static QByteArray ExpandNotificationPanel();                                                // 无负载，只有 1 字节类型
+    static QByteArray ExpandSettingsPanel();                                                    // 无负载
+    static QByteArray CollapsePanels();                                                         // 无负载
+    static QByteArray RotateDevice();                                                           // 无负载，相当于点一下旋转按钮
 
     // down=true 表示按下。屏幕熄灭时设备会顺手点亮，而不是执行返回
     static QByteArray BackOrScreenOn(bool down);
 
-    static QByteArray ExpandNotificationPanel();
-    static QByteArray ExpandSettingsPanel();
-    static QByteArray CollapsePanels();
-
-    static QByteArray GetClipboard(ClipboardAction action = ClipboardAction::Copy);
+    static QByteArray GetClipboard(ClipboardAction action = ClipboardAction::Copy);             // 默认复制出来
 
     // sequence 由客户端自增，设备回 AckClipboard 时原样带回，用来确认是哪一次设置
     static QByteArray SetClipboard(quint64 sequence, bool paste, const QString &text);
 
-    static QByteArray SetDisplayPower(bool on);
-
-    // 让设备把画面转一次，相当于点一下旋转按钮
-    static QByteArray RotateDevice();
+    static QByteArray SetDisplayPower(bool on);                                                 // true 亮屏，false 熄屏
 };
 
 } // namespace qsc::protocol
