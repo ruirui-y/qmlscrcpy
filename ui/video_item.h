@@ -44,7 +44,7 @@ private:
     QImage image_;    // 已经转好的 RGB32 画面，等渲染线程取走
     bool has_image_ = false;
     QSize frame_size_;    // 最近一帧的尺寸，旋转时会变
-    bool keep_aspect_ = true;    // true 保持宽高比并居中，false 拉满
+    bool keep_aspect_ = false;    // 默认拉满窗口；窗口本身会按帧比例调，所以不会变形
     qsc::stream::YuvConvert convert_;    // 只在主线程用，不用加锁
 
     QElapsedTimer fps_timer_;    // 统计窗口的起点

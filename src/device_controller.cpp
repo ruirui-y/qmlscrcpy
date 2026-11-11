@@ -83,7 +83,7 @@ void DeviceController::Connect(const QString &serial)
     params.serial_ = serial.trimmed();
     params.server_local_path_ = QCoreApplication::applicationDirPath() + "/scrcpy-server";
     params.max_size_ = 720;
-    params.bit_rate_ = 2000000;
+    params.bit_rate_ = 8000000;    // 2 Mbps 在 720p 下偏糊，给到 8 Mbps
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下。

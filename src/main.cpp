@@ -10,6 +10,7 @@
 #include <QUrl>
 #include <QWindow>
 
+#include "app_settings.h"
 #include "device_controller.h"
 #include "stream/frame.h"
 #include "ui/video_item.h"
@@ -59,9 +60,11 @@ int main(int argc, char *argv[])
 
     // 连接/断开这套逻辑放控制器里，界面只负责点按钮和绑状态文字
     DeviceController controller;
+    AppSettings app_settings;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("deviceController"), &controller);
+    engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &app_settings);
 
     // 加载失败必须立刻报错退出，否则会静默变成一个看不见的空窗口
     QObject::connect(

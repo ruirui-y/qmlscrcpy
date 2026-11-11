@@ -8,17 +8,16 @@ Window {
     id: controlWindow
 
     width: 460
-    height: 220
+    height: 200
     minimumWidth: 420
-    minimumHeight: 200
+    minimumHeight: 180
     visible: true
     title: qsTr("QmlScrcpy")
     color: "#121212"
 
-    // 投屏窗口独立存在，这里只是把它拉起来，并把缩放开关绑过去
+    // 投屏窗口独立存在，这里只是把它拉起来
     VideoWindow {
         id: videoWindow
-        freeScale: freeScaleCheck.checked
     }
 
     ColumnLayout {
@@ -58,18 +57,6 @@ Window {
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
-
-            // 勾选框本身不带文字：默认样式在深色底上是黑字，看不见
-            CheckBox {
-                id: freeScaleCheck
-                padding: 0
-            }
-
-            Label {
-                text: qsTr("随意缩放")
-                color: "#d8d8d8"
-                font.pixelSize: 13
-            }
 
             Item { Layout.fillWidth: true }
 

@@ -109,11 +109,10 @@ QSGNode *VideoItem::updatePaintNode(QSGNode *old_node, UpdatePaintNodeData *)
         }
     }
 
-    // 还没有画面就不要节点。QSGSimpleTextureNode 挂着空纹理会触发 Qt 的
-    // "Invalid texture accessed: 0x0"，debug 版直接 abort。
+    // 没有新画面时保留上一帧：缩放窗口会连续触发 update()，
+    // 每次都把节点删掉的话纹理跟着销毁重建，拖动期间就是几十次，画面会卡。
     if (image.isNull()) {
-        delete old_node;
-        return nullptr;
+        return old_node;
     }
 
     QSGTexture *texture = window()->createTextureFromImage(image, QQuickWindow::TextureIsOpaque);
