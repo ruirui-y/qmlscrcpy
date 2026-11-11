@@ -61,7 +61,7 @@ Window {
 
             Label {
                 anchors.left: parent.left
-                anchors.leftMargin: 10
+                anchors.leftMargin: 22                                                          // 让开左上角那个缩放把手
                 anchors.verticalCenter: parent.verticalCenter
                 text: videoWindow.title
                 color: "#a8a8a8"
@@ -127,7 +127,7 @@ Window {
         }
     }
 
-    // 右下角拖拽改尺寸：无边框窗口没有系统的边角，所以画一个看得见的把手
+    // 右下角拖拽改尺寸
     Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -177,6 +177,58 @@ Window {
         }
     }
 
+    // 左上角也能缩放：右下角保持不动，窗口往左上去长
+    Rectangle {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        width: 16
+        height: 16
+        color: "transparent"
+
+        Repeater {
+            model: 3
+
+            Rectangle {
+                width: 11
+                height: 1
+                color: "#6a6a6a"
+                rotation: -45
+                x: 2 + index * 4
+                y: 2 + index * 4
+            }
+        }
+    }
+
+    MouseArea {
+        id: resizeTopLeftArea
+
+        anchors.left: parent.left
+        anchors.top: parent.top
+        width: 16
+        height: 16
+        cursorShape: Qt.SizeFDiagCursor
+        property point pressGlobal
+        property rect pressRect
+
+        onPressed: {
+            pressGlobal = mapToGlobal(mouse.x, mouse.y)
+            pressRect = Qt.rect(videoWindow.x, videoWindow.y, videoWindow.width, videoWindow.height)
+        }
+        onPositionChanged: {
+            if (!pressed) {
+                return
+            }
+            const current = mapToGlobal(mouse.x, mouse.y)
+            const wantWidth = pressRect.width - (current.x - pressGlobal.x)
+            const wantHeight = pressRect.height - (current.y - pressGlobal.y)
+            // 先夹住最小尺寸，再按"右下角不动"反推 x/y，不然拖过头窗口会抖
+            videoWindow.width = Math.max(videoWindow.minimumWidth, wantWidth)
+            videoWindow.height = Math.max(videoWindow.minimumHeight, wantHeight)
+            videoWindow.x = pressRect.x + (pressRect.width - videoWindow.width)
+            videoWindow.y = pressRect.y + (pressRect.height - videoWindow.height)
+        }
+    }
+
     // 最外层一圈细边框：无边框窗口没有系统边框，不加这个看不出窗口边界在哪
     Rectangle {
         anchors.fill: parent
@@ -203,19 +255,31 @@ Window {
         ready = saved.width > 0
     }
 
-    // 第一帧到了、用户又没定过尺寸：窗口调成和帧一样的物理像素，纹理 1:1 不插值。
-    // 再按屏幕可用宽度封个顶，免得原生分辨率把窗口撑到屏幕外面去。
+    // 第一帧到了、用户又没定过尺寸：把窗口调成和帧一样的物理像素（纹理 1:1 不插值）。
+    // 原生分辨率常常比屏幕还大，所以宽和高都要按屏幕可用区域收缩，不能只夹宽度。
     onFrameSizeChanged: {
         if (frameSize.width <= 0 || appSettings.VideoGeometry("video").width > 0) {
             return
         }
         const ratio = Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
-        const maxWidth = Math.round(Screen.desktopAvailableWidth * 0.8)
-        const wanted = Math.round(frameSize.width / ratio)
-        const targetWidth = Math.min(wanted, maxWidth)
+        const frameRatio = frameSize.height / frameSize.width
+        const maxWidth = Screen.desktopAvailableWidth * 0.85
+        const maxHeight = Screen.desktopAvailableHeight * 0.85 - titleBar.height
+
+        let wantWidth = frameSize.width / ratio
+        let wantHeight = wantWidth * frameRatio
+        if (wantHeight > maxHeight) {
+            wantHeight = maxHeight
+            wantWidth = wantHeight / frameRatio
+        }
+        if (wantWidth > maxWidth) {
+            wantWidth = maxWidth
+            wantHeight = wantWidth * frameRatio
+        }
+
         applying = true
-        width = targetWidth
-        height = Math.round(targetWidth * frameSize.height / frameSize.width) + titleBar.height
+        width = Math.round(wantWidth)
+        height = Math.round(wantHeight) + titleBar.height
         applying = false
         ready = true
     }
