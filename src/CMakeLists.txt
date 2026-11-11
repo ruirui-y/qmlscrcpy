@@ -8,6 +8,10 @@ endif()
 # qrc 放在仓库根：它引用的是 ../qml/ 下的文件
 add_executable(QmlScrcpy ${qs_subsystem}
     main.cpp
+    device_controller.cpp
+    device_controller.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../qml.qrc
 )
 
@@ -16,8 +20,12 @@ target_compile_definitions(QmlScrcpy PRIVATE
     QS_APP_VERSION="${PROJECT_VERSION}"
 )
 
+target_include_directories(QmlScrcpy PRIVATE ${PROJECT_SOURCE_DIR})
+
 target_link_libraries(QmlScrcpy PRIVATE
     qs_options
+    qsc_session
+    qsc_stream
     Qt5::Quick
     Qt5::QuickControls2
 )
@@ -36,9 +44,12 @@ set_target_properties(QmlScrcpy PROPERTIES
 #    Qt5Core.dll 躺在 exe 旁边，Qt 就按"已部署布局"去 <exe目录>/qml 找导入路径，
 #    不会再回 Qt 安装目录找 → 所有 QML 模块都"没装"。
 #
-# 2. PATH 必须把 5.15.2 顶到最前面。windeployqt 是按 DLL 名字在 PATH 里逐个找依赖的，
+# 2. PATH 必须把 5.15.2 顶到最前面。windeployqt 是按 DLL 名字在 PATH 里找依赖的，
 #    本机 PATH 第一个是 Qt 5.14.2（C:\Users\Mars\QT5.14.2\...），不顶掉就会把 5.14 的
 #    插件拷进来，启动报"无法定位程序输入点"。
+#
+# 具体怎么改 PATH 放在 cmake/DeployQt.cmake 里做：在那行 add_custom_command 里直接写
+# ${ENV P A T H} 会被 CMake 当列表按分号拆开，整条命令就散架了。
 # ---------------------------------------------------------------------------
 option(QS_DEPLOY_RUNTIME "构建后执行 windeployqt" ON)
 if(WIN32 AND QS_DEPLOY_RUNTIME)
@@ -62,3 +73,5 @@ add_custom_command(TARGET QmlScrcpy POST_BUILD
         "$<TARGET_FILE_DIR:QmlScrcpy>/scrcpy-server"
     COMMENT "拷贝 scrcpy-server 到输出目录"
 )
+
+qs_deploy_ffmpeg(QmlScrcpy)

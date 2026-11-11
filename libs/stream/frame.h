@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QMetaType>
 #include <QSize>
 #include <QtGlobal>
 
@@ -27,11 +28,11 @@ public:
     bool IsValid() const { return owner_ != nullptr; }
     QSize Size() const { return size_; }
 
-    const quint8 *Y() const { return y_; }    // 亮度平面，尺寸 = Size()
-    const quint8 *U() const { return u_; }    // 色度 U，尺寸 = Size()/2
-    const quint8 *V() const { return v_; }    // 色度 V，尺寸 = Size()/2
+    const quint8 *Y() const { return y_; }                                                      // 亮度平面，尺寸 = Size()
+    const quint8 *U() const { return u_; }                                                      // 色度 U，尺寸 = Size()/2
+    const quint8 *V() const { return v_; }                                                      // 色度 V，尺寸 = Size()/2
 
-    int StrideY() const { return stride_y_; }    // Y 每行字节数，可能大于宽度（对齐填充）
+    int StrideY() const { return stride_y_; }                                                   // Y 每行字节数，可能大于宽度（对齐填充）
     int StrideU() const { return stride_u_; }
     int StrideV() const { return stride_v_; }
 
@@ -43,7 +44,10 @@ private:
     int stride_y_ = 0;
     int stride_u_ = 0;
     int stride_v_ = 0;
-    std::shared_ptr<const void> owner_;    // 持有 AVFrame，Frame 活着数据就有效
+    std::shared_ptr<const void> owner_;                                                         // 持有 AVFrame，Frame 活着数据就有效
 };
 
 } // namespace qsc::stream
+
+// 跨线程用信号槽传 Frame 必须先注册这个类型
+Q_DECLARE_METATYPE(qsc::stream::Frame)

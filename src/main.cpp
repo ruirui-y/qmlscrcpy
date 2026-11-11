@@ -1,8 +1,16 @@
 #include <QDebug>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQuickWindow>
 #include <QSurfaceFormat>
+#include <QTimer>
 #include <QUrl>
+
+#include "device_controller.h"
+#include "stream/frame.h"
+#include "ui/video_item.h"
 
 int main(int argc, char *argv[])
 {
@@ -21,9 +29,15 @@ int main(int argc, char *argv[])
     app.setApplicationName(QStringLiteral("QmlScrcpy"));
     app.setApplicationVersion(QStringLiteral(QS_APP_VERSION));
 
-    // 用 Controls 2 的默认样式。先不指定 Fusion：样式插件是单独的 qml 子目录，
-    // 部署时多一个变量，P0 不引入。
+    // Frame 要跨线程用信号槽传，先注册类型；VideoItem 暴露给 QML
+    qRegisterMetaType<qsc::stream::Frame>("qsc::stream::Frame");
+    qmlRegisterType<VideoItem>("QmlScrcpy", 1, 0, "VideoSurface");
+
+    // 连接/断开这套逻辑放控制器里，界面只负责点按钮和绑状态文字
+    DeviceController controller;
+
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("deviceController"), &controller);
 
     // 加载失败必须立刻报错退出，否则会静默变成一个看不见的空窗口
     QObject::connect(
@@ -38,5 +52,36 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
 
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+
+    auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
+    auto *surface = window != nullptr
+                        ? window->findChild<VideoItem *>(QStringLiteral("videoSurface"))
+                        : nullptr;
+    if (surface == nullptr) {
+        qCritical() << "QML 里找不到 objectName 为 videoSurface 的 VideoSurface";
+        return -1;
+    }
+    controller.SetSurface(surface);
+
+    // 进界面先刷一次设备列表，输入框里就有默认值了
+    controller.RefreshDevices();
+
+    // 调试方便：设了 QS_DEVICE_SERIAL 就自动连，省得每次点按钮
+    const QString auto_serial = QString::fromLocal8Bit(qgetenv("QS_DEVICE_SERIAL"));
+    if (!auto_serial.isEmpty()) {
+        controller.Connect(auto_serial);
+    }
+
+    // 调试用：QS_GRAB=路径 时等画面出来抓一张截图再退出，方便无人值守核对
+    const QString grab_path = QString::fromLocal8Bit(qgetenv("QS_GRAB"));
+    if (!grab_path.isEmpty()) {
+        QTimer::singleShot(3000, &app, [window, grab_path]() {
+            const QImage image = window->grabWindow();
+            const bool saved = image.save(grab_path);
+            qInfo() << "[app] screenshot" << grab_path << image.size() << saved;
+            QCoreApplication::quit();
+        });
+    }
+
     return app.exec();
 }

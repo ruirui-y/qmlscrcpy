@@ -16,7 +16,7 @@ target_link_directories(qs_ffmpeg INTERFACE "${QS_FFMPEG_ROOT}/lib/x64")
 
 # qs_options 一定要带上：里面有 /utf-8。少了它 MSVC 会按本地代码页（936）读源文件，
 # 中文注释能把后面的代码吃掉，报一堆莫名其妙的"缺少函数标题"。
-target_link_libraries(qs_ffmpeg INTERFACE avcodec avutil qs_options)
+target_link_libraries(qs_ffmpeg INTERFACE avcodec avutil swscale qs_options)
 
 # 把运行时 DLL 拷到目标的输出目录。
 #
@@ -28,6 +28,7 @@ function(qs_deploy_ffmpeg target)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${QS_FFMPEG_ROOT}/bin/x64/avcodec-58.dll"
             "${QS_FFMPEG_ROOT}/bin/x64/avutil-56.dll"
+            "${QS_FFMPEG_ROOT}/bin/x64/swscale-5.dll"
             "$<TARGET_FILE_DIR:${target}>"
         COMMENT "拷贝 FFmpeg 运行库"
         VERBATIM
