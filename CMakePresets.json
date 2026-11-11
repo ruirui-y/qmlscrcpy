@@ -1,0 +1,45 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "description": "Windows x64 + MSVC 2022 + Qt 5.15.2 msvc2019_64",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "C:/Users/Mars/QT5.15.2/5.15.2/msvc2019_64"
+      }
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "QmlScrcpy Windows Debug",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug"
+      }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "QmlScrcpy Windows Release",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-windows-debug",
+      "configurePreset": "windows-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "build-windows-release",
+      "configurePreset": "windows-release",
+      "configuration": "RelWithDebInfo"
+    }
+  ]
+}

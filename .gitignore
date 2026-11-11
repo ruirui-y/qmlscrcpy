@@ -1,0 +1,21 @@
+# 构建产物：整个 build/ 都是可再生的，不提交
+build/
+out/
+
+# IDE：只留共享配置，个人配置不进库
+.vs/
+.vscode/
+!.vscode/extensions.json
+*.user
+*.user.*
+CMakeUserPresets.json
+
+# CMake 中间文件
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+
+# 运行时产物：录制文件会往这里写
+recording/
+*.mp4
+*.mkv
