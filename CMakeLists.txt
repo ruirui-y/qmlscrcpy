@@ -5,6 +5,7 @@ project(QmlScrcpy VERSION 0.1.0 LANGUAGES CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerOptions)
+include(Ffmpeg)
 
 # 5.15 是硬底线：QWindow::startSystemMove() 从 5.15 才有，无边框窗口拖动靠它
 find_package(Qt5 5.15 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network)

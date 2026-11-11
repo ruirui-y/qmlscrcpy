@@ -20,7 +20,13 @@ target_compile_definitions(tst_server_session PRIVATE
     QS_DEFAULT_SERVER_PATH="${PROJECT_SOURCE_DIR}/third_party/scrcpy-server")
 add_test(NAME server_session COMMAND tst_server_session)
 
+# 预编译 FFmpeg 的护栏：版本、H.264 解码器、上下文能不能开
+add_executable(tst_ffmpeg tst_ffmpeg.cpp)
+target_link_libraries(tst_ffmpeg PRIVATE qs_ffmpeg Qt5::Test)
+add_test(NAME ffmpeg COMMAND tst_ffmpeg)
+qs_deploy_ffmpeg(tst_ffmpeg)
+
 # 测试程序运行时也要能找到 Qt5Core.dll；path_list_prepend 是 CMake 3.22 的写法，
 # 不用手动转义 PATH 里的分号
-set_tests_properties(protocol adb server_args server_session PROPERTIES
+set_tests_properties(protocol adb server_args server_session ffmpeg PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QS_QT_ROOT}/bin")
