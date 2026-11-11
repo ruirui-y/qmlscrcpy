@@ -47,8 +47,9 @@ void main()
 }
 )";
 
-// 渲染器：Qt 只在 render() 里保证 GL 上下文是当前的，所有 GL 调用都塞在这一个函数里。
-//
+void ResetGlState(QOpenGLFunctions *gl);                                                        // 画完把纹理单元和像素对齐还回默认值
+
+// 渲染器：Qt 只在 render() 里保证 GL 上下文是当前的，所有 GL 调用都塞在这一个函数里。//
 // synchronize() 在渲染线程但不是 GL 回调，只做"把 GUI 那边的最新一帧拷过来"，
 // 拷完就立刻松开对视频线程的依赖 —— 帧本身不跨帧持有，解码器关了也牵连不到这里。
 class YuvRenderer : public QQuickFramebufferObject::Renderer
@@ -193,6 +194,7 @@ void YuvRenderer::render()
     DrawQuad(gl, static_cast<float>(item_size_.width()), static_cast<float>(item_size_.height()));
 
     program_.release();
+    ResetGlState(gl);
 }
 
 // 画一个四边形铺满画布；keepAspect 打开时按帧的宽高比留黑边
@@ -220,12 +222,13 @@ void YuvRenderer::DrawQuad(QOpenGLFunctions *gl, float width, float height)
     }
 
     // 顶点顺序（TRIANGLE_STRIP）：左上、右上、左下、右下。
-    // 纹理 v 轴朝下：屏幕上方对应帧的第 0 行。
+    // v 轴要反向：FBO 是 y 朝上的，帧的第 0 行在图片顶部，
+    // 直接按 v=0 放顶上会整幅上下颠倒。
     const GLfloat coords[] = {
-        left,  top,    0.0f, 0.0f,
-        right, top,    1.0f, 0.0f,
-        left,  bottom, 0.0f, 1.0f,
-        right, bottom, 1.0f, 1.0f,
+        left,  top,    0.0f, 1.0f,
+        right, top,    1.0f, 1.0f,
+        left,  bottom, 0.0f, 0.0f,
+        right, bottom, 1.0f, 0.0f,
     };
 
     program_.enableAttributeArray(0);
@@ -237,6 +240,15 @@ void YuvRenderer::DrawQuad(QOpenGLFunctions *gl, float width, float height)
 
     program_.disableAttributeArray(0);
     program_.disableAttributeArray(1);
+}
+
+// 把动过的 GL 状态还原：
+// 我们用了 1 号、2 号纹理单元和 UNPACK_ALIGNMENT=1，不还回去的话
+// Qt 接着画文字时还停在 2 号单元，采样到的是旧纹理 —— 标题就糊成一团。
+void ResetGlState(QOpenGLFunctions *gl)
+{
+    gl->glActiveTexture(GL_TEXTURE0);
+    gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }
 
 } // namespace
