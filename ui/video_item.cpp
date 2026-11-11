@@ -149,9 +149,12 @@ QSGNode *VideoItem::updatePaintNode(QSGNode *old_node, UpdatePaintNodeData *)
         }
     }
 
-    // 没有新画面时保留上一帧：缩放窗口会连续触发 update()，
-    // 每次都把节点删掉的话纹理跟着销毁重建，拖动期间就是几十次，画面会卡。
+    // 没有新画面时保留上一帧，但矩形还是要重算：
+    // 窗口正在缩放时，画面得立刻跟着变形，不能等下一帧（那看起来就是"不跟手"）。
     if (image.isNull()) {
+        if (old_node != nullptr) {
+            static_cast<QSGSimpleTextureNode *>(old_node)->setRect(TargetRect());
+        }
         return old_node;
     }
 

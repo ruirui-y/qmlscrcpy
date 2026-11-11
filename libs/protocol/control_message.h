@@ -14,18 +14,18 @@ namespace qsc::protocol {
 // 类型号就是线上协议里的数字，对齐 scrcpy 3.x 的 ControlMessage.Type，顺序不能动。
 enum class ControlType : quint8
 {
-    InjectKeycode = 0,              // 按键按下或抬起
-    InjectText = 1,                 // 注一段文本
-    InjectTouch = 2,                // 触摸点按下、移动、抬起
-    InjectScroll = 3,               // 滚轮
-    BackOrScreenOn = 4,             // 返回键；屏幕熄着时改为点亮
-    ExpandNotificationPanel = 5,    // 下拉通知栏
-    ExpandSettingsPanel = 6,        // 下拉快捷设置
-    CollapsePanels = 7,             // 收起面板
-    GetClipboard = 8,               // 向设备要剪贴板
-    SetClipboard = 9,               // 设置设备剪贴板
-    SetDisplayPower = 10,           // 熄屏或亮屏
-    RotateDevice = 11,              // 让设备转一次画面
+    InjectKeycode = 0,                                                                          // 按键按下或抬起
+    InjectText = 1,                                                                             // 注一段文本
+    InjectTouch = 2,                                                                            // 触摸点按下、移动、抬起
+    InjectScroll = 3,                                                                           // 滚轮
+    BackOrScreenOn = 4,                                                                         // 返回键；屏幕熄着时改为点亮
+    ExpandNotificationPanel = 5,                                                                // 下拉通知栏
+    ExpandSettingsPanel = 6,                                                                    // 下拉快捷设置
+    CollapsePanels = 7,                                                                         // 收起面板
+    GetClipboard = 8,                                                                           // 向设备要剪贴板
+    SetClipboard = 9,                                                                           // 设置设备剪贴板
+    SetDisplayPower = 10,                                                                       // 熄屏或亮屏
+    RotateDevice = 11,                                                                          // 让设备转一次画面
 };
 
 // 注文本一次最多 300 字节。注文本很慢，超长的打字体验反而更差。
@@ -69,9 +69,9 @@ struct ScrollEvent
 // 向设备取剪贴板时，是否顺手把设备上的内容"剪切"掉
 enum class ClipboardAction : quint8
 {
-    None = 0,      // 不动设备剪贴板
-    Copy = 1,      // 复制出来
-    Cut = 2,       // 剪切出来
+    None = 0,                                                                                   // 不动设备剪贴板
+    Copy = 1,                                                                                   // 复制出来
+    Cut = 2,                                                                                    // 剪切出来
 };
 
 // 纯静态工厂：不留对象、不 new，调用方拿到的就是一段可以直接写进 socket 的字节。

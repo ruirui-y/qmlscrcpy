@@ -184,22 +184,32 @@ Window {
         ready = true
     }
 
-    onXChanged: savePosition()
-    onYChanged: savePosition()
-    onWidthChanged: saveSize()
-    onHeightChanged: saveSize()
+    // 位置和尺寸都在"停手 400ms 之后"才写盘。
+    // 以前每个 onXxxChanged 都写一次，拖动时一秒上百次 QSettings::sync()，
+    // 落盘把 UI 卡住好几秒，看起来就是"窗口不跟手"。
+    Timer {
+        id: saveTimer
 
-    function savePosition() {
+        interval: 400
+        repeat: false
+        onTriggered: {
+            appSettings.SaveVideoPosition("video_pos", videoWindow.x, videoWindow.y)
+            if (ready) {
+                appSettings.SaveVideoGeometry("video", videoWindow.x, videoWindow.y,
+                                              videoWindow.width, videoWindow.height)
+            }
+        }
+    }
+
+    onXChanged: scheduleSave()
+    onYChanged: scheduleSave()
+    onWidthChanged: scheduleSave()
+    onHeightChanged: scheduleSave()
+
+    function scheduleSave() {
         if (applying) {
             return
         }
-        appSettings.SaveVideoPosition("video_pos", x, y)
-    }
-
-    function saveSize() {
-        if (applying || !ready) {
-            return
-        }
-        appSettings.SaveVideoGeometry("video", x, y, width, height)
+        saveTimer.restart()
     }
 }
