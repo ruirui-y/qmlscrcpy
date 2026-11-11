@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 
 # 版本号只在这里维护一处，main.cpp 通过编译宏拿
 project(QmlScrcpy VERSION 0.1.0 LANGUAGES CXX)
@@ -17,5 +17,14 @@ get_filename_component(QS_QT_ROOT "${Qt5_DIR}/../../.." ABSOLUTE)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
+
+# 与界面无关、能单独单测的库
+add_subdirectory(libs)
+
+option(QS_BUILD_TESTS "构建单元测试（ctest）" ON)
+if(QS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 add_subdirectory(src)
