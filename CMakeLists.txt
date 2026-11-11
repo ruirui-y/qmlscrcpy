@@ -7,7 +7,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerOptions)
 
 # 5.15 是硬底线：QWindow::startSystemMove() 从 5.15 才有，无边框窗口拖动靠它
-find_package(Qt5 5.15 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
+find_package(Qt5 5.15 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network)
 message(STATUS "[QmlScrcpy] Qt ${Qt5_VERSION} @ ${Qt5_DIR}")
 
 # 当前这套 Qt 的根目录，部署时要用

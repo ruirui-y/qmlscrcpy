@@ -87,14 +87,15 @@ void AdbArgsTest::ReverseUsesTcpLocalAndLocalAbstractRemote()
     const QStringList args = AdbArgs::Reverse(QStringLiteral("ABC"),
                                               QStringLiteral("scrcpy_000003e7"), 27183);
 
+    // reverse 是"设备端监听地址在前、主机目标在后"：设备和 forward 正好相反，写反了设备端连不上
     QCOMPARE(args, Argv({QStringLiteral("-s"), QStringLiteral("ABC"), QStringLiteral("reverse"),
-                         QStringLiteral("tcp:27183"),
-                         QStringLiteral("localabstract:scrcpy_000003e7")}));
+                         QStringLiteral("localabstract:scrcpy_000003e7"),
+                         QStringLiteral("tcp:27183")}));
 
-    // 卸载时用 --remove + 本地端口，远端名字不用再给
-    QCOMPARE(AdbArgs::ReverseRemove(QStringLiteral("ABC"), 27183),
+    // 删的时候按设备端名字删，不是按端口
+    QCOMPARE(AdbArgs::ReverseRemove(QStringLiteral("ABC"), QStringLiteral("scrcpy_000003e7")),
              Argv({QStringLiteral("-s"), QStringLiteral("ABC"), QStringLiteral("reverse"),
-                   QStringLiteral("--remove"), QStringLiteral("tcp:27183")}));
+                   QStringLiteral("--remove"), QStringLiteral("localabstract:scrcpy_000003e7")}));
 }
 
 void AdbArgsTest::ForwardVariants()

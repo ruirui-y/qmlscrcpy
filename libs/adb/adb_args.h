@@ -19,15 +19,19 @@ public:
     // adb -s <serial> push <本地> <设备路径>
     static QStringList Push(const QString &serial, const QString &local, const QString &remote);
 
-    // adb -s <serial> reverse tcp:<本地端口> localabstract:<socket 名>
-    // reverse 是设备连本机：本机先 listen，设备连过来
+    // adb -s <serial> reverse localabstract:<socket 名> tcp:<主机端口>
+    //
+    // 顺序是"设备端在前、主机端在后"：这条命令让**设备**监听 localabstract 那个名字，
+    // 收到连接后转给主机上的 tcp 端口。所以本机要监听 tcp 端口，设备端 server 去连
+    // localabstract 名字。写反了设备端会直接 connect 失败。
     static QStringList Reverse(const QString &serial, const QString &socket_name, quint16 local_port);
 
-    // adb -s <serial> reverse --remove tcp:<本地端口>
-    static QStringList ReverseRemove(const QString &serial, quint16 local_port);
+    // adb -s <serial> reverse --remove localabstract:<socket 名>
+    // 按设备端名字删，不是按端口删
+    static QStringList ReverseRemove(const QString &serial, const QString &socket_name);
 
-    // adb -s <serial> forward tcp:<本地端口> localabstract:<socket 名>
-    // forward 是本机连设备：reverse 失败时的降级路线
+    // adb -s <serial> forward tcp:<主机端口> localabstract:<socket 名>
+    // forward 反过来：主机监听端口，转发到设备上的 abstract socket
     static QStringList Forward(const QString &serial, quint16 local_port, const QString &socket_name);
 
     // adb -s <serial> forward --remove tcp:<本地端口>

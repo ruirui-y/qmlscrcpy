@@ -98,6 +98,16 @@ public:
         return true;
     }
 
+    // 跳过一段不关心的字节（比如设备信息里那 64 字节设备名）
+    bool Skip(int count)
+    {
+        if (count < 0 || !Ensure(count)) {
+            return false;
+        }
+        pos_ += count;
+        return true;
+    }
+
     int Remaining() const { return data_.size() - pos_; }
     int Position() const { return pos_; }
     bool Ok() const { return ok_; }

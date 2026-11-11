@@ -12,7 +12,7 @@
 | P0 | CMake 骨架 + QML 窗口 | ✅ |
 | P1 | 协议层：包头 / 控制消息 / 设备消息，23 项单测 | ✅ |
 | P2a | adb 命令层：参数拼装 + 进程执行，14 项单测 | ✅ |
-| P2b | 连接状态机：push → reverse/forward → execute → readInfo | 进行中 |
+| P2b | 连接状态机：push → reverse/forward → execute → readInfo | ✅ 真机跑通 |
 | P3 | 视频链路：socket → demux → 解码 → SceneGraph 上屏 | 未开始 |
 | P4 | 键鼠注入 + keymap | 未开始 |
 
@@ -41,6 +41,14 @@ Qt 装在别处就改 `CMakePresets.json` 里 `CMAKE_PREFIX_PATH` 那一行。
 
 `adb.exe` 不入库（5.8 MB，Google platform-tools 随时下）。运行时按顺序找：
 `SetAdbPath()` → 环境变量 `QS_ADB_PATH` → 程序目录 → PATH。
+
+真机用例默认跳过，要跑就补两个环境变量：
+
+```powershell
+$env:QS_ADB_PATH = "C:\path\to\adb.exe"
+$env:QS_DEVICE_SERIAL = "e77121ed"     # adb devices 里那一列
+ctest --test-dir build\windows-debug -C Debug --output-on-failure
+```
 
 ## 目录
 

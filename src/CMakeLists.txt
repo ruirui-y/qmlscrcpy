@@ -54,3 +54,11 @@ if(WIN32 AND QS_DEPLOY_RUNTIME)
         VERBATIM
     )
 endif()
+
+# scrcpy-server 跟着 exe 走：连接层默认按 applicationDirPath()/scrcpy-server 找它
+add_custom_command(TARGET QmlScrcpy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/third_party/scrcpy-server"
+        "$<TARGET_FILE_DIR:QmlScrcpy>/scrcpy-server"
+    COMMENT "拷贝 scrcpy-server 到输出目录"
+)

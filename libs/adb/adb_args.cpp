@@ -27,15 +27,16 @@ QStringList AdbArgs::Push(const QString &serial, const QString &local, const QSt
 
 QStringList AdbArgs::Reverse(const QString &serial, const QString &socket_name, quint16 local_port)
 {
-    const QString local = QStringLiteral("tcp:%1").arg(local_port);
+    // 设备端监听地址在前，主机目标在后；写反了设备端 server 连不上自己的 abstract socket
     const QString remote = QStringLiteral("localabstract:%1").arg(socket_name);
-    return WithSerial(serial, QStringList{QStringLiteral("reverse"), local, remote});
+    const QString host = QStringLiteral("tcp:%1").arg(local_port);
+    return WithSerial(serial, QStringList{QStringLiteral("reverse"), remote, host});
 }
 
-QStringList AdbArgs::ReverseRemove(const QString &serial, quint16 local_port)
+QStringList AdbArgs::ReverseRemove(const QString &serial, const QString &socket_name)
 {
-    const QString local = QStringLiteral("tcp:%1").arg(local_port);
-    return WithSerial(serial, QStringList{QStringLiteral("reverse"), QStringLiteral("--remove"), local});
+    const QString remote = QStringLiteral("localabstract:%1").arg(socket_name);
+    return WithSerial(serial, QStringList{QStringLiteral("reverse"), QStringLiteral("--remove"), remote});
 }
 
 QStringList AdbArgs::Forward(const QString &serial, quint16 local_port, const QString &socket_name)
