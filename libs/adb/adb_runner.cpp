@@ -17,6 +17,15 @@ QString &ExplicitAdbPath()
 
 } // namespace
 
+QString AdbResult::ErrorText() const
+{
+    const QString from_err = QString::fromUtf8(std_err_).trimmed();
+    if (!from_err.isEmpty()) {
+        return from_err;
+    }
+    return QString::fromUtf8(std_out_).trimmed();
+}
+
 QList<AdbDevice> ParseDevices(const QByteArray &std_out)
 {
     QList<AdbDevice> devices;
@@ -26,7 +35,7 @@ QList<AdbDevice> ParseDevices(const QByteArray &std_out)
     const QRegularExpression whitespace(QStringLiteral("\\s+"));
 
     for (const QString &raw_line : lines) {
-        const QString line = raw_line.trimmed();  // 去掉 Windows 的 \r
+        const QString line = raw_line.trimmed();                                                // 去掉 Windows 的 \r
         if (line.isEmpty()) {
             continue;
         }

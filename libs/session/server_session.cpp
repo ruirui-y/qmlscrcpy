@@ -19,15 +19,15 @@
 namespace qsc::session {
 namespace {
 
-constexpr int kReverseAcceptTimeoutMs = 10000;    // reverse 模式下等设备连过来
-constexpr int kForwardConnectAttempts = 30;       // forward 模式下重试次数
-constexpr int kForwardConnectIntervalMs = 300;    // 每次重试间隔
-constexpr int kForwardConnectTimeoutMs = 1000;    // 单次 connect 超时
-constexpr int kInfoPollMs = 300;                  // 设备信息轮询间隔
-constexpr int kInfoTimeoutMs = 3000;              // 设备信息总超时
-constexpr int kDeviceNameBytes = 64;              // 设备名固定 64 字节，后面补 0
-constexpr int kInfoBytes = kDeviceNameBytes + 12; // 再加 4 字节编码器 id + 4 宽 + 4 高
-constexpr int kPushTimeoutMs = 60000;             // 首次 push 可能要传几十 MB 的 jar
+constexpr int kReverseAcceptTimeoutMs = 10000;                                                  // reverse 模式下等设备连过来
+constexpr int kForwardConnectAttempts = 30;                                                     // forward 模式下重试次数
+constexpr int kForwardConnectIntervalMs = 300;                                                  // 每次重试间隔
+constexpr int kForwardConnectTimeoutMs = 1000;                                                  // 单次 connect 超时
+constexpr int kInfoPollMs = 300;                                                                // 设备信息轮询间隔
+constexpr int kInfoTimeoutMs = 3000;                                                            // 设备信息总超时
+constexpr int kDeviceNameBytes = 64;                                                            // 设备名固定 64 字节，后面补 0
+constexpr int kInfoBytes = kDeviceNameBytes + 12;                                               // 再加 4 字节编码器 id + 4 宽 + 4 高
+constexpr int kPushTimeoutMs = 60000;                                                           // 首次 push 可能要传几十 MB 的 jar
 constexpr quint32 kScidUnset = 0xFFFFFFFFu;
 
 } // namespace
@@ -43,6 +43,14 @@ ServerSession::~ServerSession()
 
 ConnectResult ServerSession::Start()
 {
+    // 整套流程：
+    //
+    //   push ─▶ reverse ──成功──▶ listen ──▶ 读设备信息 ──▶ 等控制连接 ──┐
+    //              │                                                   ├─▶ 交回两条 socket
+    //              └──失败──▶ forward ─▶ execute ─▶ 建两条连接 ─▶ 读设备信息
+    //
+    // 两条路径的顺序不一样，是为了绕开服务端和 adb 转发的两处阻塞行为，
+    // 具体原因写在 AcceptForReverse 和 ConnectForForward 里。
     ConnectResult result;
 
     // 不传 scid 时服务端会自己抽一个，那我们就不知道 socket 名了。
@@ -98,7 +106,7 @@ bool ServerSession::PushServer(QString *error)
     const adb::AdbResult pushed = adb::Run(args, kPushTimeoutMs);
     if (!pushed.Ok()) {
         *error = QStringLiteral("推送 scrcpy-server 失败：%1")
-                     .arg(QString::fromUtf8(pushed.std_err_).trimmed());
+                     .arg(pushed.ErrorText());
         return false;
     }
 
@@ -113,8 +121,8 @@ bool ServerSession::SetUpTunnel(QString *error)
             adb::AdbArgs::Reverse(params_.serial_, SocketName(), params_.local_port_);
         const adb::AdbResult reversed = adb::Run(reverse_args);
 
+        // reverse 设好后是本机先 listen，设备连过来
         if (reversed.Ok()) {
-            // reverse 能用的前提是本机先 listen：设好之后是设备主动连过来
             if (!server_socket_.listen(QHostAddress::LocalHost, params_.local_port_)) {
                 *error = QStringLiteral("本机监听 %1 端口失败：%2")
                              .arg(params_.local_port_)
@@ -130,7 +138,7 @@ bool ServerSession::SetUpTunnel(QString *error)
         // 国产机上 reverse 会报 "more than one device"（同一台机器挂了 USB + 无线两条通道），
         // 这是 adb 自己的问题，不能因此整体失败，必须降级到 forward
         qWarning() << "[session] adb reverse 失败，降级 forward："
-                   << QString::fromUtf8(reversed.std_err_).trimmed();
+                   << reversed.ErrorText();
     }
 
     const QStringList forward_args =
@@ -138,7 +146,7 @@ bool ServerSession::SetUpTunnel(QString *error)
     const adb::AdbResult forwarded = adb::Run(forward_args);
     if (!forwarded.Ok()) {
         *error = QStringLiteral("adb forward 失败：%1")
-                     .arg(QString::fromUtf8(forwarded.std_err_).trimmed());
+                     .arg(forwarded.ErrorText());
         return false;
     }
 
@@ -258,7 +266,7 @@ bool ServerSession::ConnectForForward(ConnectResult *result)
         if (video->waitForConnected(kForwardConnectTimeoutMs)
             && control->waitForConnected(kForwardConnectTimeoutMs)) {
             if (video->waitForReadyRead(kForwardConnectTimeoutMs)) {
-                video->read(1);  // 吃掉握手用的 dummy 字节
+                video->read(1);                                                                 // 吃掉握手用的 dummy 字节
                 ready = ReadInfo(video, result);
             }
         }

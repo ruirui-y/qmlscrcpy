@@ -9,8 +9,8 @@ namespace qsc::protocol {
 // 控制消息和设备消息都受这个上限约束，所以放在最底层这个头里。
 inline constexpr int kMaxMessageBytes = 1 << 18;
 
-// 协议里所有整数都是大端（网络字节序）。
-// 这里不用 QDataStream：它的字节序是可以改的成员状态，读代码时看不出到底按哪种写的。
+// 协议里的整数全是大端，这里手动移位写出去。
+// 不用 QDataStream：它的字节序是可改的成员状态，读代码看不出到底按哪种写的。
 inline void AppendU8(QByteArray &out, quint8 value)
 {
     out.append(static_cast<char>(value));
@@ -36,9 +36,8 @@ inline void AppendU64(QByteArray &out, quint64 value)
     AppendU32(out, static_cast<quint32>(value & 0xFFFFFFFFULL));
 }
 
-// 从缓冲区按大端顺序取值。
-// 任何一步越界就把 ok_ 置 false，之后所有读都直接失败；
-// 调用方只在最后检查一次 Ok()，不用每行判错。
+// 只往前走的大端读取器。越界一次就把 ok_ 置 false，之后所有读都直接失败，
+// 调用方只在最后查一次 Ok()，不用每行判错。
 class WireReader
 {
 public:
@@ -98,7 +97,7 @@ public:
         return true;
     }
 
-    // 跳过一段不关心的字节（比如设备信息里那 64 字节设备名）
+    // 跳过不关心的字节，比如设备信息里那 64 字节设备名
     bool Skip(int count)
     {
         if (count < 0 || !Ensure(count)) {
@@ -122,8 +121,13 @@ private:
         return true;
     }
 
+    // 被读的原始缓冲区，调用方保证它活得比本对象长
     const QByteArray &data_;
+
+    // 下一个要读的字节下标
     int pos_ = 0;
+
+    // 是否已经读越界；置 false 之后所有读都失败
     bool ok_ = true;
 };
 

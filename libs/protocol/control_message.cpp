@@ -111,7 +111,7 @@ QByteArray ControlMessage::InjectScroll(const ScrollEvent &event)
 QByteArray ControlMessage::BackOrScreenOn(bool down)
 {
     QByteArray out = MakeHeader(ControlType::BackOrScreenOn);
-    AppendU8(out, down ? 0 : 1);  // 0 = ACTION_DOWN
+    AppendU8(out, down ? 0 : 1);                                                                // 0 = ACTION_DOWN
     return out;
 }
 
