@@ -2,27 +2,29 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
-import QmlScrcpy 1.0
 
-// 主窗口：上面一行是设备输入 + 连接/断开，下面是视频画布。
+// 控制窗：设备输入、连接/断开、状态和帧率。画面在另一扇窗（VideoWindow）。
 Window {
-    id: window
+    id: controlWindow
 
-    width: 420
-    height: 760
-    minimumWidth: 360
-    minimumHeight: 520
+    width: 460
+    height: 220
+    minimumWidth: 420
+    minimumHeight: 200
     visible: true
     title: qsTr("QmlScrcpy")
     color: "#121212"
 
-    // 刷新出来的第一台设备自动填进输入框，省得手打序列号
-    // （绑定在 TextField.text 上，这里不用 Connections）
+    // 投屏窗口独立存在，这里只是把它拉起来，并把缩放开关绑过去
+    VideoWindow {
+        id: videoWindow
+        freeScale: freeScaleCheck.checked
+    }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 8
+        anchors.margins: 14
+        spacing: 12
 
         RowLayout {
             Layout.fillWidth: true
@@ -55,31 +57,45 @@ Window {
 
         RowLayout {
             Layout.fillWidth: true
+            spacing: 12
 
-            Label {
-                text: deviceController.status
-                color: "#8a8a8a"
-                font.pixelSize: 13
-                elide: Text.ElideRight
-                Layout.fillWidth: true
+            // 勾选框本身不带文字：默认样式在深色底上是黑字，看不见
+            CheckBox {
+                id: freeScaleCheck
+                padding: 0
             }
 
             Label {
-                // 画布报上来的实际帧尺寸，旋转后会变
-                text: videoSurface.frameSize.width > 0
-                      ? videoSurface.frameSize.width + "x" + videoSurface.frameSize.height
+                text: qsTr("随意缩放")
+                color: "#d8d8d8"
+                font.pixelSize: 13
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Label {
+                text: videoWindow.fps > 0 ? videoWindow.fps + " fps" : qsTr("-- fps")
+                color: "#8a8a8a"
+                font.pixelSize: 13
+            }
+
+            Label {
+                text: videoWindow.frameSize.width > 0
+                      ? videoWindow.frameSize.width + "x" + videoWindow.frameSize.height
                       : ""
                 color: "#8a8a8a"
                 font.pixelSize: 13
             }
         }
 
-        // C++ 侧按 objectName 找这个对象，把解出来的帧送进来
-        VideoSurface {
-            id: videoSurface
-            objectName: "videoSurface"
+        Label {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            verticalAlignment: Text.AlignTop
+            text: deviceController.status
+            color: "#8a8a8a"
+            wrapMode: Text.Wrap
+            elide: Text.ElideRight
         }
     }
 }

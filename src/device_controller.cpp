@@ -27,9 +27,12 @@ QString DeviceController::ProposedSerial() const
     return proposed_serial_;
 }
 
-void DeviceController::SetSurface(VideoItem *surface)
+void DeviceController::SetSurface(QObject *surface)
 {
-    surface_ = surface;
+    surface_ = qobject_cast<VideoItem *>(surface);
+    if (surface_ == nullptr) {
+        qWarning() << "[controller] 传进来的不是 VideoSurface";
+    }
 }
 
 void DeviceController::SetStatus(const QString &status)

@@ -8,6 +8,7 @@
 VideoItem::VideoItem(QQuickItem *parent) : QQuickItem(parent)
 {
     setFlag(QQuickItem::ItemHasContents, true);
+    fps_timer_.start();
 }
 
 QSize VideoItem::FrameSize() const
@@ -16,13 +17,42 @@ QSize VideoItem::FrameSize() const
     return frame_size_;
 }
 
+bool VideoItem::KeepAspect() const
+{
+    return keep_aspect_;
+}
+
+int VideoItem::Fps() const
+{
+    return fps_;
+}
+
+void VideoItem::SetKeepAspect(bool keep_aspect)
+{
+    if (keep_aspect_ == keep_aspect) {
+        return;
+    }
+    keep_aspect_ = keep_aspect;
+    emit KeepAspectChanged();
+    update();
+}
+
 void VideoItem::Present(const qsc::stream::Frame &frame)
 {
     if (!frame.IsValid()) {
         return;
     }
 
-    // 转换放在主线程做：720p 大约 2~3 ms，换来的好处是渲染线程只做上传，不碰 FFmpeg
+    // 帧率：每满一秒结算一次，界面拿 fps 属性显示
+    ++frames_in_window_;
+    if (fps_timer_.elapsed() >= 1000) {
+        fps_ = frames_in_window_;
+        frames_in_window_ = 0;
+        fps_timer_.restart();
+        emit FpsChanged();
+    }
+
+    // 转换放在主线程做：720p 大约 3~4 ms，换来渲染线程只做上传、不碰 FFmpeg
     const QImage image = convert_.Convert(frame);
     if (image.isNull()) {
         return;
@@ -42,6 +72,28 @@ void VideoItem::Present(const qsc::stream::Frame &frame)
     if (size_changed) {
         emit FrameSizeChanged();
     }
+    update();
+}
+
+QRectF VideoItem::TargetRect() const
+{
+    const QSize frame_size = FrameSize();
+    if (!keep_aspect_ || frame_size.isEmpty()) {
+        return QRectF(0, 0, width(), height());
+    }
+
+    // 等比缩放到刚好塞进画布，然后居中；两边多出来的地方就是黑边
+    const qreal scale = qMin(width() / frame_size.width(), height() / frame_size.height());
+    const qreal target_width = frame_size.width() * scale;
+    const qreal target_height = frame_size.height() * scale;
+    return QRectF((width() - target_width) / 2.0, (height() - target_height) / 2.0, target_width,
+                  target_height);
+}
+
+void VideoItem::geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry)
+{
+    QQuickItem::geometryChanged(new_geometry, old_geometry);
+    // 窗口大小变了，画面要重新算位置和缩放
     update();
 }
 
@@ -80,7 +132,7 @@ QSGNode *VideoItem::updatePaintNode(QSGNode *old_node, UpdatePaintNodeData *)
     }
 
     node->setTexture(texture);
-    node->setRect(0, 0, width(), height());
+    node->setRect(TargetRect());
     node->markDirty(QSGNode::DirtyMaterial);
     return node;
 }

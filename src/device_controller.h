@@ -31,7 +31,7 @@ public:
     QString Status() const;
     QString ProposedSerial() const;    // 刷新后建议填进输入框的序列号
 
-    void SetSurface(VideoItem *surface);    // main 找到 videoSurface 之后调一次
+    Q_INVOKABLE void SetSurface(QObject *surface);    // QML 里把 VideoSurface 传进来
 
     Q_INVOKABLE void RefreshDevices();    // adb devices，刷新后填 proposedSerial
     Q_INVOKABLE void Connect(const QString &serial);    // 同步阻塞，连完才返回

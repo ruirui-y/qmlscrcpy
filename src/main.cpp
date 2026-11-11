@@ -3,14 +3,38 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QSurfaceFormat>
 #include <QTimer>
 #include <QUrl>
+#include <QWindow>
 
 #include "device_controller.h"
 #include "stream/frame.h"
 #include "ui/video_item.h"
+
+namespace {
+
+// 抓投屏那扇窗（真正持有 VideoSurface 的那扇）截图，调试用
+QQuickWindow *FindVideoWindow()
+{
+    const QList<QWindow *> windows = QGuiApplication::topLevelWindows();
+    for (QWindow *window : windows) {
+        auto *quick_window = qobject_cast<QQuickWindow *>(window);
+        if (quick_window == nullptr) {
+            continue;
+        }
+        // 控制窗的对象树里也挂着视频窗（QML 里嵌套声明），所以要确认这一项真的属于它
+        auto *video_item = quick_window->findChild<VideoItem *>();
+        if (video_item != nullptr && video_item->window() == quick_window) {
+            return quick_window;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -51,17 +75,8 @@ int main(int argc, char *argv[])
         },
         Qt::QueuedConnection);
 
-    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-
-    auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
-    auto *surface = window != nullptr
-                        ? window->findChild<VideoItem *>(QStringLiteral("videoSurface"))
-                        : nullptr;
-    if (surface == nullptr) {
-        qCritical() << "QML 里找不到 objectName 为 videoSurface 的 VideoSurface";
-        return -1;
-    }
-    controller.SetSurface(surface);
+    // 控制窗自己会拉起投屏窗（VideoWindow.qml）
+    engine.load(QUrl(QStringLiteral("qrc:/qml/MainWindow.qml")));
 
     // 进界面先刷一次设备列表，输入框里就有默认值了
     controller.RefreshDevices();
@@ -75,10 +90,30 @@ int main(int argc, char *argv[])
     // 调试用：QS_GRAB=路径 时等画面出来抓一张截图再退出，方便无人值守核对
     const QString grab_path = QString::fromLocal8Bit(qgetenv("QS_GRAB"));
     if (!grab_path.isEmpty()) {
-        QTimer::singleShot(3000, &app, [window, grab_path]() {
-            const QImage image = window->grabWindow();
+        QTimer::singleShot(6000, &app, [grab_path]() {
+            QQuickWindow *video_window = FindVideoWindow();
+            if (video_window == nullptr) {
+                qInfo() << "[app] 没找到投屏窗口";
+                QCoreApplication::quit();
+                return;
+            }
+
+            const QImage image = video_window->grabWindow();
             const bool saved = image.save(grab_path);
             qInfo() << "[app] screenshot" << grab_path << image.size() << saved;
+
+            // 顺手把控制窗也存一张，方便核对状态文字和帧率
+            for (QWindow *window : QGuiApplication::topLevelWindows()) {
+                auto *quick_window = qobject_cast<QQuickWindow *>(window);
+                if (quick_window == nullptr || quick_window == video_window) {
+                    continue;
+                }
+                const QString control_path = grab_path + QStringLiteral(".control.png");
+                const bool control_saved = quick_window->grabWindow().save(control_path);
+                qInfo() << "[app] screenshot" << control_path << control_saved;
+                break;
+            }
+
             QCoreApplication::quit();
         });
     }
