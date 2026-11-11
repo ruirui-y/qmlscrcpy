@@ -1,22 +1,26 @@
 #pragma once
 
 #include <QAtomicInt>
-#include <QImage>
 #include <QMutex>
-#include <QQuickItem>
+#include <QQuickFramebufferObject>
 #include <QSize>
 
 #include <atomic>
 
+#include "stream/frame.h"
+
 class QTimer;
 
-// QML 里显示一路视频的画布：收图、交给一张纹理上屏。
+// QML 里显示一路视频的画布：三张 YUV 平面纹理，着色器在 GPU 上合成 RGB。
 // keepAspect 打开时按帧的宽高比居中显示（两边留黑），关掉就拉满整块画布。
 //
-// 视频线程只往这里丢图（加锁存最新一张），**不投递任何跨线程事件**：
-// 拖窗口时 GUI 线程卡在系统模态循环里，投递排队调用会把视频线程一起堵住。
+// 用 QQuickFramebufferObject 而不是自定义 QSGNode：它的 Renderer::render() 是 Qt
+// 保证"渲染线程 + GL 上下文当前"的唯一入口，建纹理、传纹理都在这儿做，
+// 不会像之前那样栽在 updatePaintNode / 材质里调 GL 的时机上。
+//
+// 视频线程只往这里丢帧（加锁存最新一帧），不投递任何跨线程事件；
 // 重绘由 GUI 线程自己的定时器发起。
-class VideoItem : public QQuickItem
+class VideoItem : public QQuickFramebufferObject
 {
     Q_OBJECT
     Q_PROPERTY(QSize frameSize READ FrameSize NOTIFY FrameSizeChanged)
@@ -26,16 +30,22 @@ class VideoItem : public QQuickItem
 public:
     explicit VideoItem(QQuickItem *parent = nullptr);
 
+    Renderer *createRenderer() const override;
+
     QSize FrameSize() const;                                                                    // 最近一帧的尺寸，QML 里用来显示和算宽高比
     bool KeepAspect() const;
     int Fps() const;
 
     void SetKeepAspect(bool keep_aspect);
 
-    // 视频线程调：把最新一张图放进来，旧的直接丢掉，不排队也不补帧
-    void Present(const QImage &image);
+    // 视频线程调：把最新一帧放进来（引用计数，不拷像素），旧的直接丢掉
+    void Present(const qsc::stream::Frame &frame);
 
-    void Clear();                                                                               // 断开连接时调：把还没渲染的图丢掉
+    void Clear();                                                                               // 断开连接时调：把还没渲染的帧丢掉
+
+    // 渲染线程 synchronize() 里调：取走最新一帧，没有就返回无效帧
+    qsc::stream::Frame TakePendingFrame();
+    QSize NotifiedFrameSize() const;                                                            // 已经报给渲染线程的帧尺寸
 
 signals:
     void FrameSizeChanged();
@@ -43,17 +53,15 @@ signals:
     void FpsChanged();
 
 protected:
-    QSGNode *updatePaintNode(QSGNode *old_node, UpdatePaintNodeData *data) override;
     void geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry) override;
 
 private:
-    void OnRefreshTimer();                                                                      // GUI 线程：有新图就请重绘，尺寸变了就通知 QML
+    void OnRefreshTimer();                                                                      // GUI 线程：有新帧就请重绘，尺寸变了就通知 QML
     void UpdateFps();                                                                           // GUI 线程：每秒结算一次帧率
-    QRectF TargetRect() const;                                                                  // 按 keepAspect 算出画面应该铺在哪块矩形里
 
-    mutable QMutex mutex_;                                                                      // 视频线程写 image_，GUI/渲染线程读
-    QImage image_;                                                                              // 已经转好的 RGB32 画面，等渲染线程取走
-    bool has_image_ = false;
+    mutable QMutex mutex_;                                                                      // 视频线程写 pending_，渲染线程取走
+    qsc::stream::Frame pending_;                                                                // 最新一帧，等渲染线程取走
+    bool has_pending_ = false;
     QSize frame_size_;                                                                          // 最近一帧的尺寸，旋转时会变
     QSize notified_size_;                                                                       // 已经通知给 QML 的尺寸
     std::atomic<bool> keep_aspect_{false};                                                      // true 保持宽高比居中，false 拉满

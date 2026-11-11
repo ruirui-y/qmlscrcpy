@@ -132,7 +132,10 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     video->setParent(nullptr);
     video->moveToThread(reader_);
 
-    QObject::connect(reader_, &qsc::stream::VideoReader::ImageReady, surface_, &VideoItem::Present);
+    // 直连：Present 直接跑在视频线程里，不吃 GUI 线程的事件循环
+    // （拖窗口时 GUI 线程会被系统模态循环卡住，排队连接会把帧堆起来，松手后一口气补帧）
+    QObject::connect(reader_, &qsc::stream::VideoReader::FrameReady, surface_, &VideoItem::Present,
+                     Qt::DirectConnection);
     QObject::connect(reader_, &qsc::stream::VideoReader::Failed, this, [this](const QString &reason) {
         SetStatus(QStringLiteral("视频出错：%1").arg(reason));
     });

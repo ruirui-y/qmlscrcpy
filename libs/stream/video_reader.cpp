@@ -98,14 +98,8 @@ void VideoReader::run()
         }
 
         for (const Frame &frame : frames) {
-            stage_timer.start();
-            const QImage image = convert_.Convert(frame);
-            perf.convert_us.fetchAndAddRelaxed(stage_timer.nsecsElapsed() / 1000);
-
-            if (!image.isNull()) {
-                perf.frames.fetchAndAddRelaxed(1);
-                emit ImageReady(image);
-            }
+            perf.frames.fetchAndAddRelaxed(1);
+            emit FrameReady(frame);
         }
 
         // 每秒把各段耗时打一行，enabled 为 false 时这个函数立刻返回

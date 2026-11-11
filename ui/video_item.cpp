@@ -3,28 +3,264 @@
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QMutexLocker>
-#include <QQuickWindow>
-#include <QSGSimpleTextureNode>
+#include <QOpenGLContext>
+#include <QOpenGLFramebufferObject>
+#include <QOpenGLFunctions>
+#include <QOpenGLShaderProgram>
 #include <QTimer>
 
 #include "stream/perf_stats.h"
 
-VideoItem::VideoItem(QQuickItem *parent) : QQuickItem(parent)
+using qsc::stream::Frame;
+
+namespace {
+
+// 顶点着色器：顶点是裁剪空间坐标，直接用
+const char *const kVertexShader = R"(
+attribute highp vec4 vertexCoords;
+attribute highp vec2 texCoords;
+varying highp vec2 uv;
+void main()
+{
+    gl_Position = vertexCoords;
+    uv = texCoords;
+}
+)";
+
+// 片段着色器：三张平面纹理在 GPU 上合成 RGB（BT.601 有限范围，Android 屏幕采集的默认）
+const char *const kFragmentShader = R"(
+varying highp vec2 uv;
+uniform sampler2D texY;
+uniform sampler2D texU;
+uniform sampler2D texV;
+void main()
+{
+    mediump vec3 yuv;
+    yuv.x = texture2D(texY, uv).r - 0.0625;
+    yuv.y = texture2D(texU, uv).r - 0.5;
+    yuv.z = texture2D(texV, uv).r - 0.5;
+    mediump vec3 rgb;
+    rgb.r = dot(yuv, vec3(1.164, 0.000, 1.596));
+    rgb.g = dot(yuv, vec3(1.164, -0.391, -0.813));
+    rgb.b = dot(yuv, vec3(1.164, 2.018, 0.000));
+    gl_FragColor = vec4(rgb, 1.0);
+}
+)";
+
+// 渲染器：Qt 只在 render() 里保证 GL 上下文是当前的，所有 GL 调用都塞在这一个函数里。
+//
+// synchronize() 在渲染线程但不是 GL 回调，只做"把 GUI 那边的最新一帧拷过来"，
+// 拷完就立刻松开对视频线程的依赖 —— 帧本身不跨帧持有，解码器关了也牵连不到这里。
+class YuvRenderer : public QQuickFramebufferObject::Renderer
+{
+public:
+    void synchronize(QQuickFramebufferObject *item) override;
+    void render() override;
+
+private:
+    void EnsureProgram();
+    void DrawQuad(QOpenGLFunctions *gl, float width, float height);
+
+    QSize item_size_;                                                                           // 画布（FBO）尺寸，每次 synchronize 更新
+    bool keep_aspect_ = false;
+
+    QByteArray planes_[3];                                                                      // 三个平面的紧凑像素副本
+    int widths_[3] = {0, 0, 0};
+    int heights_[3] = {0, 0, 0};
+    QSize frame_size_;                                                                          // 副本对应的帧尺寸
+    bool dirty_ = false;                                                                        // 有没上传的新像素
+
+    GLuint textures_[3] = {0, 0, 0};
+    QOpenGLShaderProgram program_;
+    bool program_ready_ = false;
+};
+
+void YuvRenderer::synchronize(QQuickFramebufferObject *item)
+{
+    auto *video_item = static_cast<VideoItem *>(item);
+    item_size_ = QSize(static_cast<int>(video_item->width()), static_cast<int>(video_item->height()));
+    keep_aspect_ = video_item->KeepAspect();
+
+    const Frame frame = video_item->TakePendingFrame();
+    if (!frame.IsValid()) {
+        return;
+    }
+
+    // 拷进渲染器自己的缓冲：帧只活到这一次 synchronize 结束
+    const QSize size = frame.Size();
+    const quint8 *data[3] = {frame.Y(), frame.U(), frame.V()};
+    const int strides[3] = {frame.StrideY(), frame.StrideU(), frame.StrideV()};
+    const int widths[3] = {size.width(), (size.width() + 1) / 2, (size.width() + 1) / 2};
+    const int heights[3] = {size.height(), (size.height() + 1) / 2, (size.height() + 1) / 2};
+
+    for (int i = 0; i < 3; ++i) {
+        if (data[i] == nullptr || widths[i] <= 0 || heights[i] <= 0) {
+            return;
+        }
+        planes_[i].resize(widths[i] * heights[i]);
+        for (int row = 0; row < heights[i]; ++row) {
+            memcpy(planes_[i].data() + row * widths[i],
+                   data[i] + static_cast<qsizetype>(row) * strides[i], widths[i]);
+        }
+        widths_[i] = widths[i];
+        heights_[i] = heights[i];
+    }
+    frame_size_ = size;
+    dirty_ = true;
+}
+
+void YuvRenderer::EnsureProgram()
+{
+    if (program_ready_) {
+        return;
+    }
+
+    if (!program_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
+        || !program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentShader)) {
+        qWarning() << "[video] 着色器编译失败:" << program_.log();
+        // 失败也标记成 ready：每帧重试编译只会刷屏
+        program_ready_ = true;
+        return;
+    }
+
+    program_.bindAttributeLocation("vertexCoords", 0);
+    program_.bindAttributeLocation("texCoords", 1);
+    if (!program_.link()) {
+        qWarning() << "[video] 着色器链接失败:" << program_.log();
+    }
+    program_ready_ = true;
+}
+
+void YuvRenderer::render()
+{
+    QOpenGLFunctions *gl = QOpenGLContext::currentContext() != nullptr
+                               ? QOpenGLContext::currentContext()->functions()
+                               : nullptr;
+    if (gl == nullptr) {
+        return;
+    }
+
+    EnsureProgram();
+
+    const QSize fbo_size = framebufferObject() != nullptr ? framebufferObject()->size() : item_size_;
+    gl->glViewport(0, 0, qMax(1, fbo_size.width()), qMax(1, fbo_size.height()));
+    gl->glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    gl->glClear(GL_COLOR_BUFFER_BIT);
+
+    if (frame_size_.isEmpty() || widths_[0] <= 0) {
+        return;
+    }
+
+    QElapsedTimer upload_timer;
+    upload_timer.start();
+
+    // 建纹理 + 上传：只在有像素时才做
+    if (dirty_) {
+        for (int i = 0; i < 3; ++i) {
+            if (textures_[i] == 0) {
+                gl->glGenTextures(1, &textures_[i]);
+                gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                // GL_LUMINANCE 是 GL 2.0 的原生格式，着色器里采样 .r 即可
+                gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, widths_[i], heights_[i], 0,
+                                 GL_LUMINANCE, GL_UNSIGNED_BYTE, nullptr);
+            }
+            gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
+            gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            gl->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, widths_[i], heights_[i], GL_LUMINANCE,
+                                GL_UNSIGNED_BYTE, planes_[i].constData());
+        }
+        dirty_ = false;
+        qsc::stream::PerfStats::Get().upload_us.fetchAndAddRelaxed(upload_timer.nsecsElapsed() / 1000);
+    }
+
+    if (!program_.isLinked()) {
+        return;
+    }
+
+    program_.bind();
+    for (int i = 0; i < 3; ++i) {
+        gl->glActiveTexture(GL_TEXTURE0 + i);
+        gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
+    }
+    program_.setUniformValue("texY", 0);
+    program_.setUniformValue("texU", 1);
+    program_.setUniformValue("texV", 2);
+
+    DrawQuad(gl, static_cast<float>(item_size_.width()), static_cast<float>(item_size_.height()));
+
+    program_.release();
+}
+
+// 画一个四边形铺满画布；keepAspect 打开时按帧的宽高比留黑边
+void YuvRenderer::DrawQuad(QOpenGLFunctions *gl, float width, float height)
+{
+    float left = -1.0f;
+    float right = 1.0f;
+    float top = 1.0f;
+    float bottom = -1.0f;
+
+    if (keep_aspect_ && !frame_size_.isEmpty() && width > 0.0f && height > 0.0f) {
+        const float item_aspect = width / height;
+        const float frame_aspect = static_cast<float>(frame_size_.width()) / frame_size_.height();
+        if (frame_aspect > item_aspect) {
+            // 画面比窗口更宽：上下各留一条黑边
+            const float scale = item_aspect / frame_aspect;
+            top = scale;
+            bottom = -scale;
+        } else {
+            // 画面比窗口更高：左右各留一条黑边
+            const float scale = frame_aspect / item_aspect;
+            left = -scale;
+            right = scale;
+        }
+    }
+
+    // 顶点顺序（TRIANGLE_STRIP）：左上、右上、左下、右下。
+    // 纹理 v 轴朝下：屏幕上方对应帧的第 0 行。
+    const GLfloat coords[] = {
+        left,  top,    0.0f, 0.0f,
+        right, top,    1.0f, 0.0f,
+        left,  bottom, 0.0f, 1.0f,
+        right, bottom, 1.0f, 1.0f,
+    };
+
+    program_.enableAttributeArray(0);
+    program_.setAttributeArray(0, coords, 2, 4 * sizeof(GLfloat));
+    program_.enableAttributeArray(1);
+    program_.setAttributeArray(1, coords + 2, 2, 4 * sizeof(GLfloat));
+
+    gl->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    program_.disableAttributeArray(0);
+    program_.disableAttributeArray(1);
+}
+
+} // namespace
+
+VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 
-    // 重绘请求由 GUI 线程的定时器发起：视频线程只负责存图，
+    // 重绘请求由 GUI 线程的定时器发起：视频线程只负责存帧，
     // 一旦从视频线程投递事件，拖窗口时就会被 GUI 线程反过来堵死。
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(8);
     QObject::connect(refresh_timer_, &QTimer::timeout, this, &VideoItem::OnRefreshTimer);
     refresh_timer_->start();
 
-    // 帧率统计同样在 GUI 线程
     fps_timer_ = new QTimer(this);
     fps_timer_->setInterval(1000);
     QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::UpdateFps);
     fps_timer_->start();
+}
+
+QQuickFramebufferObject::Renderer *VideoItem::createRenderer() const
+{
+    return new YuvRenderer;
 }
 
 QSize VideoItem::FrameSize() const
@@ -52,30 +288,48 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
     update();
 }
 
-void VideoItem::Present(const QImage &image)
+void VideoItem::Present(const Frame &frame)
 {
-    if (image.isNull()) {
+    if (!frame.IsValid()) {
         return;
     }
 
     {
         QMutexLocker locker(&mutex_);
-        // 只留最新一张：视频线程比渲染快的时候，旧帧直接覆盖，不排队
-        image_ = image;
-        has_image_ = true;
-        frame_size_ = image.size();
+        // 只留最新一帧：视频线程比渲染快的时候，旧帧直接覆盖，不排队
+        pending_ = frame;
+        has_pending_ = true;
+        frame_size_ = frame.Size();
     }
     frames_arrived_.ref();
 
     // 这里故意什么都不投递：重绘交给 OnRefreshTimer 在 GUI 线程里发
 }
 
+Frame VideoItem::TakePendingFrame()
+{
+    QMutexLocker locker(&mutex_);
+    if (!has_pending_) {
+        return Frame();
+    }
+    const Frame frame = pending_;
+    pending_ = Frame();
+    has_pending_ = false;
+    return frame;
+}
+
+QSize VideoItem::NotifiedFrameSize() const
+{
+    QMutexLocker locker(&mutex_);
+    return notified_size_;
+}
+
 void VideoItem::Clear()
 {
     {
         QMutexLocker locker(&mutex_);
-        image_ = QImage();
-        has_image_ = false;
+        pending_ = Frame();
+        has_pending_ = false;
     }
     update();
 }
@@ -94,7 +348,6 @@ void VideoItem::OnRefreshTimer()
         emit FrameSizeChanged();
     }
 
-    // 有新图就请一次重绘
     const int arrived = frames_arrived_.loadAcquire();
     if (arrived != frames_painted_) {
         frames_painted_ = arrived;
@@ -115,70 +368,9 @@ void VideoItem::UpdateFps()
     emit FpsChanged();
 }
 
-QRectF VideoItem::TargetRect() const
-{
-    const QSize frame_size = FrameSize();
-    if (!KeepAspect() || frame_size.isEmpty()) {
-        return QRectF(0, 0, width(), height());
-    }
-
-    // 等比缩放到刚好塞进画布，然后居中；两边多出来的地方就是黑边
-    const qreal scale = qMin(width() / frame_size.width(), height() / frame_size.height());
-    const qreal target_width = frame_size.width() * scale;
-    const qreal target_height = frame_size.height() * scale;
-    return QRectF((width() - target_width) / 2.0, (height() - target_height) / 2.0, target_width,
-                  target_height);
-}
-
 void VideoItem::geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry)
 {
     QQuickItem::geometryChanged(new_geometry, old_geometry);
-    // 窗口大小变了，画面要重新算位置和缩放
+    // 画布尺寸变了，FBO 也要跟着变，请一次重绘让渲染线程重新拿尺寸
     update();
-}
-
-QSGNode *VideoItem::updatePaintNode(QSGNode *old_node, UpdatePaintNodeData *)
-{
-    QImage image;
-    {
-        QMutexLocker locker(&mutex_);
-        if (has_image_) {
-            image = image_;
-            image_ = QImage();
-            has_image_ = false;
-        }
-    }
-
-    // 没有新画面时保留上一帧，但矩形还是要重算：
-    // 窗口正在缩放时，画面得立刻跟着变形，不能等下一帧（那看起来就是"不跟手"）。
-    if (image.isNull()) {
-        if (old_node != nullptr) {
-            static_cast<QSGSimpleTextureNode *>(old_node)->setRect(TargetRect());
-        }
-        return old_node;
-    }
-
-    QElapsedTimer upload_timer;
-    upload_timer.start();
-
-    QSGTexture *texture = window()->createTextureFromImage(image, QQuickWindow::TextureIsOpaque);
-    if (texture == nullptr) {
-        // 渲染上下文还没就绪，这张建不出来；保留旧节点，等下一帧再试
-        return old_node;
-    }
-
-    auto *node = static_cast<QSGSimpleTextureNode *>(old_node);
-    if (node == nullptr) {
-        node = new QSGSimpleTextureNode;
-        // 交给节点管纹理生命周期：换新纹理时它会按场景图的时机释放旧的那张，
-        // 自己 delete 就会删在渲染器还拿着指针的时候，一炸一个准
-        node->setOwnsTexture(true);
-    }
-
-    node->setTexture(texture);
-    node->setRect(TargetRect());
-    node->markDirty(QSGNode::DirtyMaterial);
-
-    qsc::stream::PerfStats::Get().upload_us.fetchAndAddRelaxed(upload_timer.nsecsElapsed() / 1000);
-    return node;
 }

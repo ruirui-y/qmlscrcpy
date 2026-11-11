@@ -31,7 +31,7 @@ public:
     void Stop();                                                                                // 置停止标志，最多等 1 秒
 
 signals:
-    void ImageReady(QImage image);                                                              // 每解出一帧发一次；接收方用直连，跑在本线程
+    void FrameReady(qsc::stream::Frame frame);                                                   // 每解出一帧发一次；接收方用直连，跑在本线程
     void Failed(QString reason);                                                                // 读或解码出错，连接实质上不可用了
     void Ended();                                                                               // 线程正常退出（收到 Stop 或者对端断开）
 
@@ -44,7 +44,6 @@ private:
 
     QTcpSocket *socket_;                                                                        // 已建好连接的视频 socket，本对象只读
     H264Decoder *decoder_;                                                                      // 解码器，和本线程一一对应，别跨线程共用
-    YuvConvert convert_;                                                                        // YUV 转 RGB，只在本线程用
     QElapsedTimer report_timer_;                                                                // 每秒结算一次耗时统计
     std::atomic<bool> stop_{false};
 };
