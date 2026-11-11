@@ -2,3 +2,4 @@
 add_subdirectory(protocol)
 add_subdirectory(adb)
 add_subdirectory(session)
+add_subdirectory(stream)

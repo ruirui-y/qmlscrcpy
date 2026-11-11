@@ -323,7 +323,13 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
             result->error_ = QStringLiteral("读取设备信息时连接断开");
             return false;
         }
-        buffer.append(socket->readAll());
+
+        // 只读还缺的字节数。用 readAll 会把设备信息之后的流数据一起读进来丢掉，
+        // 那样第一个配置包（SPS/PPS）就没了，后面所有帧都解不出来。
+        const QByteArray chunk = socket->read(kInfoBytes - buffer.size());
+        if (!chunk.isEmpty()) {
+            buffer.append(chunk);
+        }
     }
 
     int name_length = static_cast<int>(buffer.indexOf('\0'));
