@@ -3,16 +3,15 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 
-// 控制窗：设备输入、连接/断开、在线设备、无线切换、状态。
-// 画面在 VideoWindow，常用操作在 ToolBarWindow。
+// 控制窗：一行操作 + 一行状态。画面在 VideoWindow，常用操作在 ToolBarWindow。
 // 按钮和输入框都用自绘背景：系统默认样式在不同 DPI 的屏幕上会变成白底方块。
 Window {
     id: controlWindow
 
-    width: 560
-    height: 340
-    minimumWidth: 560
-    minimumHeight: 300
+    width: 600
+    height: 250
+    minimumWidth: 600
+    minimumHeight: 230
     visible: true
     title: qsTr("QmlScrcpy")
     color: "#14161a"
@@ -28,6 +27,9 @@ Window {
     property bool ready: false
 
     Component.onCompleted: {
+        // 主窗按钮要靠它把窗口提到前台
+        deviceController.SetControlWindow(controlWindow)
+
         applying = true
         const saved = appSettings.VideoGeometry("control_window")
         if (saved.width > 0) {
@@ -69,7 +71,7 @@ Window {
         id: videoWindow
     }
 
-    // 工具栏也是一扇独立窗口，贴在投屏窗右侧；把控制窗自己也交给它，用于"主窗"按钮
+    // 工具栏也是一扇独立窗口，贴在投屏窗右侧
     ToolBarWindow {
         target: videoWindow
         control: controlWindow
@@ -115,22 +117,90 @@ Window {
         }
     }
 
-    // 一张卡片的底：圆角 + 细边框，把内容从背景里分出来
-    component Card: Rectangle {
-        default property alias content: inner.data
+    // 设备菜单：列在线设备，点一个直接连；最下面一项是用 USB 设备开无线
+    Popup {
+        id: devicePopup
 
-        Layout.fillWidth: true
-        implicitHeight: inner.implicitHeight + 24
-        radius: 10
-        color: "#1b1f26"
-        border.width: 1
-        border.color: "#262c36"
+        width: 300
+        padding: 6
+        x: 0
+        y: 0
+        modal: false
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-        ColumnLayout {
-            id: inner
-            anchors.fill: parent
-            anchors.margins: 12
-            spacing: 10
+        background: Rectangle {
+            radius: 8
+            color: "#1b1f26"
+            border.width: 1
+            border.color: "#2c323c"
+        }
+
+        contentItem: Column {
+            spacing: 2
+
+            Repeater {
+                model: deviceController.deviceLabels
+
+                delegate: Rectangle {
+                    width: parent.width
+                    height: 30
+                    radius: 4
+                    color: itemArea.containsMouse ? "#2c313a" : "transparent"
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData
+                        color: "#d8dee9"
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: itemArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            devicePopup.close()
+                            serialField.text = deviceController.devices[index]
+                            deviceController.Connect(deviceController.devices[index])
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: "#2c323c"
+                visible: deviceController.deviceLabels.length > 0
+            }
+
+            Rectangle {
+                width: parent.width
+                height: 30
+                radius: 4
+                color: wifiArea.containsMouse ? "#2c313a" : "transparent"
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("用 USB 设备开无线调试")
+                    color: "#8fb8ff"
+                    font.pixelSize: 13
+                }
+
+                MouseArea {
+                    id: wifiArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: {
+                        devicePopup.close()
+                        deviceController.EnableWifi()
+                    }
+                }
+            }
         }
     }
 
@@ -139,7 +209,6 @@ Window {
         anchors.margins: 16
         spacing: 12
 
-        // 顶部：标题 + 帧率/分辨率
         RowLayout {
             Layout.fillWidth: true
 
@@ -167,17 +236,25 @@ Window {
             }
         }
 
-        // 串号 + 动作
-        Card {
+        // 唯一的一行操作：输入 → 设备菜单 → 刷新 → 连接 → 断开
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 58
+            radius: 10
+            color: "#1b1f26"
+            border.width: 1
+            border.color: "#262c36"
+
             RowLayout {
-                Layout.fillWidth: true
+                anchors.fill: parent
+                anchors.margins: 12
                 spacing: 8
 
                 TextField {
                     id: serialField
 
                     Layout.fillWidth: true
-                    Layout.minimumWidth: 130
+                    Layout.minimumWidth: 140
                     Layout.preferredHeight: 34
                     placeholderText: qsTr("设备序列号 / IP:端口")
                     text: deviceController.proposedSerial
@@ -192,6 +269,34 @@ Window {
                         color: "#151920"
                         border.width: 1
                         border.color: serialField.activeFocus ? "#3f8fdd" : "#2c323c"
+                    }
+                }
+
+                // 设备菜单开关
+                Rectangle {
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 34
+                    radius: 6
+                    color: menuArea.containsMouse ? "#2e343e" : "#242932"
+                    border.width: 1
+                    border.color: "#333945"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "▾"
+                        color: "#cdd4de"
+                        font.pixelSize: 14
+                    }
+
+                    MouseArea {
+                        id: menuArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            devicePopup.x = serialField.mapToItem(controlWindow.contentItem, 0, 0).x
+                            devicePopup.y = serialField.mapToItem(controlWindow.contentItem, 0, 0).y + 40
+                            devicePopup.open()
+                        }
                     }
                 }
 
@@ -213,86 +318,25 @@ Window {
             }
         }
 
-        // 在线设备 + 切无线
-        Card {
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                ComboBox {
-                    id: deviceBox
-
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 150
-                    Layout.preferredHeight: 34
-                    model: deviceController.deviceLabels
-                    // 选一台就直接连：不用再点一次"连接"
-                    onActivated: {
-                        serialField.text = deviceController.devices[index]
-                        deviceController.Connect(deviceController.devices[index])
-                    }
-
-                    background: Rectangle {
-                        radius: 6
-                        color: "#151920"
-                        border.width: 1
-                        border.color: "#2c323c"
-                    }
-
-                    contentItem: Text {
-                        leftPadding: 10
-                        text: deviceBox.count > 0 ? deviceBox.currentText : qsTr("没扫到设备，点「刷新」")
-                        color: deviceBox.count > 0 ? "#d8dee9" : "#6b7280"
-                        font.pixelSize: 13
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-
-                    delegate: ItemDelegate {
-                        width: deviceBox.width
-                        contentItem: Text {
-                            leftPadding: 10
-                            text: modelData
-                            color: "#d8dee9"
-                            font.pixelSize: 13
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            color: highlighted ? "#2c313a" : "#1b1f26"
-                        }
-                    }
-                }
-
-                ActionButton {
-                    label: qsTr("切无线")
-                    width: 84
-                    implicitWidth: 84
-                    onClicked: deviceController.EnableWifi()
-                }
-            }
-        }
-
         // 状态
-        Card {
-            RowLayout {
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Rectangle {
+                width: 8
+                height: 8
+                radius: 4
+                color: deviceController.deviceName.length > 0 ? "#3ecf8e" : "#5a6272"
+            }
+
+            Text {
                 Layout.fillWidth: true
-                spacing: 8
-
-                Rectangle {
-                    width: 8
-                    height: 8
-                    radius: 4
-                    color: deviceController.deviceName.length > 0 ? "#3ecf8e" : "#5a6272"
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: deviceController.status
-                    color: "#9aa4b2"
-                    font.pixelSize: 12
-                    wrapMode: Text.Wrap
-                    elide: Text.ElideRight
-                }
+                text: deviceController.status
+                color: "#9aa4b2"
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+                elide: Text.ElideRight
             }
         }
     }

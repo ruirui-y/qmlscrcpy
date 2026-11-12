@@ -93,16 +93,7 @@ Window {
 
         ToolButton {
             label: qsTr("主窗")
-            onClicked: {
-                if (!toolWindow.control) {
-                    return
-                }
-                // 最小化了要先 showNormal，否则 raise 只是把它从任务栏点一下，界面不出来
-                toolWindow.control.show()
-                toolWindow.control.showNormal()
-                toolWindow.control.raise()
-                toolWindow.control.requestActivate()
-            }
+            onClicked: deviceController.ShowControlWindow()
         }
 
         ToolButton {

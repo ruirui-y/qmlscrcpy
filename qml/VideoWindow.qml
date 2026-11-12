@@ -9,17 +9,24 @@ import QmlScrcpy 1.0
 // 为什么要自绘：系统标题栏拖拽会进 Windows 的模态移动循环，GUI 线程被扣住，
 // 重绘请求发不出去，拖的时候画面是冻的。自己处理鼠标移动，事件循环一直在转，
 // 拖着走画面也在动。
+//
+// 尺寸按"横屏 / 竖屏"分开记：横屏看电影、竖屏刷手机，用户对两种姿势的窗口大小要求不一样。
 Window {
     id: videoWindow
 
     property alias fps: videoSurface.fps
     property alias frameSize: videoSurface.frameSize
-    property bool applying: false
-    property bool ready: false
-    property real lastAspect: 0    // 上一次的帧宽高比，用来判断是不是横竖屏翻转
+    property bool applying: false    // 正在由代码改窗口，此时的 onXxxChanged 不记录
+    property bool ready: false    // 首帧处理完之前不记尺寸
+    property bool landscape: false    // 当前帧是不是横向
+
+    // 横屏和竖屏各记一套几何
+    function geometryKey() {
+        return landscape ? "video_window_landscape" : "video_window"
+    }
 
     width: 380
-    height: 808                                                                                 // 780 的画面 + 28 的标题栏
+    height: 808
     minimumWidth: 160
     minimumHeight: 268
     visible: true
@@ -37,7 +44,7 @@ Window {
             id: titleBar
 
             Layout.fillWidth: true
-            Layout.preferredHeight: 28
+            Layout.preferredHeight: 30
             color: "#1c1c1c"
 
             // 拖动：按屏幕绝对坐标算位移，窗口自己移动不会污染计算
@@ -64,7 +71,7 @@ Window {
 
             Label {
                 anchors.left: parent.left
-                anchors.leftMargin: 22                                                          // 让开左上角那个缩放把手
+                anchors.leftMargin: 22    // 让开左上角那个缩放把手
                 anchors.verticalCenter: parent.verticalCenter
                 text: videoWindow.title
                 color: "#d0d6de"
@@ -125,10 +132,9 @@ Window {
         VideoSurface {
             id: videoSurface
             objectName: "videoSurface"
-        focus: true    // 键盘事件只有拿到焦点才收得到
             Layout.fillWidth: true
             Layout.fillHeight: true
-            keepAspect: false
+            keepAspect: false    // 窗口比例已经跟着帧走了，这里直接拉满
         }
     }
 
@@ -251,49 +257,12 @@ Window {
             x = position.x
             y = position.y
         }
-        const saved = appSettings.VideoGeometry("video_window")
-        if (saved.width > 0) {
-            width = saved.width
-            height = saved.height
-        }
         applying = false
-        ready = saved.width > 0
     }
 
-    // 第一帧到了、用户又没定过尺寸：把窗口调成和帧一样的物理像素（纹理 1:1 不插值）。
-    // 原生分辨率常常比屏幕还大，所以宽和高都要按屏幕可用区域收缩，不能只夹宽度。
-    onFrameSizeChanged: {
+    // 按当前帧比例把窗口调成"刚好装下画面"
+    function fitToFrame() {
         if (frameSize.width <= 0) {
-            return
-        }
-
-        // 已经定过尺寸时，只有"横竖屏翻转"才跟着调；普通帧尺寸抖动不动窗口
-        const aspect = frameSize.width / frameSize.height
-        if (ready) {
-            if (Math.abs(aspect - lastAspect) < 0.05) {
-                return
-            }
-            lastAspect = aspect
-            const contentHeight = Math.max(120, height - titleBar.height)
-            let newWidth = Math.round(contentHeight * aspect)
-            const widthLimit = Screen.desktopAvailableWidth * 0.85
-            if (newWidth > widthLimit) {
-                newWidth = Math.round(widthLimit)
-            }
-            applying = true
-            width = Math.max(minimumWidth, newWidth)
-            let newHeight = Math.round(width / aspect) + titleBar.height
-            const heightLimit = Screen.desktopAvailableHeight * 0.9
-            if (newHeight > heightLimit) {
-                newHeight = Math.round(heightLimit)
-                width = Math.max(minimumWidth, Math.round((newHeight - titleBar.height) * aspect))
-            }
-            height = newHeight
-            applying = false
-            return
-        }
-
-        if (appSettings.VideoGeometry("video_window").width > 0) {
             return
         }
         const ratio = Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
@@ -313,11 +282,55 @@ Window {
         }
 
         applying = true
-        width = Math.round(wantWidth)
-        height = Math.round(wantHeight) + titleBar.height
+        width = Math.max(minimumWidth, Math.round(wantWidth))
+        height = Math.max(minimumHeight, Math.round(wantHeight) + titleBar.height)
         applying = false
-        ready = true
-        lastAspect = frameSize.width / frameSize.height
+    }
+
+    // 帧尺寸变化：首次定尺寸；横竖屏翻转时切到那一边记住的尺寸
+    onFrameSizeChanged: {
+        if (frameSize.width <= 0) {
+            return
+        }
+
+        const nowLandscape = frameSize.width > frameSize.height
+        if (!ready) {
+            landscape = nowLandscape
+            const saved = appSettings.VideoGeometry(geometryKey())
+            if (saved.width > 0) {
+                applying = true
+                width = Math.max(minimumWidth, saved.width)
+                height = Math.max(minimumHeight, saved.height)
+                applying = false
+            } else {
+                fitToFrame()
+            }
+            ready = true
+            // 立刻把自动定好的尺寸记下来，否则下次启动又要重新猜
+            saveTimer.restart()
+            return
+        }
+
+        if (nowLandscape === landscape) {
+            return
+        }
+
+        // 换姿势：先把当前尺寸存到旧的那一边，再切到新姿势记住的尺寸
+        appSettings.SaveVideoGeometry(geometryKey(), x, y, width, height)
+        landscape = nowLandscape
+
+        const saved = appSettings.VideoGeometry(geometryKey())
+        if (saved.width > 0) {
+            applying = true
+            width = Math.max(minimumWidth, saved.width)
+            height = Math.max(minimumHeight, saved.height)
+            applying = false
+        } else {
+            fitToFrame()
+        }
+
+        // 切过来的这套尺寸也记下来（用户没调过就是自动算的那套）
+        saveTimer.restart()
     }
 
     // 位置和尺寸都在"停手 400ms 之后"才写盘。
@@ -331,7 +344,7 @@ Window {
         onTriggered: {
             appSettings.SaveVideoPosition("video_pos", videoWindow.x, videoWindow.y)
             if (ready) {
-                appSettings.SaveVideoGeometry("video_window", videoWindow.x, videoWindow.y,
+                appSettings.SaveVideoGeometry(videoWindow.geometryKey(), videoWindow.x, videoWindow.y,
                                               videoWindow.width, videoWindow.height)
             }
         }

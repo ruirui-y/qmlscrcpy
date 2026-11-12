@@ -60,6 +60,8 @@ public:
     Q_INVOKABLE void SendVolumeDown();                                                          // 音量减一个档
     Q_INVOKABLE void RotateDevice();                                                            // 让设备转一下屏幕
     Q_INVOKABLE void SaveScreenshot();                                                          // 把当前画面存成 png
+    Q_INVOKABLE void SetControlWindow(QObject *window);                                         // QML 把控制窗交进来，主窗按钮要用
+    Q_INVOKABLE void ShowControlWindow();                                                       // 把控制窗提到前台（最小化也能回来）
     Q_INVOKABLE void SetDisplayPower(bool on);                                                  // true 亮屏，false 息屏
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
     Q_INVOKABLE void SendRecents();                                                             // 多任务切换（最近任务）
@@ -99,6 +101,7 @@ private:
     QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
     QStringList devices_;                                                                       // 给 QML 下拉框用的设备地址
     QStringList device_labels_;                                                                 // 下拉框显示文字，和 devices_ 下标对应
+    QWindow *control_window_ = nullptr;                                                         // 控制窗指针，ShowControlWindow 用
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
     std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应
