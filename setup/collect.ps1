@@ -13,9 +13,37 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$releaseDir = Join-Path $repoRoot 'build\windows-release\bin\Release'
+$binRoot = Join-Path $repoRoot 'build\windows-release\bin'
 $stageRoot = Join-Path $PSScriptRoot 'stage'
 $stageDir = Join-Path $stageRoot 'QmlScrcpy'
+
+# Release preset 用的是 RelWithDebInfo 配置（见 CMakePresets.json），
+# 所以不能写死 bin\Release，按"哪个配置目录里有 exe"来认
+function Find-ReleaseDir {
+    if (-not (Test-Path $binRoot)) {
+        return $null
+    }
+
+    $found = @()
+    foreach ($dir in Get-ChildItem $binRoot -Directory) {
+        if (Test-Path (Join-Path $dir.FullName 'QmlScrcpy.exe')) {
+            $found += $dir.FullName
+        }
+    }
+    if ($found.Count -eq 0) {
+        return $null
+    }
+
+    # 优先 RelWithDebInfo，其次 Release，最后其它
+    $ordered = $found | Sort-Object {
+        switch -Wildcard ($_) {
+            '*RelWithDebInfo*' { 0 }
+            '*Release*'        { 1 }
+            default            { 2 }
+        }
+    }
+    return $ordered[0]
+}
 
 # 1. 构建（默认重新构建，避免打包到旧 exe）
 if (-not $SkipBuild)
@@ -34,10 +62,12 @@ else
     Write-Host '[2/5] 跳过构建'
 }
 
-if (-not (Test-Path (Join-Path $releaseDir 'QmlScrcpy.exe')))
+$releaseDir = Find-ReleaseDir
+if (-not $releaseDir)
 {
-    throw "没找到 $releaseDir\QmlScrcpy.exe，先构建 Release"
+    throw "没在 $binRoot 下找到 QmlScrcpy.exe，先跑一次 cmake --build --preset build-windows-release"
 }
+Write-Host "      使用产物目录：$releaseDir"
 
 # 3. 清空 stage，拷 Release 产物
 Write-Host '[3/5] 清空 stage 并拷贝 Release 产物 ...'
