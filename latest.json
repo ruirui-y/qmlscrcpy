@@ -1,7 +1,7 @@
-﻿{
-    "latest":  "0.1.5",
-    "minimum":  "0.1.0",
-    "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes":  "两个变化：**启动时自动检查更新**，以及**安装包改到 Gitee 发布**。",
-    "published_at":  "2026-11-12"
+{
+  "latest": "0.1.5",
+  "minimum": "0.1.0",
+  "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
+  "notes": "启动时自动检查更新；安装包改到 Gitee 发布",
+  "published_at": "2026-11-12"
 }

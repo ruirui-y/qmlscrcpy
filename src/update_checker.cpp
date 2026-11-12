@@ -1,5 +1,6 @@
 #include "update_checker.h"
 
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -34,8 +35,9 @@ QStringList LatestJsonSources()
         return sources;
     }
 
-    // 带一个按天变化的参数，避免 CDN 缓存过久
-    const QString cache_buster = QStringLiteral("?v=%1").arg(QDate::currentDate().toJulianDay());
+    // 带一个按小时变化的参数：Gitee raw 有自己的缓存，按天会让新版本等一整天
+    const QString cache_buster =
+        QStringLiteral("?v=%1").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHH")));
 
     sources.append(QStringLiteral("https://gitee.com/bai-maxifeng/qmlscrcpy/raw/master/latest.json") + cache_buster);
     sources.append(QStringLiteral("https://cdn.jsdelivr.net/gh/ruirui-y/qmlscrcpy@master/latest.json") + cache_buster);

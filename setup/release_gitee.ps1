@@ -133,7 +133,9 @@ if ($note_line) {
     $latest.notes = $note_line
 }
 
-($latest | ConvertTo-Json -Depth 4) | Set-Content -Encoding UTF8 $latest_path
+# 必须不带 BOM：Qt 的 QJsonDocument 不跳过 BOM，带 BOM 会直接解析失败
+[System.IO.File]::WriteAllText($latest_path, ($latest | ConvertTo-Json -Depth 4),
+                               (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ""
 Write-Host "完成" -ForegroundColor Green
