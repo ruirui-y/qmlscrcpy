@@ -153,3 +153,23 @@ Release 的 asset 不计入仓库体积，也没有 LFS 流量限制（单文件
 **令牌**：Gitee → 设置 → 私人令牌 → 勾 `projects`。只放在环境变量 `GITEE_TOKEN`，不要写进任何文件。
 
 **tag 必须先推上去**，否则第 2 步会指向一个不存在的版本。
+
+### 令牌放哪
+
+只放在被 git 忽略的本地文件里，别写进仓库、别写进脚本：
+
+```powershell
+# .refs/ 已在 .gitignore 里
+Set-Content -Path .refs\gitee_token.txt -Value '你的私人令牌'
+
+$env:GITEE_TOKEN = (Get-Content -Raw .refs\gitee_token.txt).Trim()
+powershell -ExecutionPolicy Bypass -File setup\release_gitee.ps1 -Version 0.1.5
+```
+
+### 脚本踩过的两个坑
+
+| 坑 | 现象 | 解法 |
+|---|---|---|
+| PowerShell 发中文 JSON | `400 Bad Request` | 改用 `curl --data-binary @文件`（UTF-8 无 BOM） |
+| 用 `/releases/tags/{tag}` 查发行版 | 返回 `null`，脚本当成"已存在"，附件传到空 id | Gitee 没这个端点，改拉列表按 `tag_name` 匹配，并校验 `id` 非空 |
+| `Set-Content -Encoding UTF8` 写 latest.json | 带 BOM，客户端 JSON 解析失败 | 改 `[IO.File]::WriteAllText` + `UTF8Encoding($false)` |
