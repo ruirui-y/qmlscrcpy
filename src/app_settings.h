@@ -30,6 +30,10 @@ public:
     // [input] 段：剪贴板
     bool ClipboardAutoSync() const;                                                             // 电脑剪贴板一变就推到设备
 
+    // [keys] 段：窗口快捷键，name 取 back / home / screenshot / fullscreen
+    QString Shortcut(const QString &name) const;
+    void SetShortcut(const QString &name, const QString &sequence);
+
     // [ui] 段：老板键
     QString BossKeyText() const;                                                                // 例如 Ctrl+Alt+B，界面里改过的优先
     void SetBossKeyText(const QString &text);                                                   // 界面里改的写 window.ini

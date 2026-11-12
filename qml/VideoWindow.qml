@@ -317,6 +317,12 @@ Window {
                 }
 
                 ToolButton {
+                    label: qsTr("桌面")
+                    tip: qsTr("回到手机桌面（相当于手机的 Home 键）")
+                    onClicked: deviceController.SendHome()
+                }
+
+                ToolButton {
                     label: deviceController.wheelMode === "drag"
                            ? qsTr("滑动 %1").arg(deviceController.dragPixels) : qsTr("滚动")
                     active: deviceController.wheelMode === "drag"
@@ -401,6 +407,12 @@ Window {
                         videoWindow.displayOff = !videoWindow.displayOff
                         deviceController.SetDisplayPower(!videoWindow.displayOff)
                     }
+                }
+
+                ToolButton {
+                    label: qsTr("电源")
+                    tip: qsTr("按一下手机电源键：锁屏或点亮屏幕（「息屏」只关显示，不锁屏）")
+                    onClicked: deviceController.SendPower()
                 }
 
                 ToolButton {
@@ -525,6 +537,33 @@ Window {
             y = position.y
         }
         applying = false
+    }
+
+    // 窗口级快捷键：先于画面里的按键处理，所以这几个组合不会再发给设备。
+    // 组合来自设置窗，留空表示禁用（binding 会取到空串，Shortcut 自动失效）
+    Shortcut {
+        sequence: deviceController.shortcutBack
+        enabled: deviceController.shortcutBack.length > 0
+        onActivated: deviceController.SendBack()
+    }
+
+    Shortcut {
+        sequence: deviceController.shortcutHome
+        enabled: deviceController.shortcutHome.length > 0
+        onActivated: deviceController.SendHome()
+    }
+
+    Shortcut {
+        sequence: deviceController.shortcutScreenshot
+        enabled: deviceController.shortcutScreenshot.length > 0
+        onActivated: deviceController.SaveScreenshot()
+    }
+
+    Shortcut {
+        sequence: deviceController.shortcutFullscreen
+        enabled: deviceController.shortcutFullscreen.length > 0
+        onActivated: videoWindow.visibility = videoWindow.visibility === Window.FullScreen
+                                      ? Window.Windowed : Window.FullScreen
     }
 
     // 会话连通状态一变就跟着显示/收起；用户手动关窗（visible=false）不会被强制拉回来，

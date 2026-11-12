@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QSettings>
 
 namespace
@@ -189,6 +190,45 @@ bool AppSettings::ClipboardAutoSync() const
     return ConfigStore().value(QStringLiteral("input/clipboard_autosync"), false).toBool();
 }
 
+// 窗口快捷键：界面里改过的（window.ini）优先，其次 config.ini，最后用内置默认
+QString AppSettings::Shortcut(const QString &name) const
+{
+    const QString override_value = WindowStore().value(QStringLiteral("keys/%1").arg(name)).toString();
+    if (!override_value.isEmpty())
+    {
+        return override_value;
+    }
+
+    const QString configured = ConfigStore().value(QStringLiteral("keys/%1").arg(name)).toString();
+    if (!configured.isEmpty())
+    {
+        return configured;
+    }
+
+    // 内置默认：返回 Esc、回桌面 Home、截图 Ctrl+Shift+S、全屏 F11
+    static const QHash<QString, QString> kDefaults{
+        {QStringLiteral("back"), QStringLiteral("Esc")},
+        {QStringLiteral("home"), QStringLiteral("Home")},
+        {QStringLiteral("screenshot"), QStringLiteral("Ctrl+Shift+S")},
+        {QStringLiteral("fullscreen"), QStringLiteral("F11")},
+    };
+    return kDefaults.value(name);
+}
+
+// 记下界面里改的快捷键（空字符串表示禁用）
+void AppSettings::SetShortcut(const QString &name, const QString &sequence)
+{
+    QSettings &store = WindowStore();
+    if (sequence.isEmpty())
+    {
+        store.setValue(QStringLiteral("keys/%1").arg(name), QString());
+    }
+    else
+    {
+        store.setValue(QStringLiteral("keys/%1").arg(name), sequence);
+    }
+    store.sync();
+}
 // 老板键的组合：界面里改过的（window.ini）优先，其次 config.ini
 QString AppSettings::BossKeyText() const
 {

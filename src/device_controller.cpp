@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QClipboard>
+#include <QKeySequence>
 #include <QRegularExpression>
 #include <QThread>
 #include <QTimer>
@@ -109,6 +110,43 @@ void DeviceController::PullClipboardFromDevice()
     SetStatus(QStringLiteral("正在读取手机剪贴板 …"));
 }
 
+// 四个窗口快捷键的当前值
+QString DeviceController::ShortcutBack() const
+{
+    return AppSettings().Shortcut(QStringLiteral("back"));
+}
+
+QString DeviceController::ShortcutHome() const
+{
+    return AppSettings().Shortcut(QStringLiteral("home"));
+}
+
+QString DeviceController::ShortcutScreenshot() const
+{
+    return AppSettings().Shortcut(QStringLiteral("screenshot"));
+}
+
+QString DeviceController::ShortcutFullscreen() const
+{
+    return AppSettings().Shortcut(QStringLiteral("fullscreen"));
+}
+
+// 改某个窗口快捷键：空串表示禁用，非空必须是合法的 QKeySequence
+bool DeviceController::SetShortcut(const QString &name, const QString &sequence)
+{
+    const QString trimmed = sequence.trimmed();
+    if (!trimmed.isEmpty() && QKeySequence(trimmed).isEmpty())
+    {
+        SetStatus(QStringLiteral("快捷键格式不对：%1").arg(sequence));
+        return false;
+    }
+
+    AppSettings().SetShortcut(name, trimmed);
+    emit ShortcutsChanged();
+    SetStatus(trimmed.isEmpty() ? QStringLiteral("已禁用该快捷键")
+                                : QStringLiteral("快捷键已改为 %1").arg(trimmed));
+    return true;
+}
 // 当前老板键文本，界面显示用
 QString DeviceController::BossKey() const
 {
@@ -739,6 +777,17 @@ void DeviceController::SendBack()
     session_->SendControl(qsc::protocol::ControlMessage::BackOrScreenOn(false));
 }
 
+// 回桌面：安卓 KEYCODE_HOME（3）
+void DeviceController::SendHome()
+{
+    SendKeycode(3);
+}
+
+// 按一下电源键：KEYCODE_POWER（26），锁屏或点亮屏幕
+void DeviceController::SendPower()
+{
+    SendKeycode(26);
+}
 // 多任务切换：安卓 KEYCODE_APP_SWITCH（187）
 // 不用 KEYCODE_MENU(82)——现代安卓应用基本不响应它，弹不出最近任务
 void DeviceController::SendRecents()

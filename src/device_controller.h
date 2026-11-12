@@ -36,6 +36,10 @@ class DeviceController : public QObject
     Q_PROPERTY(QString videoProfile READ VideoProfile NOTIFY VideoSettingsChanged)
     Q_PROPERTY(bool connected READ IsConnected NOTIFY ConnectedChanged)
     Q_PROPERTY(QString bossKey READ BossKey NOTIFY BossKeyChanged)
+    Q_PROPERTY(QString shortcutBack READ ShortcutBack NOTIFY ShortcutsChanged)
+    Q_PROPERTY(QString shortcutHome READ ShortcutHome NOTIFY ShortcutsChanged)
+    Q_PROPERTY(QString shortcutScreenshot READ ShortcutScreenshot NOTIFY ShortcutsChanged)
+    Q_PROPERTY(QString shortcutFullscreen READ ShortcutFullscreen NOTIFY ShortcutsChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -54,6 +58,10 @@ public:
     QString VideoProfile() const;                                                               // wired 或 wireless，看当前连的是哪种
     bool IsConnected() const;                                                                   // 会话建起来没有，投屏窗靠它决定要不要显示
     QString BossKey() const;                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
+    QString ShortcutBack() const;                                                               // 返回键的快捷键
+    QString ShortcutHome() const;                                                               // 回桌面的快捷键
+    QString ShortcutScreenshot() const;                                                         // 截图的快捷键
+    QString ShortcutFullscreen() const;                                                         // 全屏的快捷键                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -69,7 +77,8 @@ public:
     Q_INVOKABLE void SendClipboardToDevice();                                                   // 电脑剪贴板 → 设备，写完直接粘贴
     Q_INVOKABLE void PullClipboardFromDevice();                                                 // 设备剪贴板 → 电脑
     Q_INVOKABLE void SetBossKeyHost(QObject *host);                                             // main 把 BossKey 对象交进来
-    Q_INVOKABLE bool SetBossKey(const QString &text);                                           // 界面改老板键：解析 → 重注册 → 记住
+    Q_INVOKABLE bool SetBossKey(const QString &text);
+    Q_INVOKABLE bool SetShortcut(const QString &name, const QString &sequence);                 // name: back/home/screenshot/fullscreen                                           // 界面改老板键：解析 → 重注册 → 记住
     Q_INVOKABLE void RegisterWindow(QObject *window);                                           // QML 把自己的窗口登记进来，老板键要藏它们
     Q_INVOKABLE void ToggleBossKey();                                                           // 一键隐藏/恢复所有窗口
 
@@ -84,6 +93,8 @@ public:
     Q_INVOKABLE void SaveScreenshot();                                                          // 把当前画面存成 png
     Q_INVOKABLE void SetDisplayPower(bool on);                                                  // true 亮屏，false 息屏
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
+    Q_INVOKABLE void SendHome();                                                                // 回桌面（KEYCODE_HOME）
+    Q_INVOKABLE void SendPower();                                                               // 按一下电源键（锁屏/点亮）
     Q_INVOKABLE void SendRecents();                                                             // 多任务切换（最近任务）
 
 signals:
@@ -97,6 +108,7 @@ signals:
     void VideoSettingsChanged();
     void ConnectedChanged();
     void BossKeyChanged();
+    void ShortcutsChanged();
 
 private:
     void OnControlData();    // 控制 socket 有数据：解析设备消息（剪贴板推送、Ack）
@@ -138,7 +150,7 @@ private:
     QMetaObject::Connection clipboard_connection_;                                              // 自动同步的剪贴板信号连接
     bool connected_ = false;                                                                    // 会话活着就是 true
     QString video_profile_ = QStringLiteral("wired");                                           // 当前连接方式的画质档位
-    bool show_console_ = false;                                                                  // 控制台窗口显示状态
+    bool show_console_ = false;                                                                 // 控制台窗口显示状态
     QStringList device_labels_;                                                                 // 下拉框显示文字，和 devices_ 下标对应
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
