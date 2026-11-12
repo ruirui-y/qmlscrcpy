@@ -383,6 +383,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [自动连接](docs/自动连接.md) | 启动自动连上次设备、只做一次、存哪 |
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
+| [崩溃排查](docs/崩溃排查.md) | 怎么抓 dump、pdb 怎么对上、WinDbg/VS 怎么看栈、没 dump 时看日志 |
 | [打包发布](docs/打包发布.md) | Inno Setup 打包、stage 收集、为什么不能装 Program Files |
 | [构建与测试](docs/构建与测试.md) | 命令、环境变量、测试清单、环境坑 |
 
