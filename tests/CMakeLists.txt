@@ -55,5 +55,11 @@ add_test(NAME stream COMMAND tst_stream)
 qs_deploy_qt_runtime(tst_stream)
 qs_deploy_ffmpeg(tst_stream)
 
-set_tests_properties(protocol adb server_args server_session ffmpeg stream PROPERTIES
+# 注入逻辑：坐标换算和触摸消息布局，纯逻辑不需要设备
+add_executable(tst_input tst_input.cpp)
+target_link_libraries(tst_input PRIVATE qsc_input Qt5::Test)
+add_test(NAME input COMMAND tst_input)
+qs_deploy_qt_runtime(tst_input)
+
+set_tests_properties(protocol adb server_args server_session ffmpeg stream input PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QS_QT_ROOT}/bin")
