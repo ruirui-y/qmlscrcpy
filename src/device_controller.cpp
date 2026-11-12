@@ -15,6 +15,7 @@
 #include "base/log.h"
 #include "adb/adb_args.h"
 #include "adb/net_address.h"
+#include "base/console_window.h"
 
 #include <QGuiApplication>
 #include <QHostAddress>
@@ -34,6 +35,7 @@ DeviceController::DeviceController(QObject *parent) : QObject(parent)
     AppSettings settings;
     wheel_mode_ = settings.WheelMode();
     drag_pixels_ = settings.DragPixels();
+    show_console_ = settings.ShowConsole();
     status_ = QStringLiteral("未连接");
 }
 
@@ -68,6 +70,26 @@ void DeviceController::SetSurface(QObject *surface)
     surface_->SetDragPixels(drag_pixels_);
 }
 
+// 控制台窗口当前显示着没有
+bool DeviceController::ShowConsole() const
+{
+    return show_console_;
+}
+
+// 显示或隐藏命令行窗口，并把选择记进配置
+void DeviceController::SetShowConsole(bool show)
+{
+    if (show_console_ == show)
+    {
+        return;
+    }
+
+    show_console_ = show;
+    qsc::base::SetConsoleWindowVisible(show_console_);
+    AppSettings().SetShowConsole(show_console_);
+    emit ShowConsoleChanged();
+    SetStatus(show_console_ ? QStringLiteral("命令行窗口已显示") : QStringLiteral("命令行窗口已隐藏"));
+}
 // 设备地址列表，和 deviceLabels 下标一一对应
 QStringList DeviceController::Devices() const
 {

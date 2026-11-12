@@ -108,6 +108,7 @@ Window {
             anchors.fill: parent
             hoverEnabled: true
             enabled: button.enabled
+            cursorShape: Qt.PointingHandCursor
             onClicked: button.clicked()
         }
     }
@@ -155,6 +156,7 @@ Window {
                         id: itemArea
                         anchors.fill: parent
                         hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             // 只把地址填进输入框，连不连由用户点「连接」决定
                             devicePopup.close()
@@ -190,6 +192,7 @@ Window {
                     id: wifiArea
                     anchors.fill: parent
                     hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         devicePopup.close()
                         deviceController.EnableWifi()
@@ -215,6 +218,33 @@ Window {
             }
 
             Item { Layout.fillWidth: true }
+
+            // 命令行窗口开关：状态记在 window.ini，下次启动照这个来
+            Rectangle {
+                id: consoleToggle
+
+                Layout.preferredWidth: 88
+                Layout.preferredHeight: 26
+                radius: 6
+                color: deviceController.showConsole ? "#2b4a6f" : (consoleArea.containsMouse ? "#2e343e" : "#242932")
+                border.width: 1
+                border.color: deviceController.showConsole ? "#3f6f9f" : "#333945"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("命令行")
+                    color: deviceController.showConsole ? "#ffffff" : "#cdd4de"
+                    font.pixelSize: 12
+                }
+
+                MouseArea {
+                    id: consoleArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: deviceController.SetShowConsole(!deviceController.showConsole)
+                }
+            }
         }
 
         // 唯一的一行操作：输入 → 设备菜单 → 刷新 → 连接 → 断开
@@ -273,6 +303,7 @@ Window {
                         id: menuArea
                         anchors.fill: parent
                         hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             devicePopup.x = serialField.mapToItem(controlWindow.contentItem, 0, 0).x
                             devicePopup.y = serialField.mapToItem(controlWindow.contentItem, 0, 0).y + 40

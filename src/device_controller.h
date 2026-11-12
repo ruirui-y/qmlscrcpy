@@ -29,6 +29,7 @@ class DeviceController : public QObject
     Q_PROPERTY(QString deviceName READ DeviceName NOTIFY DeviceNameChanged)
     Q_PROPERTY(QStringList devices READ Devices NOTIFY DevicesChanged)
     Q_PROPERTY(QStringList deviceLabels READ DeviceLabels NOTIFY DevicesChanged)
+    Q_PROPERTY(bool showConsole READ ShowConsole NOTIFY ShowConsoleChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -41,6 +42,7 @@ public:
     QString DeviceName() const;                                                                 // 当前连着的设备串号，标题栏用它
     QStringList Devices() const;                                                                // 扫到的设备地址，和 deviceLabels 下标对应
     QStringList DeviceLabels() const;                                                           // 下拉框显示文字，带 USB / 无线 前缀
+    bool ShowConsole() const;                                                                   // 控制台窗口当前显示着没有
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -50,6 +52,7 @@ public:
 
     Q_INVOKABLE void SetWheelMode(const QString &mode);                                         // 切换滚轮发法，立即生效并记住
     Q_INVOKABLE void AdjustDragPixels(int delta);                                               // 滑动像素加减，立即生效并记住
+    Q_INVOKABLE void SetShowConsole(bool show);                                                 // 显示或隐藏命令行窗口，并记住
 
     // 启动时挑一个串号自动连：优先上次连过的，其次环境变量给的，都要在在线列表里
     Q_INVOKABLE QString PickStartupSerial(const QString &fallback) const;
@@ -71,6 +74,7 @@ signals:
     void DragPixelsChanged();
     void DeviceNameChanged();
     void DevicesChanged();
+    void ShowConsoleChanged();
 
 private:
     // 切无线三步的结果，工作线程算完交回给主线程
@@ -98,6 +102,7 @@ private:
     QString device_name_;                                                                       // 当前连着的设备串号
     QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
     QStringList devices_;                                                                       // 给 QML 下拉框用的设备地址
+    bool show_console_ = true;                                                                  // 控制台窗口显示状态
     QStringList device_labels_;                                                                 // 下拉框显示文字，和 devices_ 下标对应
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有

@@ -11,6 +11,7 @@
 #include <QWindow>
 
 #include "app_settings.h"
+#include "base/console_window.h"
 #include "base/log.h"
 #include "device_controller.h"
 #include "stream/frame.h"
@@ -88,6 +89,9 @@ int main(int argc, char *argv[])
     }
     qsc::base::Init(log_config);
     qInfo() << "[app] 配置" << app_settings.ConfigPath() << "窗口状态" << app_settings.WindowPath() << "日志目录" << log_config.dir_path;
+
+    // 控制台窗口按上次的选择决定显示还是隐藏（GUI 子系统下这两个调用是空操作）
+    qsc::base::SetConsoleWindowVisible(app_settings.ShowConsole());
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("deviceController"), &controller);

@@ -137,6 +137,19 @@ void AppSettings::SetDragPixels(int pixels)
     store.sync();
 }
 
+// 控制台窗口要不要显示，默认显示（控制台子系统启动本来就有）
+bool AppSettings::ShowConsole() const
+{
+    return WindowStore().value(QStringLiteral("ui/show_console"), true).toBool();
+}
+
+// 记下用户的选择，下次启动照这个来
+void AppSettings::SetShowConsole(bool show)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("ui/show_console"), show);
+    store.sync();
+}
 // 上次连上的设备串号（有线是序列号，无线是 IP:端口）
 QString AppSettings::LastSerial() const
 {

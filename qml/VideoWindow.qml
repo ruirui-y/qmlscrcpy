@@ -66,6 +66,7 @@ Window {
             id: area
             anchors.fill: parent
             hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
             onClicked: button.clicked()
             onEntered: videoWindow.hint = button.tip
             onExited: videoWindow.hint = ""
@@ -94,6 +95,7 @@ Window {
                     id: dragArea
 
                     anchors.fill: parent
+                    cursorShape: Qt.SizeAllCursor
                     property point pressGlobal
                     property point pressWindow
 
@@ -160,6 +162,7 @@ Window {
                             id: minimizeArea
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: videoWindow.showMinimized()
                         }
                     }
@@ -181,6 +184,7 @@ Window {
                             id: closeArea
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: videoWindow.visible = false
                         }
                     }
@@ -274,6 +278,7 @@ Window {
                 id: toolBarDragArea
 
                 anchors.fill: parent
+                cursorShape: Qt.SizeAllCursor
                 property point pressGlobal
                 property point pressWindow
 

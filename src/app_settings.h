@@ -27,6 +27,10 @@ public:
     // [input] 段：滚轮模式，window.ini 里选过的优先，其次 config.ini 的默认值
     QString WheelMode() const;
     void SetWheelMode(const QString &mode);
+    // [ui] 段：控制台窗口要不要显示
+    bool ShowConsole() const;
+    void SetShowConsole(bool show);
+
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮手指移动多少像素，window.ini 里调过的优先
     void SetDragPixels(int pixels);
 
