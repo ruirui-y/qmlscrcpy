@@ -59,6 +59,27 @@ void DeviceController::SetSurface(QObject *surface)
     surface_->SetDragPixels(drag_pixels_);
 }
 
+// 当前连着的设备串号，没连时是空
+QString DeviceController::DeviceName() const
+{
+    return device_name_;
+}
+
+// 启动时挑串号：上次连过的 > 环境变量给的；两个都得在在线列表里，省得白等一次失败连接
+QString DeviceController::PickStartupSerial(const QString &fallback) const
+{
+    AppSettings settings;
+    const QString last = settings.LastSerial();
+    if (!last.isEmpty() && online_serials_.contains(last))
+    {
+        return last;
+    }
+    if (!fallback.isEmpty() && online_serials_.contains(fallback))
+    {
+        return fallback;
+    }
+    return QString();
+}
 // 改状态文字，值没变就不发信号
 void DeviceController::SetStatus(const QString &status)
 {
@@ -91,6 +112,7 @@ void DeviceController::RefreshDevices()
         }
     }
 
+    online_serials_ = serials;
     proposed_serial_ = serials.isEmpty() ? QString() : serials.first();
     emit ProposedSerialChanged();
 
@@ -261,6 +283,9 @@ void DeviceController::Connect(const QString &serial)
     SetStatus(QStringLiteral("正在连接 %1 …").arg(params.serial_));
     QCoreApplication::processEvents();                                                          // 让状态文字先画出来
 
+    device_name_ = params.serial_;
+    emit DeviceNameChanged();
+
     session_ = std::make_unique<qsc::session::ServerSession>(params);
     const qsc::session::ConnectResult result = session_->Start();
     ApplyConnected(result);
@@ -313,6 +338,9 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     });
     reader_->start();
 
+    // 记住这次连的设备，下次启动优先连它
+    AppSettings().SetLastSerial(device_name_);
+
     SetStatus(QStringLiteral("已连接 %1  %2x%3%4")
                   .arg(result.device_name_)
                   .arg(result.frame_size_.width())
@@ -347,6 +375,12 @@ void DeviceController::SendControl(const QByteArray &message)
 // 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {
+    if (!device_name_.isEmpty())
+    {
+        device_name_.clear();
+        emit DeviceNameChanged();
+    }
+
     // 顺序不能反：读线程里存着解码器的裸指针，先停线程再销毁解码器
     if (reader_ != nullptr)
     {

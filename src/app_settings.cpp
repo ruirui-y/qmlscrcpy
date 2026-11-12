@@ -137,6 +137,19 @@ void AppSettings::SetDragPixels(int pixels)
     store.sync();
 }
 
+// 上次连上的设备串号（有线是序列号，无线是 IP:端口）
+QString AppSettings::LastSerial() const
+{
+    return WindowStore().value(QStringLiteral("device/last_serial")).toString();
+}
+
+void AppSettings::SetLastSerial(const QString &serial)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("device/last_serial"), serial);
+    store.sync();
+}
+
 // 采集长边上限：0 表示不缩放
 int AppSettings::VideoMaxSize() const
 {

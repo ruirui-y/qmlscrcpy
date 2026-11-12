@@ -30,6 +30,10 @@ public:
     int DragPixels() const;    // 滑动模式下一格滚轮手指移动多少像素，window.ini 里调过的优先
     void SetDragPixels(int pixels);
 
+    // [device] 段：上次连上的设备，启动时优先自动连它
+    QString LastSerial() const;
+    void SetLastSerial(const QString &serial);
+
     // [video] 段
     int VideoMaxSize() const;                                                                   // 长边上限，0 = 设备原生分辨率
     int VideoBitRate() const;

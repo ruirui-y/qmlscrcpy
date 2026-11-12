@@ -8,6 +8,7 @@ Window {
     id: toolWindow
 
     property var target: null    // 投屏窗，没设置就整条栏隐藏
+    property var control: null    // 控制窗，给"主窗"按钮把窗口提到前台用
     property bool pinned: false    // 置顶：投屏窗和工具栏一起置顶
     property bool displayOff: false    // 只用来切按钮文字，真实状态在设备那边
 
@@ -88,6 +89,17 @@ Window {
         anchors.fill: parent
         anchors.margins: 6
         spacing: 4
+
+        ToolButton {
+            label: qsTr("主窗")
+            onClicked: {
+                if (!toolWindow.control) {
+                    return
+                }
+                toolWindow.control.requestActivate()
+                toolWindow.control.raise()
+            }
+        }
 
         ToolButton {
             label: qsTr("返回")

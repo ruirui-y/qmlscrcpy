@@ -25,6 +25,7 @@ class DeviceController : public QObject
     Q_PROPERTY(QString proposedSerial READ ProposedSerial NOTIFY ProposedSerialChanged)
     Q_PROPERTY(QString wheelMode READ WheelMode NOTIFY WheelModeChanged)
     Q_PROPERTY(int dragPixels READ DragPixels NOTIFY DragPixelsChanged)
+    Q_PROPERTY(QString deviceName READ DeviceName NOTIFY DeviceNameChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -34,6 +35,7 @@ public:
     QString ProposedSerial() const;                                                             // 刷新后建议填进输入框的序列号
     QString WheelMode() const;                                                                  // "scroll" 或 "drag"
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮拖多少像素
+    QString DeviceName() const;                                                                 // 当前连着的设备串号，标题栏用它
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -43,6 +45,9 @@ public:
 
     Q_INVOKABLE void SetWheelMode(const QString &mode);                                         // 切换滚轮发法，立即生效并记住
     Q_INVOKABLE void AdjustDragPixels(int delta);                                               // 滑动像素加减，立即生效并记住
+
+    // 启动时挑一个串号自动连：优先上次连过的，其次环境变量给的，都要在在线列表里
+    Q_INVOKABLE QString PickStartupSerial(const QString &fallback) const;
     Q_INVOKABLE void SendVolumeUp();                                                            // 音量加一个档
     Q_INVOKABLE void SendVolumeDown();                                                          // 音量减一个档
     Q_INVOKABLE void RotateDevice();                                                            // 让设备转一下屏幕
@@ -56,6 +61,7 @@ signals:
     void ProposedSerialChanged();
     void WheelModeChanged();
     void DragPixelsChanged();
+    void DeviceNameChanged();
 
 private:
     void ApplyConnected(const qsc::session::ConnectResult &result);                             // 连接结果落地：接解码器和读线程
@@ -69,6 +75,8 @@ private:
     QString proposed_serial_;                                                                   // 刷新出来的第一台设备序列号
     QString wheel_mode_ = QStringLiteral("scroll");                                             // 滚轮发法，从配置里读进来
     int drag_pixels_ = 60;                                                                      // 滑动模式下一格滚轮拖多少像素
+    QString device_name_;                                                                       // 当前连着的设备串号
+    QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
     std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应

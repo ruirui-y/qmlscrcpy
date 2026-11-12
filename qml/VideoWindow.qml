@@ -22,7 +22,9 @@ Window {
     minimumWidth: 160
     minimumHeight: 268
     visible: true
-    title: qsTr("QmlScrcpy — 投屏")
+    // 标题显示当前设备：有线是序列号，无线是 IP:端口
+    title: deviceController.deviceName.length > 0
+           ? "QmlScrcpy — " + deviceController.deviceName : qsTr("QmlScrcpy — 投屏")
     color: "#000000"
     flags: Qt.Window | Qt.FramelessWindowHint
 
