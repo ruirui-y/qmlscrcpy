@@ -37,7 +37,11 @@ void DeviceController::SetSurface(QObject *surface)
     if (surface_ == nullptr)
     {
         qWarning() << "[controller] 传进来的不是 VideoSurface";
+        return;
     }
+
+    // 画布把鼠标键盘翻成控制消息，这里负责写进控制 socket
+    QObject::connect(surface_, &VideoItem::ControlMessageReady, this, &DeviceController::SendControl);
 }
 
 // 改状态文字，值没变就不发信号
