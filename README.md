@@ -10,7 +10,15 @@
 **只是来用的**：跳到 [一、使用指南](#一使用指南从零开始)，装好就能连，零配置。
 **要读代码 / 自己构建**：看 [二、看代码从哪看起](#二看代码从哪看起) 和 [三、构建与测试](#三构建与测试)。
 
-安装包：`setup\Output\QmlScrcpy_Setup_x.y.z.exe`（自带 Qt 运行库和 adb，装完即用）。
+## 下载
+
+最新安装包在 [Releases](https://github.com/ruirui-y/qmlscrcpy/releases/latest)：
+
+```
+https://github.com/ruirui-y/qmlscrcpy/releases/download/v0.1.0/QmlScrcpy_Setup_0.1.0.exe
+```
+
+自带 Qt 运行库和 adb，装完即用。**装到 D 盘，别装 Program Files**（程序要往自己目录写 config/Log）。
 
 ---
 
@@ -384,6 +392,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [自动连接](docs/自动连接.md) | 启动自动连上次设备、只做一次、存哪 |
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
+| [发布到 GitHub](docs/发布到GitHub.md) | 发版流程、gh CLI 用法、cmd 与 PowerShell 的续行坑、检查清单 |
 | [崩溃排查](docs/崩溃排查.md) | 怎么抓 dump、pdb 怎么对上、WinDbg/VS 怎么看栈、没 dump 时看日志 |
 | [打包发布](docs/打包发布.md) | Inno Setup 打包、stage 收集、为什么不能装 Program Files |
 | [构建与测试](docs/构建与测试.md) | 命令、环境变量、测试清单、环境坑 |
