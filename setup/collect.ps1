@@ -35,13 +35,15 @@ function Find-ReleaseDir {
     }
 
     # 优先 RelWithDebInfo，其次 Release，最后其它
-    $ordered = $found | Sort-Object {
+    # 注意要用 @() 包一层：只有一个元素时，管道输出会被压成字符串，
+    # 那样 $ordered[0] 取到的是第一个字符（'H'），路径就变成 ...\QmlScrcpy\H
+    $ordered = @($found | Sort-Object {
         switch -Wildcard ($_) {
             '*RelWithDebInfo*' { 0 }
             '*Release*'        { 1 }
             default            { 2 }
         }
-    }
+    })
     return $ordered[0]
 }
 
@@ -66,6 +68,10 @@ $releaseDir = Find-ReleaseDir
 if (-not $releaseDir)
 {
     throw "没在 $binRoot 下找到 QmlScrcpy.exe，先跑一次 cmake --build --preset build-windows-release"
+}
+if (-not (Test-Path (Join-Path $releaseDir 'QmlScrcpy.exe')))
+{
+    throw "产物目录不对：$releaseDir"
 }
 Write-Host "      使用产物目录：$releaseDir"
 
