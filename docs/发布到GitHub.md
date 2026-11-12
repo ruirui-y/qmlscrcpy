@@ -1,5 +1,6 @@
 # 发布到 GitHub
 
+
 安装包通过 **GitHub Releases** 发布，不 commit 进仓库（45 MB 的二进制进 git 历史会让仓库永久膨胀，而且 clone 会变慢）。
 
 ## 1. 发版的完整流程
@@ -173,3 +174,5 @@ powershell -ExecutionPolicy Bypass -File setup\release_gitee.ps1 -Version 0.1.5
 | PowerShell 发中文 JSON | `400 Bad Request` | 改用 `curl --data-binary @文件`（UTF-8 无 BOM） |
 | 用 `/releases/tags/{tag}` 查发行版 | 返回 `null`，脚本当成"已存在"，附件传到空 id | Gitee 没这个端点，改拉列表按 `tag_name` 匹配，并校验 `id` 非空 |
 | `Set-Content -Encoding UTF8` 写 latest.json | 带 BOM，客户端 JSON 解析失败 | 改 `[IO.File]::WriteAllText` + `UTF8Encoding($false)` |
+
+> **现在的主流程见 [双仓库发版](双仓库发版.md)**：代码 GitHub、安装包 Gitee，这篇留作历史参考。

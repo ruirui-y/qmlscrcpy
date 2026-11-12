@@ -437,6 +437,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [自动连接](docs/自动连接.md) | 启动自动连上次设备、只做一次、存哪 |
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
+| [双仓库发版](docs/双仓库发版.md) | GitHub 放代码、Gitee 放 exe 的完整发版流程与核对方法 |
 | [版本检查](docs/版本检查.md) | 零服务器方案、三个源依次尝试、版本比较规则、发版要多改一个文件 |
 | [文件传输](docs/文件传输.md) | 拖拽入口、adb push 进度解析、为什么必须放工作线程 |
 | [剪贴板同步](docs/剪贴板同步.md) | 协议走向、为什么之前收不到设备消息、回环坑 |
