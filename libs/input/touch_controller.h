@@ -26,7 +26,7 @@ public:
     void SetWheelMode(WheelMode mode) { wheel_mode_ = mode; }
     WheelMode Mode() const { return wheel_mode_; }
 
-    void SetDragPixels(int pixels) { drag_pixels_ = pixels > 0 ? pixels : 60; }    // 拖动模式一格滚轮拖多远
+    void SetDragPixels(int pixels) { drag_pixels_ = pixels > 0 ? pixels : 60; }                 // 拖动模式一格滚轮拖多远
     int DragPixels() const { return drag_pixels_; }
 
     QByteArray Press(const QPointF &pos);                                                       // 左键按下

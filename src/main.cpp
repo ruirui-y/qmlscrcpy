@@ -113,8 +113,7 @@ int main(int argc, char *argv[])
     // 进界面先刷一次设备列表，输入框里就有默认值了
     controller.RefreshDevices();
 
-    // 启动后自动连一次：优先上次连过的设备，其次 QS_DEVICE_SERIAL，两个都得在线
-    // 只做这一次，用户之后断开不会再自动连
+    // 启动后自动连一次：优先上次设备，其次 QS_DEVICE_SERIAL，都得在线；只这一次
     const QString fallback = QString::fromLocal8Bit(qgetenv("QS_DEVICE_SERIAL"));
     const QString auto_serial = controller.PickStartupSerial(fallback);
     if (!auto_serial.isEmpty())

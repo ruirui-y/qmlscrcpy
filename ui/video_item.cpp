@@ -341,6 +341,7 @@ void VideoItem::SetDragPixels(int pixels)
     touch_.SetDragPixels(pixels);
 }
 
+// 视频线程调：存下最新一帧，等渲染线程来取
 void VideoItem::Present(const Frame &frame)
 {
     if (!frame.IsValid())

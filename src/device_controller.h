@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QSize>
 #include <QString>
+#include <QStringList>
 
 #include <memory>
 
@@ -26,6 +27,7 @@ class DeviceController : public QObject
     Q_PROPERTY(QString wheelMode READ WheelMode NOTIFY WheelModeChanged)
     Q_PROPERTY(int dragPixels READ DragPixels NOTIFY DragPixelsChanged)
     Q_PROPERTY(QString deviceName READ DeviceName NOTIFY DeviceNameChanged)
+    Q_PROPERTY(QStringList devices READ Devices NOTIFY DevicesChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -36,6 +38,7 @@ public:
     QString WheelMode() const;                                                                  // "scroll" 或 "drag"
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮拖多少像素
     QString DeviceName() const;                                                                 // 当前连着的设备串号，标题栏用它
+    QStringList Devices() const;                                                                // 上一次 adb devices 拿到的在线设备
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -48,6 +51,9 @@ public:
 
     // 启动时挑一个串号自动连：优先上次连过的，其次环境变量给的，都要在在线列表里
     Q_INVOKABLE QString PickStartupSerial(const QString &fallback) const;
+
+    // 把当前设备切到无线调试：adb tcpip 5555 → 问出设备 IP → adb connect；需要先插着线
+    Q_INVOKABLE void EnableWifi();
     Q_INVOKABLE void SendVolumeUp();                                                            // 音量加一个档
     Q_INVOKABLE void SendVolumeDown();                                                          // 音量减一个档
     Q_INVOKABLE void RotateDevice();                                                            // 让设备转一下屏幕
@@ -62,6 +68,7 @@ signals:
     void WheelModeChanged();
     void DragPixelsChanged();
     void DeviceNameChanged();
+    void DevicesChanged();
 
 private:
     void ApplyConnected(const qsc::session::ConnectResult &result);                             // 连接结果落地：接解码器和读线程
@@ -77,6 +84,7 @@ private:
     int drag_pixels_ = 60;                                                                      // 滑动模式下一格滚轮拖多少像素
     QString device_name_;                                                                       // 当前连着的设备串号
     QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
+    QStringList devices_;                                                                       // 给 QML 下拉框用的在线设备列表
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
     std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应

@@ -3,18 +3,66 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 
-// 控制窗：设备输入、连接/断开、状态。画面在 VideoWindow，常用操作在 ToolBarWindow。
+// 控制窗：设备输入、连接/断开、在线设备、无线切换、状态。
+// 画面在 VideoWindow，常用操作在 ToolBarWindow。
 // 按钮和输入框都用自绘背景：系统默认样式在不同 DPI 的屏幕上会变成白底方块。
 Window {
     id: controlWindow
 
-    width: 520
-    height: 300
-    minimumWidth: 480
-    minimumHeight: 280
+    width: 560
+    height: 340
+    minimumWidth: 560
+    minimumHeight: 300
     visible: true
     title: qsTr("QmlScrcpy")
     color: "#14161a"
+
+    // 换屏时 DPI 变了，Qt 会重算窗口尺寸；这里保证不缩到装不下内容
+    onScreenChanged: {
+        width = Math.max(width, minimumWidth)
+        height = Math.max(height, minimumHeight)
+    }
+
+    // 位置和尺寸记在 window.ini，下次启动回到原处；拖动/缩放时防抖写盘
+    property bool applying: false
+    property bool ready: false
+
+    Component.onCompleted: {
+        applying = true
+        const saved = appSettings.VideoGeometry("control_window")
+        if (saved.width > 0) {
+            x = saved.x
+            y = saved.y
+            width = Math.max(minimumWidth, saved.width)
+            height = Math.max(minimumHeight, saved.height)
+        }
+        applying = false
+        ready = true
+        if (saved.width <= 0) {
+            // 第一次运行没有记录：把当前（Qt 给的）位置先存下来，下次就在这儿了
+            saveTimer.restart()
+        }
+    }
+
+    Timer {
+        id: saveTimer
+        interval: 400
+        repeat: false
+        onTriggered: appSettings.SaveVideoGeometry("control_window", controlWindow.x, controlWindow.y,
+                                                   controlWindow.width, controlWindow.height)
+    }
+
+    onXChanged: scheduleSave()
+    onYChanged: scheduleSave()
+    onWidthChanged: scheduleSave()
+    onHeightChanged: scheduleSave()
+
+    function scheduleSave() {
+        if (applying || !ready) {
+            return
+        }
+        saveTimer.restart()
+    }
 
     // 投屏窗口独立存在，这里只是把它拉起来
     VideoWindow {
@@ -35,7 +83,7 @@ Window {
         property bool primary: false
         signal clicked()
 
-        implicitWidth: 78
+        implicitWidth: 72
         implicitHeight: 34
         radius: 6
         opacity: enabled ? 1.0 : 0.5
@@ -119,7 +167,7 @@ Window {
             }
         }
 
-        // 中间：串号 + 三个动作
+        // 串号 + 动作
         Card {
             RowLayout {
                 Layout.fillWidth: true
@@ -129,6 +177,7 @@ Window {
                     id: serialField
 
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 130
                     Layout.preferredHeight: 34
                     placeholderText: qsTr("设备序列号 / IP:端口")
                     text: deviceController.proposedSerial
@@ -164,7 +213,63 @@ Window {
             }
         }
 
-        // 底部：状态
+        // 在线设备 + 切无线
+        Card {
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                ComboBox {
+                    id: deviceBox
+
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 150
+                    Layout.preferredHeight: 34
+                    model: deviceController.devices
+                    // 选一台就把串号填进输入框，连接还是由上面的按钮触发
+                    onActivated: serialField.text = model[index]
+
+                    background: Rectangle {
+                        radius: 6
+                        color: "#151920"
+                        border.width: 1
+                        border.color: "#2c323c"
+                    }
+
+                    contentItem: Text {
+                        leftPadding: 10
+                        text: deviceBox.count > 0 ? deviceBox.currentText : qsTr("没有在线设备")
+                        color: deviceBox.count > 0 ? "#d8dee9" : "#6b7280"
+                        font.pixelSize: 13
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+
+                    delegate: ItemDelegate {
+                        width: deviceBox.width
+                        contentItem: Text {
+                            leftPadding: 10
+                            text: modelData
+                            color: "#d8dee9"
+                            font.pixelSize: 13
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            color: highlighted ? "#2c313a" : "#1b1f26"
+                        }
+                    }
+                }
+
+                ActionButton {
+                    label: qsTr("切无线")
+                    width: 84
+                    implicitWidth: 84
+                    onClicked: deviceController.EnableWifi()
+                }
+            }
+        }
+
+        // 状态
         Card {
             RowLayout {
                 Layout.fillWidth: true

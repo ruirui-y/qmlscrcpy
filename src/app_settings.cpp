@@ -143,6 +143,7 @@ QString AppSettings::LastSerial() const
     return WindowStore().value(QStringLiteral("device/last_serial")).toString();
 }
 
+// 记下这次连的设备串号，下次启动优先连它
 void AppSettings::SetLastSerial(const QString &serial)
 {
     QSettings &store = WindowStore();

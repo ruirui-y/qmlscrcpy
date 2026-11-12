@@ -7,10 +7,14 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QClipboard>
+#include <QRegularExpression>
+#include <QThread>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
 #include "base/log.h"
+#include "adb/adb_args.h"
+#include "adb/adb_runner.h"
 #include "protocol/control_message.h"
 
 #include <QDebug>
@@ -59,6 +63,97 @@ void DeviceController::SetSurface(QObject *surface)
     surface_->SetDragPixels(drag_pixels_);
 }
 
+// 在线设备列表，QML 里直接当下拉框的 model 用
+QStringList DeviceController::Devices() const
+{
+    return devices_;
+}
+
+// 从 "ip route" 的输出里抠出本机 wifi 地址，例如 "src 192.168.31.115"
+QString ParseWifiAddress(const QString &route_output)
+{
+    const QStringList words = route_output.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    for (int index = 0; index + 1 < words.size(); ++index)
+    {
+        if (words.at(index) == QStringLiteral("src"))
+        {
+            return words.at(index + 1);
+        }
+    }
+    return QString();
+}
+
+// 切到无线调试：先 adb tcpip 5555，再问设备 IP，最后 adb connect；三步都要线连着
+void DeviceController::EnableWifi()
+{
+    const QString serial = !device_name_.isEmpty() ? device_name_
+                                                   : (online_serials_.isEmpty() ? QString() : online_serials_.first());
+    if (serial.isEmpty())
+    {
+        SetStatus(QStringLiteral("先插线连一台设备，才能切无线"));
+        return;
+    }
+
+    // 切 tcpip 会重启设备上的 adbd，当前会话必然断：先自己断干净，
+    // 否则界面会冒出一句"视频连接断开"，像是出错了
+    if (session_)
+    {
+        Disconnect();
+    }
+
+    SetStatus(QStringLiteral("正在切无线调试 …"));
+    QCoreApplication::processEvents();
+
+    // 第一步：让设备在 5555 端口起一个 adb 服务
+    const qsc::adb::AdbResult tcpip = qsc::adb::Run(qsc::adb::AdbArgs::Tcpip(serial, 5555), 10000);
+    if (!tcpip.Ok())
+    {
+        SetStatus(QStringLiteral("切无线失败：%1").arg(tcpip.ErrorText()));
+        return;
+    }
+
+    // 第二步：adbd 重启要一两秒，轮询问设备 IP，别问一次就放弃
+    QString address;
+    for (int attempt = 0; attempt < 8 && address.isEmpty(); ++attempt)
+    {
+        QThread::msleep(500);
+        const qsc::adb::AdbResult route = qsc::adb::Run(
+            qsc::adb::AdbArgs::Shell(serial, QStringList() << QStringLiteral("ip") << QStringLiteral("route")), 5000);
+        address = ParseWifiAddress(QString::fromUtf8(route.std_out_));
+    }
+
+    if (address.isEmpty())
+    {
+        RefreshDevices();
+        SetStatus(QStringLiteral("无线已开，但没问到设备 IP，等几秒后手动填 <IP>:5555 再连"));
+        return;
+    }
+
+    // 第三步：adb connect，失败重试几次（adbd 刚重启时偶尔会拒一次）
+    const QString endpoint = QStringLiteral("%1:5555").arg(address);
+    bool connected = false;
+    for (int attempt = 0; attempt < 3 && !connected; ++attempt)
+    {
+        const qsc::adb::AdbResult result = qsc::adb::Run(qsc::adb::AdbArgs::Connect(endpoint), 8000);
+        const QString output = QString::fromUtf8(result.std_out_);
+        connected = result.Ok() && !output.contains(QStringLiteral("failed"));
+        if (!connected)
+        {
+            QThread::msleep(800);
+        }
+    }
+
+    RefreshDevices();
+    if (!connected)
+    {
+        SetStatus(QStringLiteral("adb connect %1 失败，检查电脑和设备是否同一个 wifi").arg(endpoint));
+        return;
+    }
+
+    proposed_serial_ = endpoint;
+    emit ProposedSerialChanged();
+    SetStatus(QStringLiteral("无线已就绪：%1，可以拔线了，点「连接」").arg(endpoint));
+}
 // 当前连着的设备串号，没连时是空
 QString DeviceController::DeviceName() const
 {
@@ -113,7 +208,9 @@ void DeviceController::RefreshDevices()
     }
 
     online_serials_ = serials;
+    devices_ = serials;
     proposed_serial_ = serials.isEmpty() ? QString() : serials.first();
+    emit DevicesChanged();
     emit ProposedSerialChanged();
 
     SetStatus(serials.isEmpty() ? QStringLiteral("没找到在线设备")
