@@ -273,6 +273,7 @@ QmlScrcpy/
 │  ├─ session/                  server 参数、建链、隧道、握手
 │  ├─ stream/                   读包、解码、帧所有权、耗时埋点
 │  └─ input/                    坐标换算、触摸/滚轮/键盘消息
+├─ resources/                   图标（app.ico）和生成脚本（make_icon.ps1）、app.rc
 ├─ ui/video_item.*              QQuickFramebufferObject + 三平面着色器
 ├─ src/                         设备控制器、窗口配置、main
 ├─ qml/                         控制窗（MainWindow）+ 投屏窗（VideoWindow）

@@ -45,6 +45,7 @@ VersionInfoDescription={#MyAppName} 安卓投屏客户端
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoVersion={#MyAppVersion}
 WizardStyle=modern
+SetupIconFile=..\resources\app.ico
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"

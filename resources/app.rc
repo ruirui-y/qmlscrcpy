@@ -1,0 +1,3 @@
+// 应用图标资源：exe 的图标、任务栏图标、Alt+Tab 缩略图都取这里
+// 文件是 resources\make_icon.ps1 生成的，改图形改那个脚本再跑一次
+IDI_APPICON ICON "app.ico"

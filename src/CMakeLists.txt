@@ -8,6 +8,7 @@ endif()
 # qrc 放在仓库根：它引用的是 ../qml/ 下的文件
 add_executable(QmlScrcpy ${qs_subsystem}
     main.cpp
+    ${PROJECT_SOURCE_DIR}/resources/app.rc
     app_settings.cpp
     app_settings.h
     device_controller.cpp

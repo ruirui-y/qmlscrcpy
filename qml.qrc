@@ -2,5 +2,6 @@
     <qresource prefix="/">
         <file>qml/MainWindow.qml</file>
         <file>qml/VideoWindow.qml</file>
+        <file alias="app.ico">resources/app.ico</file>
     </qresource>
 </RCC>

@@ -1,5 +1,6 @@
 #include <QDebug>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -59,6 +60,9 @@ int main(int argc, char *argv[])
     QSurfaceFormat::setDefaultFormat(format);
 
     QGuiApplication app(argc, argv);
+
+    // 任务栏和 Alt+Tab 用这个图标：exe 自带的那份只在文件管理器里生效
+    app.setWindowIcon(QIcon(QStringLiteral(":/app.ico")));
     app.setApplicationName(QStringLiteral("QmlScrcpy"));
     app.setApplicationVersion(QStringLiteral(QS_APP_VERSION));
 
