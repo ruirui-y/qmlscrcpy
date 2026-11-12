@@ -18,7 +18,6 @@
 
 #include <QGuiApplication>
 #include <QHostAddress>
-#include <QWindow>
 #include <QNetworkInterface>
 #include "adb/adb_runner.h"
 #include "protocol/control_message.h"
@@ -455,41 +454,6 @@ void DeviceController::SendRecents()
     SendKeycode(187);
 }
 // QML 把控制窗交进来：主窗按钮要靠它把窗口提到前台
-void DeviceController::SetControlWindow(QObject *window)
-{
-    control_window_ = qobject_cast<QWindow *>(window);
-}
-
-// 把控制窗提到前台：先 show 再 showNormal，最小化的窗口也能回来
-void DeviceController::ShowControlWindow()
-{
-    if (control_window_ == nullptr)
-    {
-        qCInfo(qsc::base::lcRender) << "控制窗还没交给控制器";
-        return;
-    }
-
-    control_window_->show();
-    control_window_->showNormal();
-    control_window_->raise();
-    control_window_->requestActivate();
-    qCInfo(qsc::base::lcRender) << "主窗已请求前台，当前是否激活：" << control_window_->isActive();
-}
-// 工具栏按钮悬停时把说明文字交给界面（Qt5 的 ToolTip 在窄窗口里不稳，改用状态行显示）
-void DeviceController::SetHint(const QString &hint)
-{
-    if (hint_ == hint)
-    {
-        return;
-    }
-    hint_ = hint;
-    emit HintChanged();
-}
-
-QString DeviceController::Hint() const
-{
-    return hint_;
-}
 // 息屏或亮屏：只关显示，不动锁屏状态
 void DeviceController::SetDisplayPower(bool on)
 {

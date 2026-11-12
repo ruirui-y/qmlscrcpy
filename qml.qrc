@@ -2,6 +2,5 @@
     <qresource prefix="/">
         <file>qml/MainWindow.qml</file>
         <file>qml/VideoWindow.qml</file>
-        <file>qml/ToolBarWindow.qml</file>
     </qresource>
 </RCC>

@@ -4,11 +4,10 @@ import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 import QmlScrcpy 1.0
 
-// 独立的投屏窗口：自绘标题栏 + 画面，不带系统边框。
+// 投屏窗：一扇窗口里水平排两块 —— 左边是"视频窗（标题栏 + 画面）"，右边是工具栏列。
 //
-// 为什么要自绘：系统标题栏拖拽会进 Windows 的模态移动循环，GUI 线程被扣住，
-// 重绘请求发不出去，拖的时候画面是冻的。自己处理鼠标移动，事件循环一直在转，
-// 拖着走画面也在动。
+// 为什么不拆成两个窗口：拆开时位置要绑定跟随、最小化要手动同步、transientParent 还会把两扇窗
+// 绑成 owner 关系（主窗最小化把它们一起藏掉）。放在同一扇窗口里，这些全靠布局保证。
 //
 // 尺寸按"横屏 / 竖屏"分开记：横屏看电影、竖屏刷手机，用户对两种姿势的窗口大小要求不一样。
 Window {
@@ -19,187 +18,386 @@ Window {
     property bool applying: false    // 正在由代码改窗口，此时的 onXxxChanged 不记录
     property bool ready: false    // 首帧处理完之前不记尺寸
     property bool landscape: false    // 当前帧是不是横向
+    property bool pinned: false    // 置顶
+    property bool displayOff: false    // 只用来切按钮文字，真实状态在设备那边
+    property string hint: ""    // 工具栏按钮悬停时的说明，显示在标题栏
 
-    // 横屏和竖屏各记一套几何
-    function geometryKey() {
-        return landscape ? "video_window_landscape" : "video_window"
-    }
+    readonly property int toolBarWidth: 64    // 右侧工具栏列宽
 
-    width: 380
-    height: 808
-    minimumWidth: 160
+    width: 460
+    height: 900
+    minimumWidth: toolBarWidth + 200
     minimumHeight: 268
     visible: true
     // 标题显示当前设备：有线是序列号，无线是 IP:端口
     title: deviceController.deviceName.length > 0
            ? "QmlScrcpy — " + deviceController.deviceName : qsTr("QmlScrcpy — 投屏")
     color: "#000000"
-    flags: Qt.Window | Qt.FramelessWindowHint
-    // 不做控制窗的附属窗口：否则主窗最小化会把投屏窗一起带走
-    transientParent: null
+    flags: Qt.Window | Qt.FramelessWindowHint | (pinned ? Qt.WindowStaysOnTopHint : Qt.NoHint)
 
-    ColumnLayout {
+    // 横屏和竖屏各记一套几何
+    function geometryKey() {
+        return landscape ? "video_window_landscape" : "video_window"
+    }
+
+    // 一个按钮：文字 + 选中态配色 + 悬停提示 + 点击回调
+    component ToolButton: Rectangle {
+        id: button
+
+        property string label: ""
+        property string tip: ""    // 悬停时显示在标题栏的说明
+        property bool active: false
+        signal clicked()
+
+        width: parent.width
+        height: 32
+        radius: 3
+        color: area.containsMouse ? "#2f2f2f" : (active ? "#2b4a6f" : "transparent")
+
+        Text {
+            anchors.centerIn: parent
+            text: button.label
+            color: button.active ? "#ffffff" : "#c8c8c8"
+            font.pixelSize: 13
+            font.bold: true
+        }
+
+        MouseArea {
+            id: area
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: button.clicked()
+            onEntered: videoWindow.hint = button.tip
+            onExited: videoWindow.hint = ""
+        }
+    }
+
+    RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
-            id: titleBar
-
+        // 视频窗：标题栏 + 画面，竖向排
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            color: "#1c1c1c"
+            Layout.fillHeight: true
+            spacing: 0
 
-            // 拖动：按屏幕绝对坐标算位移，窗口自己移动不会污染计算
+            Rectangle {
+                id: titleBar
+
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                color: "#1c1c1c"
+
+                // 拖动：按屏幕绝对坐标算位移，窗口自己移动不会污染计算
+                MouseArea {
+                    id: dragArea
+
+                    anchors.fill: parent
+                    property point pressGlobal
+                    property point pressWindow
+
+                    onPressed: {
+                        pressGlobal = dragArea.mapToGlobal(mouse.x, mouse.y)
+                        pressWindow = Qt.point(videoWindow.x, videoWindow.y)
+                    }
+                    onPositionChanged: {
+                        if (!pressed) {
+                            return
+                        }
+                        const current = dragArea.mapToGlobal(mouse.x, mouse.y)
+                        videoWindow.x = pressWindow.x + (current.x - pressGlobal.x)
+                        videoWindow.y = pressWindow.y + (current.y - pressGlobal.y)
+                    }
+                }
+
+                // 默认显示设备名 + 帧率 + 分辨率；有悬停提示时临时顶替
+                Label {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 22    // 让开左上角那个缩放把手
+                    anchors.right: windowButtons.left
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                    text: {
+                        let text = deviceController.deviceName.length > 0
+                                ? deviceController.deviceName : qsTr("未连接")
+                        if (videoWindow.fps > 0) {
+                            text += "   " + videoWindow.fps + " fps"
+                        }
+                        if (videoWindow.frameSize.width > 0) {
+                            text += "   " + videoWindow.frameSize.width + "x" + videoWindow.frameSize.height
+                        }
+                        return text
+                    }
+                    color: "#d0d6de"
+                    font.pixelSize: 14
+                    font.bold: true
+                }
+
+                Row {
+                    id: windowButtons
+
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
+
+                    // 最小化
+                    Rectangle {
+                        width: 22
+                        height: 20
+                        color: minimizeArea.containsMouse ? "#333333" : "transparent"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "—"
+                            color: "#c8c8c8"
+                            font.pixelSize: 12
+                        }
+
+                        MouseArea {
+                            id: minimizeArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: videoWindow.showMinimized()
+                        }
+                    }
+
+                    // 关闭：只关这扇窗（主窗还在，进程不退出）
+                    Rectangle {
+                        width: 22
+                        height: 20
+                        color: closeArea.containsMouse ? "#8c2b2b" : "transparent"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "✕"
+                            color: "#c8c8c8"
+                            font.pixelSize: 12
+                        }
+
+                        MouseArea {
+                            id: closeArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: videoWindow.visible = false
+                        }
+                    }
+                }
+            }
+
+            // 画面 + 右下角缩放把手放同一个 Item：把手坐标不依赖工具栏，不会算错到左边
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                VideoSurface {
+                    id: videoSurface
+                    objectName: "videoSurface"
+                    anchors.fill: parent
+                    keepAspect: false    // 窗口比例已经跟着帧走了，这里直接拉满
+                }
+
+                // 右下角拖拽改尺寸：底色 + 三条 2px 斜线，一眼能看见
+                Rectangle {
+                    id: resizeGrip
+
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    width: 18
+                    height: 18
+                    color: "#2a2a2a"
+
+                    Repeater {
+                        model: 3
+
+                        Rectangle {
+                            width: 13
+                            height: 2
+                            color: "#b8b8b8"
+                            rotation: -45
+                            x: 3 + index * 4
+                            y: 12 - index * 4
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: resizeArea
+
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    width: 18
+                    height: 18
+                    cursorShape: Qt.SizeFDiagCursor
+                    property point pressGlobal
+                    property size pressSize
+
+                    onPressed: {
+                        pressGlobal = mapToGlobal(mouse.x, mouse.y)
+                        pressSize = Qt.size(videoWindow.width, videoWindow.height)
+                    }
+                    onPositionChanged: {
+                        if (!pressed) {
+                            return
+                        }
+                        const current = mapToGlobal(mouse.x, mouse.y)
+                        videoWindow.width = Math.max(videoWindow.minimumWidth,
+                                                     pressSize.width + (current.x - pressGlobal.x))
+                        videoWindow.height = Math.max(videoWindow.minimumHeight,
+                                                      pressSize.height + (current.y - pressGlobal.y))
+                    }
+                }
+            }
+        }
+
+        // 视频区和工具栏之间的分隔线，全屏收起工具栏时一起隐藏
+        Rectangle {
+            Layout.preferredWidth: 1
+            Layout.fillHeight: true
+            color: "#2a2a2a"
+            visible: toolBar.visible
+        }
+
+        // 工具栏：全屏时收起来，别挡画面
+        Rectangle {
+            id: toolBar
+
+            Layout.preferredWidth: videoWindow.toolBarWidth
+            Layout.fillHeight: true
+            color: "#1c1c1c"
+            visible: videoWindow.visibility !== Window.FullScreen
+
+            // 按钮之间的空地也能拖窗口（按钮自己的 MouseArea 会先吃掉点击）
             MouseArea {
-                id: dragArea
+                id: toolBarDragArea
 
                 anchors.fill: parent
                 property point pressGlobal
                 property point pressWindow
 
                 onPressed: {
-                    pressGlobal = dragArea.mapToGlobal(mouse.x, mouse.y)
+                    pressGlobal = toolBarDragArea.mapToGlobal(mouse.x, mouse.y)
                     pressWindow = Qt.point(videoWindow.x, videoWindow.y)
                 }
                 onPositionChanged: {
                     if (!pressed) {
                         return
                     }
-                    const current = dragArea.mapToGlobal(mouse.x, mouse.y)
+                    const current = toolBarDragArea.mapToGlobal(mouse.x, mouse.y)
                     videoWindow.x = pressWindow.x + (current.x - pressGlobal.x)
                     videoWindow.y = pressWindow.y + (current.y - pressGlobal.y)
                 }
             }
 
-            Label {
-                anchors.left: parent.left
-                anchors.leftMargin: 22    // 让开左上角那个缩放把手
-                anchors.verticalCenter: parent.verticalCenter
-                // 默认显示设备名 + 帧率 + 分辨率；有悬停提示时临时顶替
-                text: {
-                    if (deviceController.hint.length > 0) {
-                        return deviceController.hint
-                    }
-                    let text = deviceController.deviceName.length > 0
-                            ? deviceController.deviceName : qsTr("未连接")
-                    if (videoWindow.fps > 0) {
-                        text += "   " + videoWindow.fps + " fps"
-                    }
-                    if (videoWindow.frameSize.width > 0) {
-                        text += "   " + videoWindow.frameSize.width + "x" + videoWindow.frameSize.height
-                    }
-                    return text
-                }
-                color: deviceController.hint.length > 0 ? "#8fb8ff" : "#d0d6de"
-                font.pixelSize: 14
-                font.bold: true
-            }
-
-            Row {
-                anchors.right: parent.right
-                anchors.rightMargin: 6
-                anchors.verticalCenter: parent.verticalCenter
+            Column {
+                anchors.fill: parent
+                anchors.margins: 4
                 spacing: 4
 
-                // 最小化
-                Rectangle {
-                    width: 22
-                    height: 20
-                    color: minimizeArea.containsMouse ? "#333333" : "transparent"
+                ToolButton {
+                    label: qsTr("返回")
+                    tip: qsTr("返回上一级（设备息屏时还会点亮屏幕）")
+                    onClicked: deviceController.SendBack()
+                }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "—"
-                        color: "#c8c8c8"
-                        font.pixelSize: 12
+                ToolButton {
+                    label: qsTr("任务")
+                    tip: qsTr("打开最近任务列表（相当于手机的方框键）")
+                    onClicked: deviceController.SendRecents()
+                }
+
+                ToolButton {
+                    label: deviceController.wheelMode === "drag"
+                           ? qsTr("滑动 %1").arg(deviceController.dragPixels) : qsTr("滚动")
+                    active: deviceController.wheelMode === "drag"
+                    tip: deviceController.wheelMode === "drag"
+                         ? qsTr("滚轮当前是滑动模式（模拟手指拖动），点一下切回滚动事件")
+                         : qsTr("滚轮当前是滚动模式（原生滚动事件），点一下切到模拟滑动")
+                    onClicked: deviceController.SetWheelMode(deviceController.wheelMode === "drag" ? "scroll" : "drag")
+                }
+
+                // 滑动手感：只在滑动模式下有用，上面一组粗调 ±5，下面一组微调 ±1
+                Row {
+                    width: parent.width
+                    spacing: 4
+                    visible: deviceController.wheelMode === "drag"
+
+                    ToolButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: qsTr("−5")
+                        onClicked: deviceController.AdjustDragPixels(-5)
                     }
 
-                    MouseArea {
-                        id: minimizeArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: videoWindow.showMinimized()
+                    ToolButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: qsTr("+5")
+                        onClicked: deviceController.AdjustDragPixels(5)
                     }
                 }
 
-                // 关闭：只关这扇窗，控制窗还在
-                Rectangle {
-                    width: 22
-                    height: 20
-                    color: closeArea.containsMouse ? "#8c2b2b" : "transparent"
+                Row {
+                    width: parent.width
+                    spacing: 4
+                    visible: deviceController.wheelMode === "drag"
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "✕"
-                        color: "#c8c8c8"
-                        font.pixelSize: 12
+                    ToolButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: qsTr("−1")
+                        onClicked: deviceController.AdjustDragPixels(-1)
                     }
 
-                    MouseArea {
-                        id: closeArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: videoWindow.visible = false
+                    ToolButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: qsTr("+1")
+                        onClicked: deviceController.AdjustDragPixels(1)
                     }
                 }
+
+                ToolButton {
+                    label: qsTr("音量 +")
+                    tip: qsTr("设备音量加一档")
+                    onClicked: deviceController.SendVolumeUp()
+                }
+
+                ToolButton {
+                    label: qsTr("音量 −")
+                    tip: qsTr("设备音量减一档")
+                    onClicked: deviceController.SendVolumeDown()
+                }
+
+                ToolButton {
+                    label: qsTr("截图")
+                    tip: qsTr("保存当前画面到 screenshots 目录，并复制到剪贴板")
+                    onClicked: deviceController.SaveScreenshot()
+                }
+
+                ToolButton {
+                    label: videoWindow.displayOff ? qsTr("亮屏") : qsTr("息屏")
+                    tip: qsTr("只关/开屏幕显示，不动锁屏和电源状态")
+                    active: videoWindow.displayOff
+                    onClicked: {
+                        videoWindow.displayOff = !videoWindow.displayOff
+                        deviceController.SetDisplayPower(!videoWindow.displayOff)
+                    }
+                }
+
+                ToolButton {
+                    label: qsTr("置顶")
+                    tip: qsTr("让投屏窗一直显示在其它窗口前面")
+                    active: videoWindow.pinned
+                    onClicked: videoWindow.pinned = !videoWindow.pinned
+                }
+
+                ToolButton {
+                    label: videoWindow.visibility === Window.FullScreen ? qsTr("还原") : qsTr("全屏")
+                    tip: qsTr("投屏窗全屏／还原（全屏时工具栏自动收起）")
+                    active: videoWindow.visibility === Window.FullScreen
+                    onClicked: videoWindow.visibility = videoWindow.visibility === Window.FullScreen
+                                                  ? Window.Windowed : Window.FullScreen
+                }
             }
-        }
-
-        VideoSurface {
-            id: videoSurface
-            objectName: "videoSurface"
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            keepAspect: false    // 窗口比例已经跟着帧走了，这里直接拉满
-        }
-    }
-
-    // 右下角拖拽改尺寸：底色 + 三条 2px 斜线，一眼能看见
-    Rectangle {
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        width: 18
-        height: 18
-        color: "#2a2a2a"
-
-        Repeater {
-            model: 3
-
-            Rectangle {
-                width: 13
-                height: 2
-                color: "#b8b8b8"
-                rotation: -45
-                x: 3 + index * 4
-                y: 12 - index * 4
-            }
-        }
-    }
-
-    MouseArea {
-        id: resizeArea
-
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        width: 18
-        height: 18
-        cursorShape: Qt.SizeFDiagCursor
-        property point pressGlobal
-        property size pressSize
-
-        onPressed: {
-            pressGlobal = mapToGlobal(mouse.x, mouse.y)
-            pressSize = Qt.size(videoWindow.width, videoWindow.height)
-        }
-        onPositionChanged: {
-            if (!pressed) {
-                return
-            }
-            const current = mapToGlobal(mouse.x, mouse.y)
-            videoWindow.width = Math.max(videoWindow.minimumWidth,
-                                         pressSize.width + (current.x - pressGlobal.x))
-            videoWindow.height = Math.max(videoWindow.minimumHeight,
-                                          pressSize.height + (current.y - pressGlobal.y))
         }
     }
 
@@ -230,8 +428,8 @@ Window {
 
         anchors.left: parent.left
         anchors.top: parent.top
-        width: 18
-        height: 18
+        width: 16
+        height: 16
         cursorShape: Qt.SizeFDiagCursor
         property point pressGlobal
         property rect pressRect
@@ -255,6 +453,28 @@ Window {
         }
     }
 
+    // 悬停提示条：整窗宽盖在标题栏上，标题栏自己塞不下长句
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: 30
+        color: "#12233a"
+        visible: videoWindow.hint.length > 0
+        z: 10
+
+        Text {
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            verticalAlignment: Text.AlignVCenter
+            text: videoWindow.hint
+            color: "#9cc4ff"
+            font.pixelSize: 13
+            elide: Text.ElideRight
+        }
+    }
+
     // 最外层一圈细边框：无边框窗口没有系统边框，不加这个看不出窗口边界在哪
     Rectangle {
         anchors.fill: parent
@@ -264,6 +484,8 @@ Window {
     }
 
     Component.onCompleted: {
+        // 主窗最小化不该带走这扇窗：Qt 的 componentComplete 会把 transientParent 设回父窗口，这里清掉
+        transientParent = null
         deviceController.SetSurface(videoSurface)
 
         applying = true
@@ -275,25 +497,25 @@ Window {
         applying = false
     }
 
-    // 按当前帧比例把窗口调成"刚好装下画面"
+    // 按当前帧比例把窗口调成"刚好装下画面 + 工具栏"
     function fitToFrame() {
         if (frameSize.width <= 0) {
             return
         }
         const ratio = Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
         const frameRatio = frameSize.height / frameSize.width
-        const maxWidth = Screen.desktopAvailableWidth * 0.85
+        const maxWidth = Screen.desktopAvailableWidth * 0.9
         const maxHeight = Screen.desktopAvailableHeight * 0.85 - titleBar.height
 
-        let wantWidth = frameSize.width / ratio
-        let wantHeight = wantWidth * frameRatio
+        let wantWidth = frameSize.width / ratio + toolBarWidth
+        let wantHeight = (wantWidth - toolBarWidth) * frameRatio
         if (wantHeight > maxHeight) {
             wantHeight = maxHeight
-            wantWidth = wantHeight / frameRatio
+            wantWidth = wantHeight / frameRatio + toolBarWidth
         }
         if (wantWidth > maxWidth) {
             wantWidth = maxWidth
-            wantHeight = wantWidth * frameRatio
+            wantHeight = (wantWidth - toolBarWidth) * frameRatio
         }
 
         applying = true

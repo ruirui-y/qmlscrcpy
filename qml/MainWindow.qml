@@ -3,7 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 
-// 控制窗：一行操作 + 一行状态。画面在 VideoWindow，常用操作在 ToolBarWindow。
+// 控制窗：一行操作 + 一行状态。画面和工具栏都在 VideoWindow 里。
 // 按钮和输入框都用自绘背景：系统默认样式在不同 DPI 的屏幕上会变成白底方块。
 Window {
     id: controlWindow
@@ -16,6 +16,9 @@ Window {
     title: qsTr("QmlScrcpy")
     color: "#14161a"
 
+    // 主窗控制整个进程：关掉它就退出（投屏窗和工具栏跟着走）
+    onClosing: Qt.quit()
+
     // 换屏时 DPI 变了，Qt 会重算窗口尺寸；这里保证不缩到装不下内容
     onScreenChanged: {
         width = Math.max(width, minimumWidth)
@@ -27,9 +30,6 @@ Window {
     property bool ready: false
 
     Component.onCompleted: {
-        // 主窗按钮要靠它把窗口提到前台
-        deviceController.SetControlWindow(controlWindow)
-
         applying = true
         const saved = appSettings.VideoGeometry("control_window")
         if (saved.width > 0) {
@@ -71,11 +71,6 @@ Window {
         id: videoWindow
     }
 
-    // 工具栏也是一扇独立窗口，贴在投屏窗右侧
-    ToolBarWindow {
-        target: videoWindow
-        control: controlWindow
-    }
 
     // 一个按钮：自绘背景 + 主次两种配色
     component ActionButton: Rectangle {
