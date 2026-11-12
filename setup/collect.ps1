@@ -75,8 +75,24 @@ if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force }
 New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 Copy-Item (Join-Path $releaseDir '*') $stageDir -Recurse -Force
 
-# 4. 删掉运行期产物和调试符号：安装包不该带我们的配置、日志和截图
-Write-Host '[4/5] 清理运行期产物 ...'
+# 4. 先把 pdb 和 exe 留一份到 Output\pdb，再清掉安装包里的
+Write-Host '[4/5] 保留符号并清理运行期产物 ...'
+$pdbDir = Join-Path $PSScriptRoot ('Output\pdb\' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+$pdbFiles = @(Get-ChildItem $releaseDir -Filter '*.pdb' -File -ErrorAction SilentlyContinue)
+if ($pdbFiles.Count -gt 0)
+{
+    New-Item -ItemType Directory -Path $pdbDir -Force | Out-Null
+    $pdbFiles | Copy-Item -Destination $pdbDir -Force
+    # 分析 dump 要 exe 和 pdb 版本对得上，exe 一起存
+    Copy-Item (Join-Path $releaseDir 'QmlScrcpy.exe') $pdbDir -Force
+    Write-Host "      符号已留存：$pdbDir"
+}
+else
+{
+    Write-Host '      这次构建没有 pdb（Release 配置可能不带调试信息）'
+}
+
+# 安装包不该带我们的配置、日志、截图和调试符号
 foreach ($name in @('Log', 'screenshots', 'config', 'QmlScrcpy.pdb'))
 {
     $target = Join-Path $stageDir $name
