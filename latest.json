@@ -1,0 +1,7 @@
+{
+  "latest": "0.1.4",
+  "minimum": "0.1.0",
+  "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
+  "notes": "拖动卡顿修复、文件首页、后台线程统一",
+  "published_at": "2026-11-12"
+}

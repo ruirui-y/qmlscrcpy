@@ -30,6 +30,9 @@ public:
     // [input] 段：剪贴板
     bool ClipboardAutoSync() const;                                                             // 电脑剪贴板一变就推到设备
 
+    // [update] 段：版本检查用的 latest.json 地址（留空用内置源列表）
+    QString UpdateUrl() const;
+
     // [transfer] 段：拖文件上传到设备哪个目录
     QString UploadDir() const;
     void SetUploadDir(const QString &dir);

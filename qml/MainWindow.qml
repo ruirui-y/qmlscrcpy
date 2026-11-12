@@ -262,6 +262,47 @@ Window {
 
             Item { Layout.fillWidth: true }
 
+            // 有新版本时的红标：点了直接开浏览器去下载（链接来自 latest.json）
+            Rectangle {
+                id: updateBadge
+
+                visible: updateChecker.updateAvailable || updateChecker.updateRequired
+                Layout.preferredWidth: updateBadgeText.implicitWidth + 20
+                Layout.preferredHeight: 26
+                radius: 6
+                color: updateChecker.updateRequired
+                       ? (updateBadgeArea.containsMouse ? "#d9534f" : "#b8403b")
+                       : (updateBadgeArea.containsMouse ? "#c07a1a" : "#9a6314")
+
+                Text {
+                    id: updateBadgeText
+                    anchors.centerIn: parent
+                    text: updateChecker.updateRequired
+                          ? qsTr("必须更新 %1").arg(updateChecker.latestVersion)
+                          : qsTr("新版 %1").arg(updateChecker.latestVersion)
+                    color: "#ffffff"
+                    font.pixelSize: 12
+                }
+
+                MouseArea {
+                    id: updateBadgeArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: {
+                        controlWindow.hintAnchor = updateBadge
+                        controlWindow.hint = updateChecker.notes.length > 0
+                                             ? qsTr("发现 %1：%2（点击去下载）").arg(updateChecker.latestVersion).arg(updateChecker.notes)
+                                             : qsTr("发现新版本 %1，点击去下载").arg(updateChecker.latestVersion)
+                    }
+                    onExited: {
+                        controlWindow.hint = ""
+                        controlWindow.hintAnchor = null
+                    }
+                    onClicked: updateChecker.OpenDownloadPage()
+                }
+            }
+
             // 设置入口：画质、快捷键、命令行、恢复默认都在里面
             Rectangle {
                 id: settingsToggle

@@ -18,6 +18,7 @@
 #include "boss_key.h"
 #include "base/log.h"
 #include "device_controller.h"
+#include "update_checker.h"
 #include "stream/frame.h"
 #include "stream/perf_stats.h"
 #include "ui/video_item.h"
@@ -104,6 +105,10 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("deviceController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &app_settings);
 
+    // 版本检查：启动后异步拉一次 latest.json，失败静默
+    qsc::UpdateChecker update_checker(QStringLiteral(QS_APP_VERSION));
+    engine.rootContext()->setContextProperty(QStringLiteral("updateChecker"), &update_checker);
+
     // 加载失败必须立刻报错退出，否则会静默变成一个看不见的空窗口
     // 老板键：全局热键，按一次藏起所有窗口，再按恢复
     qsc::BossKey boss_key;
@@ -183,6 +188,8 @@ int main(int argc, char *argv[])
             QCoreApplication::quit();
         });
     }
+
+    update_checker.Check();
 
     const int exit_code = app.exec();
 

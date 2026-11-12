@@ -15,6 +15,8 @@ add_executable(QmlScrcpy ${qs_subsystem}
     boss_key.h
     device_controller.cpp
     device_controller.h
+    update_checker.cpp
+    update_checker.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../qml.qrc
@@ -33,8 +35,10 @@ target_link_libraries(QmlScrcpy PRIVATE
     qsc_session
     qsc_stream
     qsc_input
+    qsc_update
     Qt5::Quick
     Qt5::QuickControls2
+    Qt5::Network
 )
 
 # 多配置生成器会在 bin 下再套一层 Debug/，实际产物在 bin/<Config>/

@@ -16,6 +16,7 @@ namespace qsc::base
 Q_LOGGING_CATEGORY(lcInput, "qsc.input")
 Q_LOGGING_CATEGORY(lcSession, "qsc.session")
 Q_LOGGING_CATEGORY(lcStream, "qsc.stream")
+Q_LOGGING_CATEGORY(lcApp, "qsc.app", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcRender, "qsc.render")
 
 namespace

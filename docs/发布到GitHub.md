@@ -108,3 +108,48 @@ Release 的 asset 不计入仓库体积，也没有 LFS 流量限制（单文件
 可以加 `.github/workflows/release.yml`：push tag 时在 `windows-latest` 上跑 CMake + 打包 + 上传。代价是要在 CI 里装 Qt 5.15.2（官方安装器需要账号，一般用 `aqtinstall` 装），首次配置约半天，而且 Release 的说明文字还是要手写。
 
 **当前阶段建议手动发版**：一次 2 分钟，且能人工确认装出来的包没问题。
+
+## 别忘了改 latest.json
+
+发完 Release 还要改仓库根目录的 `latest.json`，否则客户端永远收不到更新提示：
+
+```json
+{
+  "latest": "0.1.5",
+  "minimum": "0.1.0",
+  "url": "https://github.com/ruirui-y/qmlscrcpy/releases/latest",
+  "notes": "这次改了什么",
+  "published_at": "2026-11-13"
+}
+```
+
+改完 push 就生效（Gitee 源要同步推一份到 `gitee.com/bai-maxifeng/qmlscrcpy`）。
+`minimum` 决定"必须更新"的门槛，`latest` 决定"有新版"的提示。
+
+## 现在的主流程：代码 GitHub，安装包 Gitee
+
+```
+① 改 CMakeLists 版本号 → setup\collect.ps1 → setup\build_installer.bat
+② git commit；git push all master
+③ git tag -a v0.1.5 -m "QmlScrcpy 0.1.5"；git push all v0.1.5
+④ $env:GITEE_TOKEN = '私人令牌'
+   powershell -ExecutionPolicy Bypass -File setup\release_gitee.ps1 -Version 0.1.5
+⑤ git add latest.json && git commit -m "chore(release): latest.json 指向 0.1.5" && git push all master
+⑥ （可选）GitHub 上只发说明、不传 exe：
+   gh release create v0.1.5 --title "QmlScrcpy 0.1.5" --notes-file docs\release-notes\v0.1.5.md
+```
+
+`all` 是双推远程：`git remote set-url --add --push all https://gitee.com/bai-maxifeng/qmlscrcpy.git`。
+
+## release_gitee.ps1 做什么
+
+| 步骤 | 内容 |
+|---|---|
+| 1 | 查 `releases/tags/vX`，已有就复用（可重复跑，不会报"已存在"） |
+| 2 | 用发布说明当正文建发行版 |
+| 3 | `curl -F file=@安装包` 传附件（PS 5.1 传 multipart 太别扭） |
+| 4 | 改 `latest.json` 的 `latest` / `url` / `notes` / `published_at` |
+
+**令牌**：Gitee → 设置 → 私人令牌 → 勾 `projects`。只放在环境变量 `GITEE_TOKEN`，不要写进任何文件。
+
+**tag 必须先推上去**，否则第 2 步会指向一个不存在的版本。

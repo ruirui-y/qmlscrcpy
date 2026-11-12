@@ -203,6 +203,11 @@ bool AppSettings::ClipboardAutoSync() const
     return ConfigStore().value(QStringLiteral("input/clipboard_autosync"), false).toBool();
 }
 
+// 版本检查地址：留空表示走内置源列表（Gitee → jsDelivr → GitHub）
+QString AppSettings::UpdateUrl() const
+{
+    return ConfigStore().value(QStringLiteral("update/url")).toString();
+}
 // 拖文件上传的目标目录：界面里改过的优先，其次 config.ini，默认 Download/QmlScrcpy
 QString AppSettings::UploadDir() const
 {

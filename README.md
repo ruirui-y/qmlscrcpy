@@ -12,13 +12,18 @@
 
 ## 下载
 
-最新安装包在 [Releases](https://github.com/ruirui-y/qmlscrcpy/releases/latest)：
+**安装包只在 Gitee 发布**（GitHub 上只放代码，exe 传到 GitHub 国内下载太慢）：
 
 ```
-https://github.com/ruirui-y/qmlscrcpy/releases/download/v0.1.1/QmlScrcpy_Setup_0.1.1.exe
+https://gitee.com/bai-maxifeng/qmlscrcpy/releases
 ```
+
+> 为什么分两处：代码和 issue 在 GitHub，安装包和版本发布在 Gitee。
+> 客户端启动时读的 `latest.json` 也挂在 Gitee 上，国内可以直接访问。
 
 自带 Qt 运行库和 adb，装完即用。**装到 D 盘，别装 Program Files**（程序要往自己目录写 config/Log）。
+
+启动时会自动检查新版本（读仓库根目录的 `latest.json`），有新版主窗右上角亮红标，点一下去下载——实现见 [版本检查](docs/版本检查.md)，不需要服务器。
 
 ---
 
@@ -432,6 +437,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [自动连接](docs/自动连接.md) | 启动自动连上次设备、只做一次、存哪 |
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
+| [版本检查](docs/版本检查.md) | 零服务器方案、三个源依次尝试、版本比较规则、发版要多改一个文件 |
 | [文件传输](docs/文件传输.md) | 拖拽入口、adb push 进度解析、为什么必须放工作线程 |
 | [剪贴板同步](docs/剪贴板同步.md) | 协议走向、为什么之前收不到设备消息、回环坑 |
 | [老板键](docs/老板键.md) | RegisterHotKey、隐藏/恢复窗口、和 Win+D 的区别 |
