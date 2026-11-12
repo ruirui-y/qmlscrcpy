@@ -318,6 +318,16 @@ Window {
             }
         }
 
+        // 悬停提示（工具栏按钮上鼠标停一下，这里显示一句说明）
+        Text {
+            Layout.fillWidth: true
+            visible: deviceController.hint.length > 0
+            text: deviceController.hint
+            color: "#8fb8ff"
+            font.pixelSize: 12
+            elide: Text.ElideRight
+        }
+
         // 状态
         RowLayout {
             Layout.fillWidth: true

@@ -29,6 +29,7 @@ class DeviceController : public QObject
     Q_PROPERTY(QString deviceName READ DeviceName NOTIFY DeviceNameChanged)
     Q_PROPERTY(QStringList devices READ Devices NOTIFY DevicesChanged)
     Q_PROPERTY(QStringList deviceLabels READ DeviceLabels NOTIFY DevicesChanged)
+    Q_PROPERTY(QString hint READ Hint NOTIFY HintChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -41,6 +42,7 @@ public:
     QString DeviceName() const;                                                                 // 当前连着的设备串号，标题栏用它
     QStringList Devices() const;                                                                // 扫到的设备地址，和 deviceLabels 下标对应
     QStringList DeviceLabels() const;                                                           // 下拉框显示文字，带 USB / 无线 前缀
+    QString Hint() const;                                                                       // 鼠标悬停在工具栏按钮上时的说明文字
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -62,6 +64,7 @@ public:
     Q_INVOKABLE void SaveScreenshot();                                                          // 把当前画面存成 png
     Q_INVOKABLE void SetControlWindow(QObject *window);                                         // QML 把控制窗交进来，主窗按钮要用
     Q_INVOKABLE void ShowControlWindow();                                                       // 把控制窗提到前台（最小化也能回来）
+    Q_INVOKABLE void SetHint(const QString &hint);                                              // 工具栏按钮悬停时设置说明文字
     Q_INVOKABLE void SetDisplayPower(bool on);                                                  // true 亮屏，false 息屏
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
     Q_INVOKABLE void SendRecents();                                                             // 多任务切换（最近任务）
@@ -73,6 +76,7 @@ signals:
     void DragPixelsChanged();
     void DeviceNameChanged();
     void DevicesChanged();
+    void HintChanged();
 
 private:
     // 切无线三步的结果，工作线程算完交回给主线程
@@ -102,6 +106,7 @@ private:
     QStringList devices_;                                                                       // 给 QML 下拉框用的设备地址
     QStringList device_labels_;                                                                 // 下拉框显示文字，和 devices_ 下标对应
     QWindow *control_window_ = nullptr;                                                         // 控制窗指针，ShowControlWindow 用
+    QString hint_;                                                                              // 工具栏悬停提示，显示在控制窗底部
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
     std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应

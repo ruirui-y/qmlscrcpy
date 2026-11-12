@@ -475,6 +475,21 @@ void DeviceController::ShowControlWindow()
     control_window_->requestActivate();
     qCInfo(qsc::base::lcRender) << "主窗已请求前台，当前是否激活：" << control_window_->isActive();
 }
+// 工具栏按钮悬停时把说明文字交给界面（Qt5 的 ToolTip 在窄窗口里不稳，改用状态行显示）
+void DeviceController::SetHint(const QString &hint)
+{
+    if (hint_ == hint)
+    {
+        return;
+    }
+    hint_ = hint;
+    emit HintChanged();
+}
+
+QString DeviceController::Hint() const
+{
+    return hint_;
+}
 // 息屏或亮屏：只关显示，不动锁屏状态
 void DeviceController::SetDisplayPower(bool on)
 {

@@ -85,11 +85,11 @@ Window {
             anchors.fill: parent
             hoverEnabled: true
             onClicked: button.clicked()
+            // 提示不弹浮层（Qt5 的 ToolTip 在窄窗口和这些自定义属性上不稳），
+            // 统一送到控制窗底部显示一行
+            onEntered: deviceController.SetHint(button.tip)
+            onExited: deviceController.SetHint("")
         }
-
-        ToolTip.visible: area.containsMouse && button.tip.length > 0
-        ToolTip.text: button.tip
-        ToolTip.delay: 400
     }
 
     Column {
