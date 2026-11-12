@@ -26,6 +26,9 @@ public:
     void SetWheelMode(WheelMode mode) { wheel_mode_ = mode; }
     WheelMode Mode() const { return wheel_mode_; }
 
+    void SetDragPixels(int pixels) { drag_pixels_ = pixels > 0 ? pixels : 60; }    // 拖动模式一格滚轮拖多远
+    int DragPixels() const { return drag_pixels_; }
+
     QByteArray Press(const QPointF &pos);                                                       // 左键按下
     QByteArray Move(const QPointF &pos);                                                        // 按住拖动
     QByteArray Release(const QPointF &pos);                                                     // 左键抬起
@@ -41,6 +44,7 @@ private:
     const CoordinateMapper *mapper_;                                                            // 不持有，生命周期归调用方
     bool pressed_ = false;                                                                      // 当前是否按着左键，决定 buttons_ 报什么
     WheelMode wheel_mode_ = WheelMode::Scroll;                                                  // 默认发滚动事件，和 scrcpy 客户端一致
+    int drag_pixels_ = 60;                                                                      // 拖动模式下一格滚轮手指移动多少像素
 };
 
 } // namespace qsc::input

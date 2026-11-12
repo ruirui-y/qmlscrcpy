@@ -335,6 +335,12 @@ void VideoItem::SetWheelMode(const QString &mode)
 }
 
 // 视频线程调：存下最新一帧，等渲染线程来取
+// 滑动模式的手感：一格滚轮拖多少像素
+void VideoItem::SetDragPixels(int pixels)
+{
+    touch_.SetDragPixels(pixels);
+}
+
 void VideoItem::Present(const Frame &frame)
 {
     if (!frame.IsValid())

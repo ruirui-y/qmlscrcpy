@@ -38,6 +38,8 @@ keep_days=15
 # 滚轮模式：scroll = 发滚动事件（微信这类原生列表），drag = 模拟手指滑动（阅读器、地图）
 [input]
 wheel_mode=scroll
+# 滑动模式下一格滚轮手指移动多少像素（太小会被当点击，太大一下翻过头）
+drag_pixels=60
 
 # 视频采集：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
 [video]
@@ -112,6 +114,26 @@ void AppSettings::SetWheelMode(const QString &mode)
 {
     QSettings &store = WindowStore();
     store.setValue(QStringLiteral("input/wheel_mode"), mode);
+    store.sync();
+}
+
+// 拖动模式一格滚轮拖多少像素：太小会被当点击，太大一下翻过头
+int AppSettings::DragPixels() const
+{
+    // 界面里调过的写 window.ini，没调过就用 config.ini 的默认值
+    int pixels = WindowStore().value(QStringLiteral("input/drag_pixels"), 0).toInt();
+    if (pixels <= 0)
+    {
+        pixels = ConfigStore().value(QStringLiteral("input/drag_pixels"), 60).toInt();
+    }
+    return pixels > 0 ? pixels : 60;
+}
+
+// 记下界面里调过的滑动像素
+void AppSettings::SetDragPixels(int pixels)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("input/drag_pixels"), pixels);
     store.sync();
 }
 

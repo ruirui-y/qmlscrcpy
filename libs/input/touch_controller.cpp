@@ -17,8 +17,6 @@ constexpr quint32 kButtonPrimary = 1;                                           
 // 协议层把归一化值除以 16 转定点，所以这里一格滚轮按 16 个单位送
 constexpr float kScrollUnitsPerNotch = 16.0f;
 
-// 拖动模式下一格滚轮手指移动多少像素：要明显超过系统触摸阈值（一般 8~16px）
-constexpr int kDragPixelsPerNotch = 60;
 
 } // namespace
 
@@ -91,7 +89,7 @@ QByteArray TouchController::MakeScroll(const QPointF &pos, int notches)
 }
 
 // 模拟手指拖动：阅读器这类只认拖动的应用靠它。
-// 往上滚一格 = 手指往下拖 60px（内容跟着手指走，视觉上就是往上翻）
+// 往上滚一格 = 手指往下拖 drag_pixels_ 像素（内容跟着手指走，视觉上就是往上翻）
 QVector<QByteArray> TouchController::ScrollByDrag(const QPointF &pos, int notches)
 {
     QVector<QByteArray> messages;
@@ -108,7 +106,7 @@ QVector<QByteArray> TouchController::ScrollByDrag(const QPointF &pos, int notche
     }
 
     // 位置按帧坐标算位移，避免窗口缩放时手感变来变去
-    const int delta = (notches > 0 ? 1 : -1) * kDragPixelsPerNotch * qAbs(notches);
+    const int delta = (notches > 0 ? 1 : -1) * drag_pixels_ * qAbs(notches);
     const QPoint start = frame_pos;
     const QPoint end = QPoint(frame_pos.x(), frame_pos.y() + delta);
     const QSize screen = mapper_->FrameSize();

@@ -6,6 +6,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
 #include "base/log.h"
@@ -22,6 +24,7 @@ DeviceController::DeviceController(QObject *parent) : QObject(parent)
     // 滚轮发法跟配置走：界面里选过的优先，没选过就用 config.ini 的默认值
     AppSettings settings;
     wheel_mode_ = settings.WheelMode();
+    drag_pixels_ = settings.DragPixels();
     status_ = QStringLiteral("未连接");
 }
 
@@ -53,6 +56,7 @@ void DeviceController::SetSurface(QObject *surface)
     // 画布把鼠标键盘翻成控制消息，这里负责写进控制 socket
     QObject::connect(surface_, &VideoItem::ControlMessageReady, this, &DeviceController::SendControl);
     surface_->SetWheelMode(wheel_mode_);
+    surface_->SetDragPixels(drag_pixels_);
 }
 
 // 改状态文字，值没变就不发信号
@@ -107,6 +111,7 @@ void DeviceController::SetWheelMode(const QString &mode)
     if (surface_ != nullptr)
     {
         surface_->SetWheelMode(wheel_mode_);
+    surface_->SetDragPixels(drag_pixels_);
     }
     AppSettings settings;
     settings.SetWheelMode(wheel_mode_);
@@ -119,6 +124,30 @@ QString DeviceController::WheelMode() const
     return wheel_mode_;
 }
 
+// 滑动像素加减：范围夹在 10 到 300，太小会被当点击，太大一下翻过头
+void DeviceController::AdjustDragPixels(int delta)
+{
+    const int adjusted = qBound(10, drag_pixels_ + delta, 300);
+    if (adjusted == drag_pixels_)
+    {
+        return;
+    }
+
+    drag_pixels_ = adjusted;
+    if (surface_ != nullptr)
+    {
+        surface_->SetDragPixels(drag_pixels_);
+    }
+    AppSettings settings;
+    settings.SetDragPixels(drag_pixels_);
+    emit DragPixelsChanged();
+    SetStatus(QStringLiteral("滑动像素：%1").arg(drag_pixels_));
+}
+
+int DeviceController::DragPixels() const
+{
+    return drag_pixels_;
+}
 // 发一次按键：按下和抬起各一条，安卓才会真正触发
 void DeviceController::SendKeycode(quint32 keycode)
 {
@@ -171,8 +200,28 @@ void DeviceController::SaveScreenshot()
     const QString path = QCoreApplication::applicationDirPath() + QStringLiteral("/screenshots/") + name;
     QDir().mkpath(QFileInfo(path).absolutePath());
     const bool saved = image.save(path);
-    SetStatus(saved ? QStringLiteral("截图已保存：%1").arg(name) : QStringLiteral("截图保存失败"));
+
+    // 顺手放进系统剪贴板，截图就是为了贴给别人看
+    QGuiApplication::clipboard()->setImage(image);
+
+    SetStatus(saved ? QStringLiteral("截图已保存并复制：%1").arg(name) : QStringLiteral("截图只复制到剪贴板，保存失败"));
     qCInfo(qsc::base::lcRender) << "截图" << path << saved;
+}
+// 返回上一级：走专门的消息，它在设备息屏时还能顺手点亮屏幕
+void DeviceController::SendBack()
+{
+    if (!session_)
+    {
+        return;
+    }
+    session_->SendControl(qsc::protocol::ControlMessage::BackOrScreenOn(true));
+    session_->SendControl(qsc::protocol::ControlMessage::BackOrScreenOn(false));
+}
+
+// 菜单键：安卓 KEYCODE_MENU（82）
+void DeviceController::SendMenu()
+{
+    SendKeycode(82);
 }
 // 息屏或亮屏：只关显示，不动锁屏状态
 void DeviceController::SetDisplayPower(bool on)

@@ -41,6 +41,7 @@ public:
 
     void SetKeepAspect(bool keep_aspect);
     void SetWheelMode(const QString &mode);                                                     // "scroll" 发滚动事件，"drag" 模拟滑动
+    void SetDragPixels(int pixels);                                                             // 滑动模式下一格滚轮拖多少像素
 
     // 视频线程调：把最新一帧放进来（引用计数，不拷像素），旧的直接丢掉
     void Present(const qsc::stream::Frame &frame);
