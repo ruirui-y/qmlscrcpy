@@ -5,12 +5,14 @@
 namespace qsc::stream
 {
 
+// 全局单例，是否打印由启动时的环境变量决定
 PerfStats &PerfStats::Get()
 {
     static PerfStats stats;
     return stats;
 }
 
+// 按秒结算四段耗时打印一行，然后清零
 void PerfStats::ReportAndReset()
 {
     if (!enabled)

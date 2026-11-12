@@ -18,12 +18,14 @@ VideoReader::VideoReader(QTcpSocket *socket, H264Decoder *decoder, QObject *pare
     report_timer_.start();
 }
 
+// 置停止标志并等线程退出，最多等 1 秒
 void VideoReader::Stop()
 {
     stop_.store(true);
     wait(1000);
 }
 
+// 把缓冲补到 want 字节；停机或断线返回 false 并给出原因
 bool VideoReader::FillBuffer(QByteArray &buffer, int want, QString *reason)
 {
     while (buffer.size() < want)
@@ -51,6 +53,7 @@ bool VideoReader::FillBuffer(QByteArray &buffer, int want, QString *reason)
     return true;
 }
 
+// 读包、解码、发帧，循环到停机或断线
 void VideoReader::run()
 {
     QByteArray buffer;

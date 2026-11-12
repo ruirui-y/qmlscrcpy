@@ -31,6 +31,7 @@ YuvConvert::~YuvConvert()
     }
 }
 
+// 帧尺寸变了才重建转换上下文和目标帧
 bool YuvConvert::EnsureBuffers(const QSize &size)
 {
     if (context_ != nullptr && size_ == size)
@@ -80,6 +81,7 @@ bool YuvConvert::EnsureBuffers(const QSize &size)
     return true;
 }
 
+// 把一帧 YUV420P 转成 RGB32 的 QImage
 QImage YuvConvert::Convert(const Frame &frame)
 {
     if (!frame.IsValid() || !EnsureBuffers(frame.Size()))

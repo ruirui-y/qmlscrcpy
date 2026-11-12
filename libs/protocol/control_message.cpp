@@ -57,6 +57,7 @@ QByteArray TruncateUtf8(const QString &text, int max_bytes)
     return utf8.left(cut);
 }
 
+// 拼 12 字节控制消息头：类型 + 负载长度
 QByteArray MakeHeader(ControlType type)
 {
     QByteArray out;
@@ -66,6 +67,7 @@ QByteArray MakeHeader(ControlType type)
 
 } // namespace
 
+// 注入一次按键：按下、抬起或长按
 QByteArray ControlMessage::InjectKeycode(const KeycodeEvent &event)
 {
     QByteArray out = MakeHeader(ControlType::InjectKeycode);
@@ -76,6 +78,7 @@ QByteArray ControlMessage::InjectKeycode(const KeycodeEvent &event)
     return out;
 }
 
+// 把一段文字塞进设备输入框，按 UTF-8 边界截断
 QByteArray ControlMessage::InjectText(const QString &text)
 {
     const QByteArray utf8 = TruncateUtf8(text, kMaxInjectTextBytes);
@@ -86,6 +89,7 @@ QByteArray ControlMessage::InjectText(const QString &text)
     return out;
 }
 
+// 注入一次触摸：按下、移动、抬起，坐标是帧坐标系像素
 QByteArray ControlMessage::InjectTouch(const TouchEvent &event)
 {
     QByteArray out = MakeHeader(ControlType::InjectTouch);
@@ -98,6 +102,7 @@ QByteArray ControlMessage::InjectTouch(const TouchEvent &event)
     return out;
 }
 
+// 注入一次滚轮，位移归一化到 -1 到 1
 QByteArray ControlMessage::InjectScroll(const ScrollEvent &event)
 {
     // 协议里的滚动量是 [-1, 1] 定点；Qt 一次滚轮是 120 的整数倍，约定 120 算一格
@@ -112,6 +117,7 @@ QByteArray ControlMessage::InjectScroll(const ScrollEvent &event)
     return out;
 }
 
+// 返回键，同时兼顾点亮屏幕
 QByteArray ControlMessage::BackOrScreenOn(bool down)
 {
     QByteArray out = MakeHeader(ControlType::BackOrScreenOn);
@@ -119,21 +125,25 @@ QByteArray ControlMessage::BackOrScreenOn(bool down)
     return out;
 }
 
+// 拉下通知栏
 QByteArray ControlMessage::ExpandNotificationPanel()
 {
     return MakeHeader(ControlType::ExpandNotificationPanel);
 }
 
+// 拉下快捷设置面板
 QByteArray ControlMessage::ExpandSettingsPanel()
 {
     return MakeHeader(ControlType::ExpandSettingsPanel);
 }
 
+// 收起通知栏和快捷面板
 QByteArray ControlMessage::CollapsePanels()
 {
     return MakeHeader(ControlType::CollapsePanels);
 }
 
+// 请求设备把剪贴板内容发过来
 QByteArray ControlMessage::GetClipboard(ClipboardAction action)
 {
     QByteArray out = MakeHeader(ControlType::GetClipboard);
@@ -141,6 +151,7 @@ QByteArray ControlMessage::GetClipboard(ClipboardAction action)
     return out;
 }
 
+// 把文字写进设备剪贴板，可选择写完就粘贴
 QByteArray ControlMessage::SetClipboard(quint64 sequence, bool paste, const QString &text)
 {
     const QByteArray utf8 = TruncateUtf8(text, kMaxClipboardBytes);
@@ -153,6 +164,7 @@ QByteArray ControlMessage::SetClipboard(quint64 sequence, bool paste, const QStr
     return out;
 }
 
+// 开或关屏幕，不动锁屏状态
 QByteArray ControlMessage::SetDisplayPower(bool on)
 {
     QByteArray out = MakeHeader(ControlType::SetDisplayPower);
@@ -160,6 +172,7 @@ QByteArray ControlMessage::SetDisplayPower(bool on)
     return out;
 }
 
+// 让设备把屏幕转一下
 QByteArray ControlMessage::RotateDevice()
 {
     return MakeHeader(ControlType::RotateDevice);

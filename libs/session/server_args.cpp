@@ -3,6 +3,7 @@
 namespace qsc::session
 {
 
+// 把参数结构体拼成 scrcpy-server 的启动参数
 QStringList ServerArgs::Build(const ServerParams &params)
 {
     QStringList args;

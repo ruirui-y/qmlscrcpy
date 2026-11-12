@@ -27,6 +27,7 @@ QString DeviceController::ProposedSerial() const
     return proposed_serial_;
 }
 
+// QML 把视频画布交进来，连上后的帧就送这里
 void DeviceController::SetSurface(QObject *surface)
 {
     surface_ = qobject_cast<VideoItem *>(surface);
@@ -36,6 +37,7 @@ void DeviceController::SetSurface(QObject *surface)
     }
 }
 
+// 改状态文字，值没变就不发信号
 void DeviceController::SetStatus(const QString &status)
 {
     if (status_ == status)
@@ -46,6 +48,7 @@ void DeviceController::SetStatus(const QString &status)
     emit StatusChanged();
 }
 
+// 跑 adb devices，把第一台在线设备填进建议值
 void DeviceController::RefreshDevices()
 {
     // 只是列一下设备，几十毫秒，直接在主线程做
@@ -73,6 +76,7 @@ void DeviceController::RefreshDevices()
                                 : QStringLiteral("找到 %1 台设备").arg(serials.size()));
 }
 
+// 同步建链并接到画布上，会阻塞一两秒
 void DeviceController::Connect(const QString &serial)
 {
     if (serial.trimmed().isEmpty())
@@ -105,6 +109,7 @@ void DeviceController::Connect(const QString &serial)
     ApplyConnected(result);
 }
 
+// 连接结果落地：接解码器和读线程
 void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
 {
     if (!result.ok_)
@@ -160,6 +165,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
                   .arg(result.used_forward_ ? QStringLiteral("  forward") : QString()));
 }
 
+// 断开并回到未连接状态
 void DeviceController::Disconnect()
 {
     if (reader_ == nullptr && !session_)
@@ -171,6 +177,7 @@ void DeviceController::Disconnect()
     SetStatus(QStringLiteral("已断开"));
 }
 
+// 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {
     // 顺序不能反：读线程里存着解码器的裸指针，先停线程再销毁解码器

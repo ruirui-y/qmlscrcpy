@@ -77,6 +77,7 @@ private:
     bool program_ready_ = false;
 };
 
+// 同步阶段：取走最新一帧拷进渲染器缓冲，这个阶段没有 GL 上下文
 void YuvRenderer::synchronize(QQuickFramebufferObject *item)
 {
     auto *video_item = static_cast<VideoItem *>(item);
@@ -115,6 +116,7 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
     dirty_ = true;
 }
 
+// 首次渲染时编译链接 YUV 转 RGB 的着色器
 void YuvRenderer::EnsureProgram()
 {
     if (program_ready_)
@@ -140,6 +142,7 @@ void YuvRenderer::EnsureProgram()
     program_ready_ = true;
 }
 
+// 渲染线程里画一帧：上传三个平面，着色器合成后画进 FBO
 void YuvRenderer::render()
 {
     QOpenGLFunctions *gl = QOpenGLContext::currentContext() != nullptr
@@ -310,6 +313,7 @@ int VideoItem::Fps() const
     return fps_;
 }
 
+// 开关等比缩放，变了要重绘一次
 void VideoItem::SetKeepAspect(bool keep_aspect)
 {
     if (keep_aspect_.exchange(keep_aspect) == keep_aspect)
@@ -320,6 +324,7 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
     update();
 }
 
+// 视频线程调：存下最新一帧，不投递任何跨线程事件
 void VideoItem::Present(const Frame &frame)
 {
     if (!frame.IsValid())
@@ -339,6 +344,7 @@ void VideoItem::Present(const Frame &frame)
     // 这里故意什么都不投递：重绘交给 OnRefreshTimer 在 GUI 线程里发
 }
 
+// 渲染线程调：取走最新一帧，没有就返回无效帧
 Frame VideoItem::TakePendingFrame()
 {
     QMutexLocker locker(&mutex_);
@@ -358,6 +364,7 @@ QSize VideoItem::NotifiedFrameSize() const
     return notified_size_;
 }
 
+// 断开连接时把还没渲染的帧丢掉
 void VideoItem::Clear()
 {
     {
@@ -368,6 +375,7 @@ void VideoItem::Clear()
     update();
 }
 
+// GUI 线程每 8ms 看一眼：有新帧就请重绘，尺寸变了就通知 QML
 void VideoItem::OnRefreshTimer()
 {
     QSize current_size;
@@ -391,6 +399,7 @@ void VideoItem::OnRefreshTimer()
     }
 }
 
+// 每秒结算一次帧率
 void VideoItem::UpdateFps()
 {
     static int last_arrived = 0;
@@ -405,6 +414,7 @@ void VideoItem::UpdateFps()
     emit FpsChanged();
 }
 
+// 画布尺寸变了，重绘一次让 FBO 跟上
 void VideoItem::geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry)
 {
     QQuickItem::geometryChanged(new_geometry, old_geometry);

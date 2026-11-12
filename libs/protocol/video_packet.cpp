@@ -5,6 +5,7 @@
 namespace qsc::protocol
 {
 
+// 解析 12 字节视频包头，低 62 位是 PTS 微秒
 bool VideoPacketHeader::Parse(const QByteArray &buffer, VideoPacketHeader &header)
 {
     if (buffer.size() < kSize)

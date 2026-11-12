@@ -17,6 +17,7 @@ namespace qsc::stream
 namespace
 {
 
+// 把 FFmpeg 的负错误码翻成能看懂的文字
 QString AvErrorText(int code)
 {
     char buffer[256] = {0};
@@ -49,6 +50,7 @@ H264Decoder::~H264Decoder()
     Close();
 }
 
+// 打开 H.264 解码器，失败时把 FFmpeg 的原因带出来
 bool H264Decoder::Open(QString *error)
 {
     if (context_ != nullptr)
@@ -93,6 +95,7 @@ bool H264Decoder::Open(QString *error)
     return true;
 }
 
+// 关掉解码器并释放所有缓冲
 void H264Decoder::Close()
 {
     if (packet_ != nullptr)
@@ -158,6 +161,7 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
     return DrainFrames(frames, error);
 }
 
+// 把解码器里已经解好的帧全取出来
 bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
 {
     for (;;)

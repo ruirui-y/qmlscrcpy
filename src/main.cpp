@@ -42,6 +42,7 @@ QQuickWindow *FindVideoWindow()
 
 } // namespace
 
+// 程序入口：配好渲染格式、注册 QML 类型、拉起控制窗，然后进事件循环
 int main(int argc, char *argv[])
 {
     // 高 DPI 在 Qt5 要手动开（Qt6 才默认），这两行必须在 QGuiApplication 构造之前

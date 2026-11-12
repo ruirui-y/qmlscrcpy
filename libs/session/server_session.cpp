@@ -43,6 +43,7 @@ ServerSession::~ServerSession()
     Stop();
 }
 
+// 同步建链：推 server、建隧道、起进程、连两个 socket、读设备信息
 ConnectResult ServerSession::Start()
 {
     // 整套流程：
@@ -100,6 +101,7 @@ ConnectResult ServerSession::Start()
     return result;
 }
 
+// 把 server jar 推到设备临时目录
 bool ServerSession::PushServer(QString *error)
 {
     const QString local_path = ResolveLocalServerPath();
@@ -122,6 +124,7 @@ bool ServerSession::PushServer(QString *error)
     return true;
 }
 
+// 按 reverse 或 forward 建 adb 隧道
 bool ServerSession::SetUpTunnel(QString *error)
 {
     if (params_.use_reverse_)
@@ -166,6 +169,7 @@ bool ServerSession::SetUpTunnel(QString *error)
     return true;
 }
 
+// 在设备上拉起 server 进程
 bool ServerSession::StartServerProcess(QString *error)
 {
     ServerParams launch = params_;
@@ -195,6 +199,7 @@ bool ServerSession::StartServerProcess(QString *error)
     return true;
 }
 
+// 拿到视频和控制两个 socket，两种模式的连接顺序不同
 bool ServerSession::ConnectSockets(ConnectResult *result)
 {
     if (forward_mode_)
@@ -204,6 +209,7 @@ bool ServerSession::ConnectSockets(ConnectResult *result)
     return AcceptForReverse(result);
 }
 
+// reverse 模式：等 server 反向连过来，控制连接可能晚到
 bool ServerSession::AcceptForReverse(ConnectResult *result)
 {
     // 设备端先连视频 socket，再连控制 socket，顺序不能反
@@ -271,6 +277,7 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
     return true;
 }
 
+// forward 模式：主动连本机端口，两个都连上再读
 bool ServerSession::ConnectForForward(ConnectResult *result)
 {
     for (int attempt = 0; attempt < kForwardConnectAttempts; ++attempt)
@@ -327,6 +334,7 @@ bool ServerSession::ConnectForForward(ConnectResult *result)
     return true;
 }
 
+// 读 server 发来的设备信息：名字长度、名字、宽高
 bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
 {
     // 设备信息固定 76 字节：
@@ -386,6 +394,7 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
     return true;
 }
 
+// 把 server 进程的日志读干净，只留尾部，出错才说得清原因
 void ServerSession::DrainServerOutput()
 {
     if (server_process_ == nullptr)
@@ -413,6 +422,7 @@ QString ServerSession::ServerOutputTail() const
     return QStringLiteral("…") + text.right(kTailChars);
 }
 
+// 拆掉这次建的所有隧道
 void ServerSession::RemoveTunnel()
 {
     if (!tunnel_enabled_)
@@ -446,6 +456,7 @@ QString ServerSession::SocketName() const
     return adb::AdbArgs::SocketName(params_.scid_);
 }
 
+// 关进程、拆隧道、放 socket
 void ServerSession::Stop()
 {
     if (video_socket_ != nullptr)
@@ -477,6 +488,7 @@ void ServerSession::Stop()
     server_output_.clear();
 }
 
+// 交出视频 socket，之后归读取方管
 QTcpSocket *ServerSession::TakeVideoSocket()
 {
     QTcpSocket *socket = video_socket_;
@@ -484,6 +496,7 @@ QTcpSocket *ServerSession::TakeVideoSocket()
     return socket;
 }
 
+// 交出控制 socket，之后归发送方管
 QTcpSocket *ServerSession::TakeControlSocket()
 {
     QTcpSocket *socket = control_socket_;

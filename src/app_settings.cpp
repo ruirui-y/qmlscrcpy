@@ -18,6 +18,7 @@ QSettings &Store()
 
 AppSettings::AppSettings(QObject *parent) : QObject(parent) {}
 
+// 读上次记下的窗口位置和大小
 QRect AppSettings::VideoGeometry(const QString &key) const
 {
     QSettings &store = Store();
@@ -35,6 +36,7 @@ QRect AppSettings::VideoGeometry(const QString &key) const
     return QRect(x, y, width, height);
 }
 
+// 记下窗口位置和大小
 void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width, int height)
 {
     if (width <= 0 || height <= 0)
@@ -52,6 +54,7 @@ void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width,
     store.sync();
 }
 
+// 读上次记下的窗口位置
 QPoint AppSettings::VideoPosition(const QString &key) const
 {
     QSettings &store = Store();
@@ -62,6 +65,7 @@ QPoint AppSettings::VideoPosition(const QString &key) const
     return QPoint(x, y);
 }
 
+// 只记窗口位置
 void AppSettings::SaveVideoPosition(const QString &key, int x, int y)
 {
     QSettings &store = Store();

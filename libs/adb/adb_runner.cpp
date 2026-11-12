@@ -29,6 +29,7 @@ QString AdbResult::ErrorText() const
     return QString::fromUtf8(std_out_).trimmed();
 }
 
+// 解析 adb devices 输出，跳过表头和 adb 自己打的噪声行
 QList<AdbDevice> ParseDevices(const QByteArray &std_out)
 {
     QList<AdbDevice> devices;
@@ -69,11 +70,13 @@ QList<AdbDevice> ParseDevices(const QByteArray &std_out)
     return devices;
 }
 
+// 指定 adb 路径，测试和自定义安装用
 void SetAdbPath(const QString &path)
 {
     ExplicitAdbPath() = path;
 }
 
+// 取 adb 路径：显式设置 > 环境变量 > 同目录 > PATH
 QString AdbPath()
 {
     if (!ExplicitAdbPath().isEmpty())
@@ -96,6 +99,7 @@ QString AdbPath()
     return QStringLiteral("adb");
 }
 
+// 跑一条 adb 命令并等它结束，超时就杀进程
 AdbResult Run(const QStringList &args, int timeout_ms)
 {
     AdbResult result;
@@ -129,6 +133,7 @@ AdbResult Run(const QStringList &args, int timeout_ms)
     return result;
 }
 
+// 起一个长跑进程（server 进程用它拉起来）
 QProcess *StartLongRunning(const QStringList &args, QString *error)
 {
     auto *process = new QProcess();

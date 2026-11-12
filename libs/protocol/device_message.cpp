@@ -5,6 +5,7 @@
 namespace qsc::protocol
 {
 
+// 解析设备发来的消息：返回消费字节数，0 还不够，-1 流坏了
 qint32 DeviceMessage::TryParse(const QByteArray &buffer, DeviceMessage &message)
 {
     if (buffer.isEmpty())
