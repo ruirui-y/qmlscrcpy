@@ -149,7 +149,7 @@ void InputTest::ReleaseClearsButtons()
     QCOMPARE(U32(message, 28), quint32(0));
 }
 
-// 一格滚轮：垂直方向打满 -1.0（定点 0x8000），水平方向为 0
+// 一格向上滚轮：垂直方向给正值打满（定点 0x7FFF），水平方向为 0
 void InputTest::ScrollOneNotchIsFullDeflection()
 {
     qsc::input::CoordinateMapper mapper;
@@ -167,7 +167,7 @@ void InputTest::ScrollOneNotchIsFullDeflection()
     QCOMPARE(U16(message, 9), quint16(100));
     QCOMPARE(U16(message, 11), quint16(200));
     QCOMPARE(I16(message, 13), qint16(0));
-    QCOMPARE(static_cast<quint16>(I16(message, 15)), quint16(0x8000));
+    QCOMPARE(static_cast<quint16>(I16(message, 15)), quint16(0x7FFF));
 }
 
 QTEST_GUILESS_MAIN(InputTest)

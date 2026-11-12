@@ -56,11 +56,11 @@ QByteArray TouchController::Scroll(const QPointF &pos, int notches)
         return QByteArray();
     }
 
-    // 滚轮往上拨时协议里的 v_scroll 是负数，和安卓 AXIS_VSCROLL 的方向一致
+    // 实测：安卓收到负值反而是往下滚，所以往上拨要给正值
     protocol::ScrollEvent event;
     event.position_ = frame_pos;
     event.screen_size_ = mapper_->FrameSize();
-    event.v_scroll_ = -static_cast<float>(notches) * kScrollUnitsPerNotch;
+    event.v_scroll_ = static_cast<float>(notches) * kScrollUnitsPerNotch;
     event.buttons_ = pressed_ ? kButtonPrimary : 0;
     return protocol::ControlMessage::InjectScroll(event);
 }
