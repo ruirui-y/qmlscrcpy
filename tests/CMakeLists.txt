@@ -61,5 +61,11 @@ target_link_libraries(tst_input PRIVATE qsc_input Qt5::Test)
 add_test(NAME input COMMAND tst_input)
 qs_deploy_qt_runtime(tst_input)
 
-set_tests_properties(protocol adb server_args server_session ffmpeg stream input PROPERTIES
+# 键盘映射：Qt 键 → 安卓键码、metaState、自动重复计数
+add_executable(tst_key tst_key.cpp)
+target_link_libraries(tst_key PRIVATE qsc_input Qt5::Test)
+add_test(NAME key COMMAND tst_key)
+qs_deploy_qt_runtime(tst_key)
+
+set_tests_properties(protocol adb server_args server_session ffmpeg stream input key PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QS_QT_ROOT}/bin")

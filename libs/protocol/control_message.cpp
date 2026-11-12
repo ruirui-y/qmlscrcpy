@@ -57,7 +57,7 @@ QByteArray TruncateUtf8(const QString &text, int max_bytes)
     return utf8.left(cut);
 }
 
-// 拼 12 字节控制消息头：类型 + 负载长度
+// 控制消息只有 1 字节类型头，负载长度在消息体里按类型各自带
 QByteArray MakeHeader(ControlType type)
 {
     QByteArray out;

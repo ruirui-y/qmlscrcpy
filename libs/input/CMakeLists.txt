@@ -2,8 +2,12 @@
 # 纯逻辑，不碰界面也不碰设备，所以能脱机单测。
 add_library(qsc_input STATIC
     coordinate_mapper.cpp
+    key_controller.cpp
+    keycode_table.cpp
     touch_controller.cpp
     coordinate_mapper.h
+    key_controller.h
+    keycode_table.h
     touch_controller.h
 )
 
