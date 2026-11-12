@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtQuick.Window 2.15
 
 // 独立的工具栏窗口：默认贴在投屏窗右侧，跟着投屏窗移动和显示。
@@ -62,6 +63,7 @@ Window {
         id: button
 
         property string label: ""
+        property string tip: ""    // 鼠标悬停时显示的说明
         property bool active: false
         signal clicked()
 
@@ -84,6 +86,10 @@ Window {
             hoverEnabled: true
             onClicked: button.clicked()
         }
+
+        ToolTip.visible: area.containsMouse && button.tip.length > 0
+        ToolTip.text: button.tip
+        ToolTip.delay: 400
     }
 
     Column {
@@ -91,18 +97,16 @@ Window {
         anchors.margins: 6
         spacing: 4
 
-        ToolButton {
-            label: qsTr("主窗")
-            onClicked: deviceController.ShowControlWindow()
-        }
 
         ToolButton {
             label: qsTr("返回")
+            tip: qsTr("返回上一级（设备息屏时还会点亮屏幕）")
             onClicked: deviceController.SendBack()
         }
 
         ToolButton {
             label: qsTr("任务")
+            tip: qsTr("打开最近任务列表（相当于手机的方框键）")
             onClicked: deviceController.SendRecents()
         }
 
@@ -110,6 +114,9 @@ Window {
             label: deviceController.wheelMode === "drag"
                    ? qsTr("滑动 %1").arg(deviceController.dragPixels) : qsTr("滚动")
             active: deviceController.wheelMode === "drag"
+            tip: deviceController.wheelMode === "drag"
+                 ? qsTr("滚轮当前是滑动模式（模拟手指拖动），点一下切回滚动事件")
+                 : qsTr("滚轮当前是滚动模式（原生滚动事件），点一下切到模拟滑动")
             onClicked: deviceController.SetWheelMode(deviceController.wheelMode === "drag" ? "scroll" : "drag")
         }
 
@@ -161,18 +168,16 @@ Window {
             onClicked: deviceController.SendVolumeDown()
         }
 
-        ToolButton {
-            label: qsTr("旋转")
-            onClicked: deviceController.RotateDevice()
-        }
 
         ToolButton {
             label: qsTr("截图")
+            tip: qsTr("保存当前画面到 screenshots 目录，并复制到剪贴板")
             onClicked: deviceController.SaveScreenshot()
         }
 
         ToolButton {
             label: toolWindow.displayOff ? qsTr("亮屏") : qsTr("息屏")
+            tip: qsTr("只关/开屏幕显示，不动锁屏和电源状态")
             active: toolWindow.displayOff
             onClicked: {
                 toolWindow.displayOff = !toolWindow.displayOff
@@ -182,6 +187,7 @@ Window {
 
         ToolButton {
             label: qsTr("置顶")
+            tip: qsTr("让投屏窗一直显示在其它窗口前面")
             active: toolWindow.pinned
             onClicked: {
                 toolWindow.pinned = !toolWindow.pinned

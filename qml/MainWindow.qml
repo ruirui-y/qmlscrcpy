@@ -161,9 +161,9 @@ Window {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
+                            // 只把地址填进输入框，连不连由用户点「连接」决定
                             devicePopup.close()
                             serialField.text = deviceController.devices[index]
-                            deviceController.Connect(deviceController.devices[index])
                         }
                     }
                 }

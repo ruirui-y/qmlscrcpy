@@ -138,25 +138,24 @@ Window {
         }
     }
 
-    // 右下角拖拽改尺寸
+    // 右下角拖拽改尺寸：底色 + 三条 2px 斜线，一眼能看见
     Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        width: 16
-        height: 16
-        color: "transparent"
+        width: 18
+        height: 18
+        color: "#2a2a2a"
 
-        // 三条斜线当把手图案，比纯隐形的热区好找
         Repeater {
             model: 3
 
             Rectangle {
-                width: 11
-                height: 1
-                color: "#6a6a6a"
+                width: 13
+                height: 2
+                color: "#b8b8b8"
                 rotation: -45
                 x: 3 + index * 4
-                y: 11 - index * 4
+                y: 12 - index * 4
             }
         }
     }
@@ -166,8 +165,8 @@ Window {
 
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        width: 16
-        height: 16
+        width: 18
+        height: 18
         cursorShape: Qt.SizeFDiagCursor
         property point pressGlobal
         property size pressSize
@@ -215,8 +214,8 @@ Window {
 
         anchors.left: parent.left
         anchors.top: parent.top
-        width: 16
-        height: 16
+        width: 18
+        height: 18
         cursorShape: Qt.SizeFDiagCursor
         property point pressGlobal
         property rect pressRect
