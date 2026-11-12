@@ -18,6 +18,9 @@ Window {
     modality: Qt.ApplicationModal    // 打开时挡住主窗，避免改一半又去点连接
     transientParent: null
 
+    // 登记给老板键：设置窗开着时按老板键也要一起藏起来
+    Component.onCompleted: deviceController.RegisterWindow(settingsWindow)
+
     // Esc 直接关掉设置窗（模态窗被挡住时也能退出来）
     Shortcut {
         sequence: "Esc"
