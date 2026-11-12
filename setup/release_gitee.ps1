@@ -153,7 +153,9 @@ foreach ($line in (Get-Content -Encoding UTF8 $notes_path)) {
     break
 }
 if ($note_line) {
-    $latest.notes = $note_line
+    # 悬停提示是纯文本，去掉 ** 和 ` 这类 markdown 记号
+    $clean = $note_line -replace '\*\*', '' -replace '`', ''
+    $latest.notes = $clean
 }
 
 # 必须不带 BOM：Qt 的 QJsonDocument 不跳过 BOM，带 BOM 会直接解析失败
