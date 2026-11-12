@@ -24,6 +24,10 @@ public:
     bool LogToFile() const;
     int LogKeepDays() const;
 
+    // [input] 段：滚轮模式，window.ini 里选过的优先，其次 config.ini 的默认值
+    QString WheelMode() const;
+    void SetWheelMode(const QString &mode);
+
     // [video] 段
     int VideoMaxSize() const;                                                                   // 长边上限，0 = 设备原生分辨率
     int VideoBitRate() const;

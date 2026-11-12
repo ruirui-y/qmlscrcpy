@@ -63,6 +63,7 @@ private slots:
     void PressBuildsTouchMessage();
     void ReleaseClearsButtons();
     void ScrollOneNotchIsFullDeflection();
+    void DragModeEmitsThreeTouches();
 };
 
 // 拉满模式：宽高各自缩放，不留黑边
@@ -158,8 +159,10 @@ void InputTest::ScrollOneNotchIsFullDeflection()
     mapper.SetKeepAspect(false);
 
     qsc::input::TouchController controller(&mapper);
-    const QByteArray message = controller.Scroll(QPointF(100, 100), 1);
+    const QVector<QByteArray> messages = controller.Scroll(QPointF(100, 100), 1);
 
+    QCOMPARE(messages.size(), 1);
+    const QByteArray message = messages.first();
     QCOMPARE(message.size(), 21);
     QCOMPARE(U8(message, 0), quint8(3));
     QCOMPARE(U32(message, 1), quint32(50));
@@ -168,6 +171,32 @@ void InputTest::ScrollOneNotchIsFullDeflection()
     QCOMPARE(U16(message, 11), quint16(200));
     QCOMPARE(I16(message, 13), qint16(0));
     QCOMPARE(static_cast<quint16>(I16(message, 15)), quint16(0x7FFF));
+}
+
+// 拖动模式：一格滚轮变成按下、移动、抬起三条触摸，手指往下拖 60px
+void InputTest::DragModeEmitsThreeTouches()
+{
+    qsc::input::CoordinateMapper mapper;
+    mapper.SetFrameSize(QSize(100, 200));
+    mapper.SetItemSize(QSizeF(200, 200));
+    mapper.SetKeepAspect(false);
+
+    qsc::input::TouchController controller(&mapper);
+    controller.SetWheelMode(qsc::input::WheelMode::Drag);
+
+    const QVector<QByteArray> messages = controller.Scroll(QPointF(100, 100), 1);
+    QCOMPARE(messages.size(), 3);
+
+    // 三条都是触摸消息，action 依次是 0 按下、2 移动、1 抬起
+    QCOMPARE(U8(messages[0], 0), quint8(2));
+    QCOMPARE(U8(messages[0], 1), quint8(0));
+    QCOMPARE(U8(messages[1], 1), quint8(2));
+    QCOMPARE(U8(messages[2], 1), quint8(1));
+
+    // 起点和终点都在帧坐标里：往上滚 → 手指往下拖 60px（不越过帧高度）
+    QCOMPARE(U32(messages[0], 14), quint32(100));
+    QCOMPARE(U32(messages[1], 14), quint32(160));
+    QCOMPARE(U32(messages[2], 14), quint32(160));
 }
 
 QTEST_GUILESS_MAIN(InputTest)

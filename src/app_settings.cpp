@@ -35,6 +35,10 @@ level=info
 to_file=true
 keep_days=15
 
+# 滚轮模式：scroll = 发滚动事件（微信这类原生列表），drag = 模拟手指滑动（阅读器、地图）
+[input]
+wheel_mode=scroll
+
 # 视频采集：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
 [video]
 max_size=0
@@ -90,6 +94,25 @@ bool AppSettings::LogToFile() const
 int AppSettings::LogKeepDays() const
 {
     return ConfigStore().value(QStringLiteral("log/keep_days"), 15).toInt();
+}
+
+// 滚轮模式：界面里选过的写 window.ini，没选过就用 config.ini 的默认值
+QString AppSettings::WheelMode() const
+{
+    const QString chosen = WindowStore().value(QStringLiteral("input/wheel_mode")).toString();
+    if (!chosen.isEmpty())
+    {
+        return chosen;
+    }
+    return ConfigStore().value(QStringLiteral("input/wheel_mode"), QStringLiteral("scroll")).toString();
+}
+
+// 记下用户选的滚轮模式，写 window.ini
+void AppSettings::SetWheelMode(const QString &mode)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("input/wheel_mode"), mode);
+    store.sync();
 }
 
 // 采集长边上限：0 表示不缩放

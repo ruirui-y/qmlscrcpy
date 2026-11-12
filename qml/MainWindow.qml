@@ -20,6 +20,11 @@ Window {
         id: videoWindow
     }
 
+    // 工具栏也是一扇独立窗口，贴在投屏窗右侧，跟着它移动
+    ToolBarWindow {
+        target: videoWindow
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 14

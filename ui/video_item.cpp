@@ -327,6 +327,14 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
 }
 
 // 视频线程调：存下最新一帧，不投递任何跨线程事件
+// 切换滚轮模式：scroll 发原生滚动事件，drag 模拟手指滑动
+void VideoItem::SetWheelMode(const QString &mode)
+{
+    touch_.SetWheelMode(mode == QStringLiteral("drag") ? qsc::input::WheelMode::Drag
+                                                       : qsc::input::WheelMode::Scroll);
+}
+
+// 视频线程调：存下最新一帧，等渲染线程来取
 void VideoItem::Present(const Frame &frame)
 {
     if (!frame.IsValid())
@@ -503,7 +511,12 @@ void VideoItem::wheelEvent(QWheelEvent *event)
     }
 
     SyncMapper();
-    EmitControlMessage(touch_.Scroll(event->position(), notches));
+    // 拖动模式一次会出三条消息，逐条发
+    const QVector<QByteArray> messages = touch_.Scroll(event->position(), notches);
+    for (const QByteArray &message : messages)
+    {
+        EmitControlMessage(message);
+    }
     event->accept();
 }
 

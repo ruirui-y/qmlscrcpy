@@ -1,9 +1,16 @@
 #include "device_controller.h"
 
 #include "app_settings.h"
-#include "base/log.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
+#include <QImage>
+#include <QQuickWindow>
+#include "base/log.h"
+#include "protocol/control_message.h"
+
 #include <QDebug>
 #include <QTcpSocket>
 
@@ -12,6 +19,9 @@
 
 DeviceController::DeviceController(QObject *parent) : QObject(parent)
 {
+    // 滚轮发法跟配置走：界面里选过的优先，没选过就用 config.ini 的默认值
+    AppSettings settings;
+    wheel_mode_ = settings.WheelMode();
     status_ = QStringLiteral("未连接");
 }
 
@@ -42,6 +52,7 @@ void DeviceController::SetSurface(QObject *surface)
 
     // 画布把鼠标键盘翻成控制消息，这里负责写进控制 socket
     QObject::connect(surface_, &VideoItem::ControlMessageReady, this, &DeviceController::SendControl);
+    surface_->SetWheelMode(wheel_mode_);
 }
 
 // 改状态文字，值没变就不发信号
@@ -81,6 +92,97 @@ void DeviceController::RefreshDevices()
 
     SetStatus(serials.isEmpty() ? QStringLiteral("没找到在线设备")
                                 : QStringLiteral("找到 %1 台设备").arg(serials.size()));
+}
+
+// 滚轮模式：立即生效、写进 window.ini，下次启动还是它
+void DeviceController::SetWheelMode(const QString &mode)
+{
+    const QString normalized = mode == QStringLiteral("drag") ? QStringLiteral("drag") : QStringLiteral("scroll");
+    if (wheel_mode_ == normalized)
+    {
+        return;
+    }
+
+    wheel_mode_ = normalized;
+    if (surface_ != nullptr)
+    {
+        surface_->SetWheelMode(wheel_mode_);
+    }
+    AppSettings settings;
+    settings.SetWheelMode(wheel_mode_);
+    emit WheelModeChanged();
+    SetStatus(QStringLiteral("滚轮模式：%1").arg(wheel_mode_ == QStringLiteral("drag") ? QStringLiteral("滑动") : QStringLiteral("滚动")));
+}
+
+QString DeviceController::WheelMode() const
+{
+    return wheel_mode_;
+}
+
+// 发一次按键：按下和抬起各一条，安卓才会真正触发
+void DeviceController::SendKeycode(quint32 keycode)
+{
+    if (!session_)
+    {
+        return;
+    }
+
+    qsc::protocol::KeycodeEvent event;
+    event.keycode_ = keycode;
+    event.action_ = 0;
+    session_->SendControl(qsc::protocol::ControlMessage::InjectKeycode(event));
+    event.action_ = 1;
+    session_->SendControl(qsc::protocol::ControlMessage::InjectKeycode(event));
+}
+
+// 音量加：走安卓的 KEYCODE_VOLUME_UP（24）
+void DeviceController::SendVolumeUp()
+{
+    SendKeycode(24);
+}
+
+// 音量减：KEYCODE_VOLUME_DOWN（25）
+void DeviceController::SendVolumeDown()
+{
+    SendKeycode(25);
+}
+
+// 让设备转屏幕：一条无负载消息
+void DeviceController::RotateDevice()
+{
+    if (!session_)
+    {
+        return;
+    }
+    session_->SendControl(qsc::protocol::ControlMessage::RotateDevice());
+}
+
+// 截图：抓投屏窗当前内容，存到 exe 旁边的 screenshots 目录
+void DeviceController::SaveScreenshot()
+{
+    if (surface_ == nullptr || surface_->window() == nullptr)
+    {
+        SetStatus(QStringLiteral("没有画面，截不了图"));
+        return;
+    }
+
+    const QImage image = surface_->window()->grabWindow();
+    const QString name = QStringLiteral("shot_%1.png").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
+    const QString path = QCoreApplication::applicationDirPath() + QStringLiteral("/screenshots/") + name;
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    const bool saved = image.save(path);
+    SetStatus(saved ? QStringLiteral("截图已保存：%1").arg(name) : QStringLiteral("截图保存失败"));
+    qCInfo(qsc::base::lcRender) << "截图" << path << saved;
+}
+// 息屏或亮屏：只关显示，不动锁屏状态
+void DeviceController::SetDisplayPower(bool on)
+{
+    if (!session_)
+    {
+        return;
+    }
+    session_->SendControl(qsc::protocol::ControlMessage::SetDisplayPower(on));
+    SetStatus(on ? QStringLiteral("已亮屏") : QStringLiteral("已息屏"));
 }
 
 // 同步建链并接到画布上，会阻塞一两秒
