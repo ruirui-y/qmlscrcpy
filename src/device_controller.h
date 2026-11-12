@@ -71,6 +71,16 @@ signals:
     void DevicesChanged();
 
 private:
+    // 切无线三步的结果，工作线程算完交回给主线程
+    struct WifiSwitchResult
+    {
+        bool ok_ = false;                                                                       // 整条流程成没成
+        QString endpoint_;                                                                      // 成功时的 IP:端口
+        QString message_;                                                                       // 失败时给界面看的原因
+    };
+
+    static WifiSwitchResult SwitchToWifiBlocking(const QString &serial);                        // 工作线程：跑完整条切无线流程
+    void ApplyWifiResult(const WifiSwitchResult &result);                                       // 主线程：刷新列表、更新状态
     void ApplyConnected(const qsc::session::ConnectResult &result);                             // 连接结果落地：接解码器和读线程
     void SendControl(const QByteArray &message);                                                // 把画布翻好的输入消息写进控制 socket
     void SendKeycode(quint32 keycode);                                                          // 发一次按键（按下+抬起各一条）
@@ -82,6 +92,7 @@ private:
     QString proposed_serial_;                                                                   // 刷新出来的第一台设备序列号
     QString wheel_mode_ = QStringLiteral("scroll");                                             // 滚轮发法，从配置里读进来
     int drag_pixels_ = 60;                                                                      // 滑动模式下一格滚轮拖多少像素
+    bool wifi_busy_ = false;                                                                    // 正在后台切无线，期间不接受第二次点击
     QString device_name_;                                                                       // 当前连着的设备串号
     QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
     QStringList devices_;                                                                       // 给 QML 下拉框用的在线设备列表
