@@ -108,6 +108,11 @@ void VideoReader::run()
         const QByteArray payload = buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
         buffer.remove(0, total);
         perf.read_us.fetchAndAddRelaxed(read_timer.nsecsElapsed() / 1000);
+        perf.bytes.fetchAndAddRelaxed(total);
+        if (header.IsKeyFrame())
+        {
+            perf.keyframes.fetchAndAddRelaxed(1);
+        }
 
         // 配置包只存不放画面；容器复用，clear 只清大小不释放容量
         frames.clear();

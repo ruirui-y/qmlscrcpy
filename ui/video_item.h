@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAtomicInt>
+#include <QElapsedTimer>
 #include <QMutex>
 #include <QQuickFramebufferObject>
 #include <QSize>
@@ -11,6 +12,7 @@
 #include "input/key_controller.h"
 #include "input/touch_controller.h"
 #include "stream/frame.h"
+#include "stream/perf_stats.h"
 
 class QTimer;
 
@@ -51,6 +53,8 @@ public:
     // 渲染线程 synchronize() 里调：取走最新一帧，没有就返回无效帧
     qsc::stream::Frame TakePendingFrame();
     QSize NotifiedFrameSize() const;                                                            // 已经报给渲染线程的帧尺寸
+    qint64 PendingEnqueueUs() const;                                                            // 待渲染帧是什么时候到进程的（微秒）
+    qint64 ClockUs() const { return clock_.nsecsElapsed() / 1000; }                             // 当前单调时刻（微秒），渲染线程算延迟用
 
 signals:
     void FrameSizeChanged();
@@ -88,6 +92,9 @@ private:
     QAtomicInt frames_arrived_;                                                                 // 视频线程每收一帧 +1
     int frames_painted_ = 0;                                                                    // GUI 线程已经画到第几帧
     int fps_ = 0;                                                                               // 上一秒算出来的帧率
+    int fps_last_arrived_ = 0;                                                                  // 上一秒结算时的累计帧数，用来算差值
+    QElapsedTimer clock_;                                                                       // 进程启动后的单调时钟，用来算帧在管道里的时间
+    qint64 pending_enqueue_us_ = 0;                                                             // 当前待渲染帧的入队时刻
     QTimer *refresh_timer_ = nullptr;                                                           // 8ms 一次，把重绘请求从视频线程手里接管过来
     QTimer *fps_timer_ = nullptr;                                                               // 每秒触发一次，负责结算帧率
 };

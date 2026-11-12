@@ -70,6 +70,52 @@ void DeviceController::SetSurface(QObject *surface)
     surface_->SetDragPixels(drag_pixels_);
 }
 
+// 当前生效的码率（bps），界面用来显示
+int DeviceController::VideoBitRate() const
+{
+    return AppSettings().VideoBitRate(video_profile_);
+}
+
+// 当前生效的帧率上限，0 表示不限
+int DeviceController::VideoMaxFps() const
+{
+    return AppSettings().VideoMaxFps(video_profile_);
+}
+
+// 当前用的是哪一档画质参数：有线还是无线
+QString DeviceController::VideoProfile() const
+{
+    return video_profile_;
+}
+
+// 改码率和帧率：这两个是 server 启动参数，改完必须重连才生效
+void DeviceController::ApplyVideoSettings(int bit_rate, int max_fps)
+{
+    AppSettings settings;
+    settings.SetVideoBitRate(bit_rate, video_profile_);
+    settings.SetVideoMaxFps(max_fps, video_profile_);
+    emit VideoSettingsChanged();
+
+    // 没连设备就只存配置，下次连接自然生效
+    if (session_ == nullptr || reader_ == nullptr)
+    {
+        SetStatus(QStringLiteral("画质已保存：%1 Mbps / %2 fps，下次连接生效")
+                      .arg(bit_rate / 1000000.0, 0, 'f', 1)
+                      .arg(max_fps > 0 ? QString::number(max_fps) : QStringLiteral("不限")));
+        return;
+    }
+
+    const QString serial = device_name_;
+    SetStatus(QStringLiteral("按新画质重连中（1~2 秒）…"));
+    QCoreApplication::processEvents();
+
+    // scrcpy 的码率和帧率只在 server 启动时生效，所以只能断开重连
+    Disconnect();
+    if (!serial.isEmpty())
+    {
+        Connect(serial);
+    }
+}
 // 控制台窗口当前显示着没有
 bool DeviceController::ShowConsole() const
 {
@@ -505,8 +551,11 @@ void DeviceController::Connect(const QString &serial)
     params.serial_ = serial.trimmed();
     params.server_local_path_ = QCoreApplication::applicationDirPath() + "/scrcpy-server";
     AppSettings settings;                                                                        // 采集参数走配置，改 config.ini 就能调
+    video_profile_ = AppSettings::VideoProfile(serial.trimmed());                                // 有线 / 无线各一套画质参数
     params.max_size_ = settings.VideoMaxSize();                                                 // 0 = 不缩放，用设备原生分辨率
-    params.bit_rate_ = settings.VideoBitRate();
+    params.bit_rate_ = settings.VideoBitRate(video_profile_);
+    params.max_fps_ = settings.VideoMaxFps(video_profile_);                                     // 0 = 不限，无线嫌卡就填 60
+    emit VideoSettingsChanged();
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下（建链是阻塞的）

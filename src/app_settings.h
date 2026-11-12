@@ -40,7 +40,12 @@ public:
 
     // [video] 段
     int VideoMaxSize() const;                                                                   // 长边上限，0 = 设备原生分辨率
-    int VideoBitRate() const;
+    // 有线和无线各一套画质参数：serial 带冒号（IP:端口）算无线
+    static QString VideoProfile(const QString &serial);
+    int VideoBitRate(const QString &profile = QString()) const;
+    int VideoMaxFps(const QString &profile = QString()) const;                                  // 0 = 不限帧（跟着屏幕刷新走）
+    void SetVideoBitRate(int bit_rate, const QString &profile = QString());                     // 界面里调过的码率写 window.ini
+    void SetVideoMaxFps(int max_fps, const QString &profile = QString());                       // 界面里调过的帧率写 window.ini
 
     // [video_window] 段：窗口尺寸，QML 直接调
     Q_INVOKABLE QRect VideoGeometry(const QString &key) const;

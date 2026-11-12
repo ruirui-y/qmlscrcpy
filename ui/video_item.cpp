@@ -89,7 +89,27 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
     item_size_ = QSize(static_cast<int>(video_item->width()), static_cast<int>(video_item->height()));
     keep_aspect_ = video_item->KeepAspect();
 
+    qsc::stream::PerfStats &perf = qsc::stream::PerfStats::Get();
+    perf.renders.fetchAndAddRelaxed(1);
+
+    const qint64 enqueue_us = video_item->PendingEnqueueUs();
     const Frame frame = video_item->TakePendingFrame();
+    if (frame.IsValid())
+    {
+        perf.renders_with_frame.fetchAndAddRelaxed(1);
+
+        // 帧从进进程到真正上屏花了多久：这个数和设备时钟无关，有线和无线可以直接比
+        if (enqueue_us > 0)
+        {
+            const qint64 pipeline_us = video_item->ClockUs() - enqueue_us;
+            perf.pipeline_us.storeRelaxed(pipeline_us);
+            perf.pipeline_sum_us.fetchAndAddRelaxed(pipeline_us);
+            if (pipeline_us > perf.pipeline_max_us.loadRelaxed())
+            {
+                perf.pipeline_max_us.storeRelaxed(pipeline_us);
+            }
+        }
+    }
     if (!frame.IsValid())
     {
         return;
@@ -287,10 +307,11 @@ void ResetGlState(QOpenGLFunctions *gl)
 
 VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
 {
+    clock_.start();
     setFlag(QQuickItem::ItemHasContents, true);
     setAcceptedMouseButtons(Qt::LeftButton);                                                    // 只认左键：右键留给后面做菜单
 
-    // 重绘由 GUI 线程定时器发起：视频线程只存帧，不投递事件
+    // 重绘由 Present 逐帧投递（到帧就画）；这个 8ms 定时器只负责尺寸通知和兜底统计
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(8);
     QObject::connect(refresh_timer_, &QTimer::timeout, this, &VideoItem::OnRefreshTimer);
@@ -357,14 +378,32 @@ void VideoItem::Present(const Frame &frame)
         return;
     }
 
+    bool replaced = false;
     {
         QMutexLocker locker(&mutex_);
         // 只留最新一帧：视频线程比渲染快的时候，旧帧直接覆盖，不排队
+        replaced = has_pending_;
         pending_ = frame;
         has_pending_ = true;
         frame_size_ = frame.Size();
+        pending_enqueue_us_ = clock_.nsecsElapsed() / 1000;
     }
     frames_arrived_.ref();
+
+    // 记一笔"没被渲染就被覆盖"的帧数，这是判断渲染跟不跟得上的关键指标
+    qsc::stream::PerfStats &perf = qsc::stream::PerfStats::Get();
+    perf.presented.fetchAndAddRelaxed(1);
+    if (replaced)
+    {
+        perf.dropped.fetchAndAddRelaxed(1);
+    }
+
+    // 到帧就排队请求一次重绘：视频线程直接调 update() 不安全，投递到 GUI 线程执行。
+    // 以前靠 8ms 定时器轮询，120fps 时大量帧落在两个 tick 之间被覆盖。
+    QMetaObject::invokeMethod(this, [this]()
+    {
+        update();
+    }, Qt::QueuedConnection);
 
     // 这里故意什么都不投递：重绘交给 OnRefreshTimer 在 GUI 线程里发
 }
@@ -389,6 +428,13 @@ QSize VideoItem::NotifiedFrameSize() const
     return notified_size_;
 }
 
+// 待渲染帧是什么时候到进程的（微秒），渲染线程用它算管道延迟
+qint64 VideoItem::PendingEnqueueUs() const
+{
+    QMutexLocker locker(&mutex_);
+    return pending_enqueue_us_;
+}
+
 // 断开连接时把还没渲染的帧丢掉
 void VideoItem::Clear()
 {
@@ -399,6 +445,8 @@ void VideoItem::Clear()
     }
     // 断开时把按键重复计数一起清掉，下次连接不会从第 3 次重复开始
     keys_.Reset();
+    fps_last_arrived_ = 0;
+    frames_painted_ = 0;
     update();
 }
 
@@ -418,21 +466,21 @@ void VideoItem::OnRefreshTimer()
         emit FrameSizeChanged();
     }
 
+    // 重绘已经由 Present 逐帧投递，这里只兜一次"有帧但没触发"的极端情况
     const int arrived = frames_arrived_.loadAcquire();
     if (arrived != frames_painted_)
     {
         frames_painted_ = arrived;
-        update();
     }
 }
 
-// 每秒结算一次帧率
+// 每秒结算一次"收到多少帧"（渲染帧数看 [perf] 行里的「渲」）
 void VideoItem::UpdateFps()
 {
-    static int last_arrived = 0;
     const int arrived = frames_arrived_.loadAcquire();
-    const int frames = arrived - last_arrived;
-    last_arrived = arrived;
+    // 用成员变量而不是函数内 static：断线重连时计数器归零，static 会算出一个巨大的负数
+    const int frames = arrived - fps_last_arrived_;
+    fps_last_arrived_ = arrived;
     if (frames == fps_)
     {
         return;

@@ -109,10 +109,10 @@ adb devices
 
 | 文件 | 谁写 | 内容 |
 |---|---|---|
-| `config.ini` | 用户手改（程序只读） | 日志级别、采集参数、滚轮默认模式、默认滑动像素 |
-| `window.ini` | 程序自己写 | 窗口位置尺寸、上次设备、命令行开关、当前滚轮模式 |
+| `config.ini` | 用户手改（程序只读） | 日志级别、画质默认值（有线 8M / 无线 6M）、滚轮默认模式、默认滑动像素 |
+| `window.ini` | 程序自己写 | 窗口位置尺寸、上次设备、命令行开关、界面里调过的画质（分档） |
 
-两个文件都在 exe 同目录。为什么分两个：`QSettings` 重写 `config.ini` 会把注释转义成 `%23%20…`，所以把人改的和程序写的分开。
+两个文件都在 exe 下的 `config/` 目录（旧版本散在根目录的会自动搬过去）。为什么分两个：`QSettings` 重写 `config.ini` 会把注释转义成 `%23%20…`，所以把人改的和程序写的分开。
 
 ```ini
 # config.ini
@@ -125,9 +125,16 @@ keep_days=15
 wheel_mode=scroll
 drag_pixels=60
 
+# 有线／兜底
 [video]
 max_size=0
 bit_rate=8000000
+max_fps=0              # 0 = 不限；实测对观感影响很小
+
+# 无线（串号带冒号就用这组）
+[video_wireless]
+bit_rate=6000000
+max_fps=0
 ```
 
 ```ini
@@ -154,6 +161,13 @@ h=250
 wheel_mode=drag
 drag_pixels=59
 
+# 界面里调过的画质（只写调过的那一档）
+[video_wireless]
+bit_rate=5000000
+
+[video_wired]
+bit_rate=8000000
+
 [device]
 last_serial=192.168.31.114:5555
 
@@ -169,7 +183,7 @@ show_console=true
 | `QS_DEVICE_SERIAL` | 启动时自动连这台（优先级低于"上次连的设备"） |
 | `QS_SCRCPY_SERVER` | 指定 scrcpy-server 路径 |
 | `QS_LOG_LEVEL` | 临时改日志级别（`debug` / `info` / `warn` / `error`） |
-| `QS_PERF=1` | 每秒打印一次链路耗时（等数据 / 解码 / 上屏 / fps） |
+| `QS_PERF` | 每秒的链路统计（收/推/丢/渲/积压/入队到上屏）默认打印；设 `QS_PERF=0` 关掉 |
 | `QS_GRAB` | 截图到文件后退出（自检用） |
 | `QS_FORWARD=1` | 用 `adb forward` 代替 `adb reverse` |
 
@@ -322,6 +336,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | P10 | 窗口解耦（transientParent）、状态归到标题栏 | ✅ |
 | P11 | 工具栏并进投屏窗，只剩控制窗 + 投屏窗两扇 | ✅ |
 | P12 | 主窗「命令行」开关，控制台显隐记进配置 | ✅ |
+| P13 | 帧链路埋点（收/推/丢/渲/积压）+ 配置收进 config 目录 | ✅ |
 
 ## 已知限制
 

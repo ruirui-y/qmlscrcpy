@@ -133,6 +133,12 @@ void EnsureFileForToday()
 // 把消息写进当天的日志文件，再转给原处理器输出到控制台
 void MessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
+    // Qt 自己在创建 QML 窗口时会对空指针做一次 disconnect，属于框架内部噪音，不落盘也不再往控制台转
+    if (message == QStringLiteral("QObject::disconnect: Unexpected nullptr parameter"))
+    {
+        return;
+    }
+
     {
         QMutexLocker locker(&g_mutex);
 

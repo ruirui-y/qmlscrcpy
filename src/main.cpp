@@ -65,8 +65,8 @@ int main(int argc, char *argv[])
     // Frame 要跨线程用信号槽传，先注册类型；VideoItem 暴露给 QML
     qRegisterMetaType<qsc::stream::Frame>("qsc::stream::Frame");
 
-    // QS_PERF=1 时每秒打一行链路耗时，用来定位拖窗口卡在哪一段
-    qsc::stream::PerfStats::Get().enabled = qEnvironmentVariableIsSet("QS_PERF");
+    // 每秒打一行链路统计（收/推/丢/渲/积压），QS_PERF=0 可以关掉
+    qsc::stream::PerfStats::Get().enabled = qgetenv("QS_PERF") != "0";
     qmlRegisterType<VideoItem>("QmlScrcpy", 1, 0, "VideoSurface");
 
     // 连接/断开这套逻辑放控制器里，界面只负责点按钮和绑状态文字

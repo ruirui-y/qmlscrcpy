@@ -1,29 +1,49 @@
 #include "app_settings.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QSettings>
 
 namespace
 {
 
-// 两个文件都在 exe 旁边：绿色软件，拷走整目录就能用
-QString FilePathInExeDir(const char *file_name)
+// 配置文件统一放 exe 下的 config 目录：绿色软件，拷走整目录就能用
+QString ConfigDirPath()
 {
-    return QCoreApplication::applicationDirPath() + QLatin1Char('/') + QString::fromLatin1(file_name);
+    return QCoreApplication::applicationDirPath() + QStringLiteral("/config");
+}
+
+// 拼出 config 目录下的某个文件路径
+QString FilePathInConfigDir(const char *file_name)
+{
+    return ConfigDirPath() + QLatin1Char('/') + QString::fromLatin1(file_name);
+}
+
+// 把旧版本散落在 exe 根目录的 ini 搬到 config 下，搬过的不再重复搬
+void MigrateLegacyIni(const char *file_name)
+{
+    const QString legacy_path = QCoreApplication::applicationDirPath() + QLatin1Char('/')
+                                + QString::fromLatin1(file_name);
+    const QString target_path = FilePathInConfigDir(file_name);
+    if (QFile::exists(legacy_path) && !QFile::exists(target_path))
+    {
+        QDir().mkpath(ConfigDirPath());
+        QFile::rename(legacy_path, target_path);
+    }
 }
 
 // 用户配置：只读，绝不让 QSettings 改写，否则注释会被转义成 %23 之类
 QSettings &ConfigStore()
 {
-    static QSettings settings(FilePathInExeDir("config.ini"), QSettings::IniFormat);
+    static QSettings settings(FilePathInConfigDir("config.ini"), QSettings::IniFormat);
     return settings;
 }
 
 // 程序自己的状态：读写都在这，随便重写
 QSettings &WindowStore()
 {
-    static QSettings settings(FilePathInExeDir("window.ini"), QSettings::IniFormat);
+    static QSettings settings(FilePathInConfigDir("window.ini"), QSettings::IniFormat);
     return settings;
 }
 
@@ -44,14 +64,33 @@ drag_pixels=60
 # 视频采集：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
 [video]
 max_size=0
-bit_rate=12000000
-)";
+bit_rate=8000000
+# 帧率上限：0 = 不限（120Hz 屏能跑 120fps）；实测这项对观感几乎没影响，一般不用改
+max_fps=0
+
+# 无线连接单独一套（串号里带冒号就用这组）：6M 在局域网下够用且不排队
+[video_wireless]
+bit_rate=6000000
+max_fps=0)";
 
 } // namespace
 
 AppSettings::AppSettings(QObject *parent) : QObject(parent)
 {
+    // 目录和迁移要在读写配置之前完成，否则 QSettings 会在根目录又建一份
+    QDir().mkpath(ConfigDirPath());
+    MigrateLegacyIni("config.ini");
+    MigrateLegacyIni("window.ini");
+
     EnsureDefaultConfig();
+
+    // 老版本把画质覆盖值存在 [video] 里（不分有线无线），现在分档了，清掉免得和 [video_wired] 混着看
+    QSettings &window_store = WindowStore();
+    if (window_store.contains(QStringLiteral("video/bit_rate")))
+    {
+        window_store.remove(QStringLiteral("video"));
+        window_store.sync();
+    }
 }
 
 // config.ini 不存在时写一份带注释的模板
@@ -63,6 +102,7 @@ void AppSettings::EnsureDefaultConfig()
         return;
     }
 
+    QDir().mkpath(ConfigDirPath());
     QFile file(ConfigPath());
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
@@ -74,12 +114,12 @@ void AppSettings::EnsureDefaultConfig()
 
 QString AppSettings::ConfigPath() const
 {
-    return FilePathInExeDir("config.ini");
+    return FilePathInConfigDir("config.ini");
 }
 
 QString AppSettings::WindowPath() const
 {
-    return FilePathInExeDir("window.ini");
+    return FilePathInConfigDir("window.ini");
 }
 
 // 日志级别：配置里写字符串，解析交给调用方
@@ -170,11 +210,59 @@ int AppSettings::VideoMaxSize() const
     return ConfigStore().value(QStringLiteral("video/max_size"), 0).toInt();
 }
 
-int AppSettings::VideoBitRate() const
+// 串号里带冒号（IP:端口）就算无线连接，用来选哪一套画质参数
+QString AppSettings::VideoProfile(const QString &serial)
 {
-    return ConfigStore().value(QStringLiteral("video/bit_rate"), 12000000).toInt();
+    return serial.contains(QLatin1Char(':')) ? QStringLiteral("wireless") : QStringLiteral("wired");
 }
 
+// 界面里调过的（window.ini 的 [video_<profile>]）优先，其次 config.ini 的同名段，最后兜底
+int AppSettings::VideoBitRate(const QString &profile) const
+{
+    const QString key = QStringLiteral("video_%1/bit_rate").arg(profile.isEmpty() ? QStringLiteral("wired") : profile);
+    const int override_value = WindowStore().value(key, -1).toInt();
+    if (override_value > 0)
+    {
+        return override_value;
+    }
+
+    // config.ini 里没写 [video_wireless] 时退回到 [video]
+    const int configured = ConfigStore().value(key, -1).toInt();
+    if (configured > 0)
+    {
+        return configured;
+    }
+    return ConfigStore().value(QStringLiteral("video/bit_rate"), 8000000).toInt();
+}
+
+// 记下界面里调的码率；-1 表示没调过（回落到 config.ini）
+void AppSettings::SetVideoBitRate(int bit_rate, const QString &profile)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("video_%1/bit_rate").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), bit_rate);
+    store.sync();
+}
+
+// 采集帧率上限：界面里调过的优先；0 表示不限，120Hz 屏设备能跑到 120fps
+int AppSettings::VideoMaxFps(const QString &profile) const
+{
+    const QString key = QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile);
+    // 用 -1 当"没调过"的哨兵：0 是合法值（不限帧），不能拿 0 当默认
+    const int override_value = WindowStore().value(key, -1).toInt();
+    if (override_value >= 0)
+    {
+        return override_value;
+    }
+    return ConfigStore().value(key, ConfigStore().value(QStringLiteral("video/max_fps"), 0)).toInt();
+}
+
+// 记下界面里调的帧率上限
+void AppSettings::SetVideoMaxFps(int max_fps, const QString &profile)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), max_fps);
+    store.sync();
+}
 // 读窗口尺寸；没记录过返回空矩形
 QRect AppSettings::VideoGeometry(const QString &key) const
 {
