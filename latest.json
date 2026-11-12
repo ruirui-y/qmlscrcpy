@@ -1,7 +1,7 @@
 {
-    "latest":  "0.1.5",
+    "latest":  "0.1.6",
     "minimum":  "0.1.0",
     "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes":  "**增加版本检查**：启动时自动检查更新，有新版就在主窗右上角亮红标；安装包同步迁到 Gitee 发布。",
+    "notes":  "**这个版本只用来验证\"自动检查更新\"这条链路**：exe 里除了版本号没有任何改动。",
     "published_at":  "2026-11-12"
 }
