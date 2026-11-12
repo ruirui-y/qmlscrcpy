@@ -60,7 +60,8 @@ if ($LASTEXITCODE -ne 0) {
 
 $api_base = "https://gitee.com/api/v5/repos/$Owner/$Repo"
 $release_name = "QmlScrcpy $Version"
-$body_text = Get-Content -Raw -Encoding UTF8 $notes_path
+# 统一成 LF：CRLF 发给 Gitee 会被判 "body is invalid"
+$body_text = (Get-Content -Raw -Encoding UTF8 $notes_path) -replace "`r`n", "`n"
 
 Write-Host "[1/4] 查找发行版 $tag ..."
 $release = $null
@@ -76,11 +77,17 @@ if ($release -and -not $release.id) {
 
 if ($release) {
     Write-Host "      已存在（id=$($release.id)），更新说明后复用"
-    [void](Invoke-GiteeJson 'PATCH' "$api_base/releases/$($release.id)" @{
-        access_token = $Token
-        name         = $release_name
-        body         = $body_text
-    })
+    # PATCH 必须把 tag_name / target_commitish 一起带上，否则 Gitee 回 "tag_name is missing"
+    $patched = Invoke-GiteeJson 'PATCH' "$api_base/releases/$($release.id)" @{
+        access_token     = $Token
+        tag_name         = $tag
+        target_commitish = 'master'
+        name             = $release_name
+        body             = $body_text
+    }
+    if ($patched -notmatch '"id"') {
+        Fail "更新发行版说明失败：$patched"
+    }
     Write-Host "[2/4] 说明已更新"
 }
 else {
@@ -101,9 +108,23 @@ else {
 
 Write-Host "[3/4] 上传安装包 ..."
 $upload_url = "$api_base/releases/$($release.id)/attach_files?access_token=$Token"
+$exe_name = [System.IO.Path]::GetFileName($exe)
 $size_mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-Write-Host "      $([System.IO.Path]::GetFileName($exe))（$size_mb MB）"
-$upload_result = curl.exe -s -X POST $upload_url -F "file=@$exe"
+
+# 同名附件已经传过就不再传，否则每次重跑都会多一份
+$existing_assets = curl.exe -s --max-time 25 "$api_base/releases/$($release.id)/attach_files?access_token=$Token"
+$already = $null
+if ($existing_assets -and $existing_assets.Trim().StartsWith('[')) {
+    $already = ($existing_assets | ConvertFrom-Json) | Where-Object { $_.name -eq $exe_name } | Select-Object -First 1
+}
+if ($already) {
+    Write-Host "      $exe_name 已存在（id=$($already.id)，$size_mb MB），跳过上传"
+    $upload_result = '{"id":"skipped"}'
+}
+else {
+    Write-Host "      $exe_name（$size_mb MB）"
+    $upload_result = curl.exe -s -X POST $upload_url -F "file=@$exe"
+}
 if ($LASTEXITCODE -ne 0) {
     Fail "附件上传失败（curl 退出码 $LASTEXITCODE）"
 }
@@ -111,7 +132,9 @@ if ($LASTEXITCODE -ne 0) {
 if ($upload_result -notmatch '"id"') {
     Fail "附件上传被拒绝：$upload_result"
 }
-Write-Host "      上传成功"
+if (-not $already) {
+    Write-Host "      上传成功"
+}
 
 Write-Host "[4/4] 更新 latest.json ..."
 $latest = Get-Content -Raw -Encoding UTF8 $latest_path | ConvertFrom-Json
