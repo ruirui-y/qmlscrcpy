@@ -22,3 +22,7 @@ compile_commands.json
 recording/
 *.mp4
 *.mkv
+
+# 打包中间目录和产物：由 setup\collect.ps1 生成，不入库
+setup/stage/
+setup/Output/

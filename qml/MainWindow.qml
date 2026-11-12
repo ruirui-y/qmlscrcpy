@@ -11,7 +11,7 @@ Window {
     width: 600
     height: 250
     minimumWidth: 600
-    minimumHeight: 230
+    minimumHeight: 250
     visible: true
     title: qsTr("QmlScrcpy")
     color: "#14161a"
@@ -248,6 +248,33 @@ Window {
                 }
             }
 
+            // 恢复默认配置：清 window.ini、删 config.ini，重启后回到出厂
+            Rectangle {
+                id: resetToggle
+
+                Layout.preferredWidth: 56
+                Layout.preferredHeight: 26
+                radius: 6
+                color: resetArea.containsMouse ? "#3a2b2b" : "#242932"
+                border.width: 1
+                border.color: "#4a3434"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("重置")
+                    color: "#e0b4b4"
+                    font.pixelSize: 12
+                }
+
+                MouseArea {
+                    id: resetArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: resetPopup.open()
+                }
+            }
+
             // 命令行窗口开关：状态记在 window.ini，下次启动照这个来
             Rectangle {
                 id: consoleToggle
@@ -280,9 +307,11 @@ Window {
                 id: videoPopup
 
                 width: 260
-                padding: 12
-                x: -160
-                y: 34
+                padding: 8
+                // 居中到主窗，靠上放：父对象是头部 RowLayout，左上角在窗口内 16px 处。
+                // Popup 画在窗口内部，放太低会把底部的「应用」按钮裁掉
+                x: Math.round((controlWindow.width - width) / 2) - 16
+                y: 18
                 modal: true
                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -294,7 +323,7 @@ Window {
                 }
 
                 contentItem: Column {
-                    spacing: 8
+                    spacing: 6
 
                     Text {
                         text: qsTr("帧率上限（0 = 不限，一般不用改）")
@@ -306,7 +335,7 @@ Window {
                         id: fpsField
 
                         width: parent.width
-                        height: 30
+                        height: 26
                         text: String(deviceController.videoMaxFps)
                         color: "#d8dee9"
                         font.pixelSize: 13
@@ -333,7 +362,7 @@ Window {
                         id: bitrateField
 
                         width: parent.width
-                        height: 30
+                        height: 26
                         text: (deviceController.videoBitRate / 1000000).toFixed(1)
                         color: "#d8dee9"
                         font.pixelSize: 13
@@ -351,15 +380,14 @@ Window {
 
                     Text {
                         width: parent.width
-                        text: qsTr("改完会自动断开重连（约 1~2 秒），因为码率和帧率是 server 启动参数")
+                        text: qsTr("改完自动断开重连（1~2 秒）：码率/帧率是 server 启动参数")
                         color: "#6b7280"
-                        font.pixelSize: 10
-                        wrapMode: Text.WordWrap
+                        font.pixelSize: 9
                     }
 
                     Rectangle {
                         width: parent.width
-                        height: 30
+                        height: 26
                         radius: 6
                         color: applyArea.containsMouse ? "#5aa9ff" : "#3f8fdd"
 
@@ -380,6 +408,100 @@ Window {
                                 const mbps = parseFloat(bitrateField.text) || 8.0
                                 videoPopup.close()
                                 deviceController.ApplyVideoSettings(Math.round(mbps * 1000000), fps)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 恢复默认配置的确认框：会删掉 config.ini 和 window.ini 的内容
+            Popup {
+                id: resetPopup
+
+                width: 280
+                padding: 12
+                // 同上：居中靠上（父对象是头部 RowLayout，减掉 16px 边距）
+                x: Math.round((controlWindow.width - width) / 2) - 16
+                y: 18
+                modal: true
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                background: Rectangle {
+                    radius: 8
+                    color: "#1b1f26"
+                    border.width: 1
+                    border.color: "#4a3434"
+                }
+
+                contentItem: Column {
+                    spacing: 10
+
+                    Text {
+                        width: parent.width
+                        text: qsTr("恢复默认配置？")
+                        color: "#e6ebf2"
+                        font.pixelSize: 14
+                        font.bold: true
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: qsTr("会清空窗口位置尺寸、上次设备、画质参数、命令行开关，并重新生成默认的 config.ini。当前连接不会断开，重启程序后全部生效。")
+                        color: "#8b93a3"
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: 8
+
+                        Rectangle {
+                            width: (parent.width - parent.spacing) / 2
+                            height: 30
+                            radius: 6
+                            color: cancelArea.containsMouse ? "#2e343e" : "#242932"
+                            border.width: 1
+                            border.color: "#333945"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("取消")
+                                color: "#cdd4de"
+                                font.pixelSize: 13
+                            }
+
+                            MouseArea {
+                                id: cancelArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: resetPopup.close()
+                            }
+                        }
+
+                        Rectangle {
+                            width: (parent.width - parent.spacing) / 2
+                            height: 30
+                            radius: 6
+                            color: confirmResetArea.containsMouse ? "#c0504d" : "#a63d3a"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("恢复")
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                            }
+
+                            MouseArea {
+                                id: confirmResetArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    resetPopup.close()
+                                    deviceController.ResetAllConfig()
+                                }
                             }
                         }
                     }

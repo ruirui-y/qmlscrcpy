@@ -50,6 +50,8 @@ public:
     // [video_window] 段：窗口尺寸，QML 直接调
     Q_INVOKABLE QRect VideoGeometry(const QString &key) const;
     Q_INVOKABLE void SaveVideoGeometry(const QString &key, int x, int y, int width, int height);
+    Q_INVOKABLE void ResetVideoGeometry(const QString &key);                                    // 删掉某个姿势的尺寸记录，恢复默认值
+    Q_INVOKABLE bool ResetAllConfig();                                                          // 清空 window.ini 并删掉 config.ini，重启后回到出厂状态
 
     // [video_pos] 段：窗口位置
     Q_INVOKABLE QPoint VideoPosition(const QString &key) const;

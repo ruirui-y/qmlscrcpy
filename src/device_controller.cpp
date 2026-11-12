@@ -70,6 +70,19 @@ void DeviceController::SetSurface(QObject *surface)
     surface_->SetDragPixels(drag_pixels_);
 }
 
+// 恢复默认配置：清掉 window.ini、删掉 config.ini，当前会话不重启不会变
+void DeviceController::ResetAllConfig()
+{
+    AppSettings settings;
+    const bool removed = settings.ResetAllConfig();
+    SetStatus(removed ? QStringLiteral("已恢复默认配置，重启程序后生效")
+                      : QStringLiteral("配置已重置，重启程序后生效"));
+}
+// 会话建起来没有
+bool DeviceController::IsConnected() const
+{
+    return connected_;
+}
 // 当前生效的码率（bps），界面用来显示
 int DeviceController::VideoBitRate() const
 {
@@ -620,6 +633,13 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     // 记住这次连的设备，下次启动优先连它
     AppSettings().SetLastSerial(device_name_);
 
+    // 连上了才让投屏窗出来（启动时只显示主窗）
+    if (!connected_)
+    {
+        connected_ = true;
+        emit ConnectedChanged();
+    }
+
     SetStatus(QStringLiteral("已连接 %1  %2x%3%4")
                   .arg(result.device_name_)
                   .arg(result.frame_size_.width())
@@ -654,6 +674,13 @@ void DeviceController::SendControl(const QByteArray &message)
 // 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {
+    // 会话没了就把投屏窗收起来，回到"只有主窗"的状态
+    if (connected_)
+    {
+        connected_ = false;
+        emit ConnectedChanged();
+    }
+
     if (!device_name_.isEmpty())
     {
         device_name_.clear();

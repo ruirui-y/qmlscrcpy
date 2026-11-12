@@ -177,10 +177,10 @@ void AppSettings::SetDragPixels(int pixels)
     store.sync();
 }
 
-// 控制台窗口要不要显示，默认显示（控制台子系统启动本来就有）
+// 控制台窗口要不要显示：默认不显示，只有用户在界面上打开过才显示
 bool AppSettings::ShowConsole() const
 {
-    return WindowStore().value(QStringLiteral("ui/show_console"), true).toBool();
+    return WindowStore().value(QStringLiteral("ui/show_console"), false).toBool();
 }
 
 // 记下用户的选择，下次启动照这个来
@@ -262,6 +262,25 @@ void AppSettings::SetVideoMaxFps(int max_fps, const QString &profile)
     QSettings &store = WindowStore();
     store.setValue(QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), max_fps);
     store.sync();
+}
+// 删掉某个姿势的窗口尺寸记录：下次定尺寸时就回到默认值（横屏 900x400、竖屏按帧比例）
+void AppSettings::ResetVideoGeometry(const QString &key)
+{
+    QSettings &store = WindowStore();
+    store.remove(key);
+    store.sync();
+}
+// 恢复默认配置：window.ini 清空、config.ini 删掉（下次启动会重新生成带注释的模板）
+bool AppSettings::ResetAllConfig()
+{
+    // 先把 QSettings 里的内容清掉并落盘，否则对象析构时会把旧值写回去
+    QSettings &window_store = WindowStore();
+    window_store.clear();
+    window_store.sync();
+
+    const bool removed = QFile::remove(ConfigPath());
+    EnsureDefaultConfig();
+    return removed;
 }
 // 读窗口尺寸；没记录过返回空矩形
 QRect AppSettings::VideoGeometry(const QString &key) const

@@ -28,16 +28,21 @@ Window {
     height: 900
     minimumWidth: toolBarWidth + 200
     minimumHeight: 268
-    visible: true
+    // 启动时只显示主窗；连上会话才把投屏窗亮出来，断开就收起
+    visible: false
     // 标题显示当前设备：有线是序列号，无线是 IP:端口
     title: deviceController.deviceName.length > 0
            ? "QmlScrcpy — " + deviceController.deviceName : qsTr("QmlScrcpy — 投屏")
     color: "#000000"
     flags: Qt.Window | Qt.FramelessWindowHint | (pinned ? Qt.WindowStaysOnTopHint : Qt.NoHint)
 
-    // 横屏和竖屏各记一套几何
+    // 横屏和竖屏各记一套几何和位置
     function geometryKey() {
         return landscape ? "video_window_landscape" : "video_window"
+    }
+
+    function positionKey() {
+        return landscape ? "video_pos_landscape" : "video_pos"
     }
 
     // 一个按钮：文字 + 选中态配色 + 悬停提示 + 点击回调
@@ -261,7 +266,6 @@ Window {
             Layout.preferredWidth: 1
             Layout.fillHeight: true
             color: "#2a2a2a"
-            visible: toolBar.visible
         }
 
         // 工具栏：全屏时收起来，别挡画面
@@ -271,7 +275,6 @@ Window {
             Layout.preferredWidth: videoWindow.toolBarWidth
             Layout.fillHeight: true
             color: "#1c1c1c"
-            visible: videoWindow.visibility !== Window.FullScreen
 
             // 按钮之间的空地也能拖窗口（按钮自己的 MouseArea 会先吃掉点击）
             MouseArea {
@@ -397,10 +400,16 @@ Window {
 
                 ToolButton {
                     label: videoWindow.visibility === Window.FullScreen ? qsTr("还原") : qsTr("全屏")
-                    tip: qsTr("投屏窗全屏／还原（全屏时工具栏自动收起）")
+                    tip: qsTr("投屏窗全屏／还原")
                     active: videoWindow.visibility === Window.FullScreen
                     onClicked: videoWindow.visibility = videoWindow.visibility === Window.FullScreen
                                                   ? Window.Windowed : Window.FullScreen
+                }
+
+                ToolButton {
+                    label: qsTr("复位")
+                    tip: qsTr("把窗口尺寸恢复成默认（横屏 900x400，竖屏按画面比例）")
+                    onClicked: videoWindow.resetToDefault()
                 }
             }
         }
@@ -491,6 +500,9 @@ Window {
     Component.onCompleted: {
         // 主窗最小化不该带走这扇窗：Qt 的 componentComplete 会把 transientParent 设回父窗口，这里清掉
         transientParent = null
+
+        // QML 加载时可能已经连上了（自启动连上次设备），按当前状态决定露不露脸
+        visible = deviceController.connected
         deviceController.SetSurface(videoSurface)
 
         applying = true
@@ -500,6 +512,16 @@ Window {
             y = position.y
         }
         applying = false
+    }
+
+    // 会话连通状态一变就跟着显示/收起；用户手动关窗（visible=false）不会被强制拉回来，
+    // 下次连接才重新出现
+    Connections {
+        target: deviceController
+
+        function onConnectedChanged() {
+            videoWindow.visible = deviceController.connected
+        }
     }
 
     // 按当前帧比例把窗口调成"刚好装下画面 + 工具栏"
@@ -529,6 +551,26 @@ Window {
         applying = false
     }
 
+    // 复位：把这个姿势的尺寸记录删掉，立刻套回默认值（横屏 900x400，竖屏按帧比例）
+    function resetToDefault() {
+        appSettings.ResetVideoGeometry(geometryKey())
+
+        if (frameSize.width <= 0) {
+            return
+        }
+
+        applying = true
+        if (landscape) {
+            width = Math.min(900, Math.round(Screen.desktopAvailableWidth * 0.9))
+            height = Math.min(400 + titleBar.height, Math.round(Screen.desktopAvailableHeight * 0.9))
+            applying = false
+        } else {
+            applying = false
+            fitToFrame()
+        }
+        saveTimer.restart()
+    }
+
     // 帧尺寸变化：首次定尺寸；横竖屏翻转时切到那一边记住的尺寸
     onFrameSizeChanged: {
         if (frameSize.width <= 0) {
@@ -544,6 +586,12 @@ Window {
                 width = Math.max(minimumWidth, saved.width)
                 height = Math.max(minimumHeight, saved.height)
                 applying = false
+            } else if (nowLandscape) {
+                // 横屏第一次出现时的默认尺寸：900x400 的画面区，够看清又不占满屏幕
+                applying = true
+                width = Math.min(900, Math.round(Screen.desktopAvailableWidth * 0.9))
+                height = Math.min(400 + titleBar.height, Math.round(Screen.desktopAvailableHeight * 0.9))
+                applying = false
             } else {
                 fitToFrame()
             }
@@ -557,9 +605,19 @@ Window {
             return
         }
 
-        // 换姿势：先把当前尺寸存到旧的那一边，再切到新姿势记住的尺寸
+        // 换姿势：尺寸和位置都先存到旧的那一边，再取新姿势记住的值
         appSettings.SaveVideoGeometry(geometryKey(), x, y, width, height)
+        appSettings.SaveVideoPosition(positionKey(), x, y)
         landscape = nowLandscape
+
+        // 位置按姿势分开恢复，横屏和竖屏各回各的地方，不共用左上角
+        const saved_position = appSettings.VideoPosition(positionKey())
+        if (saved_position.x >= 0 && saved_position.y >= 0) {
+            applying = true
+            x = saved_position.x
+            y = saved_position.y
+            applying = false
+        }
 
         const saved = appSettings.VideoGeometry(geometryKey())
         if (saved.width > 0) {
@@ -584,7 +642,7 @@ Window {
         interval: 400
         repeat: false
         onTriggered: {
-            appSettings.SaveVideoPosition("video_pos", videoWindow.x, videoWindow.y)
+            appSettings.SaveVideoPosition(videoWindow.positionKey(), videoWindow.x, videoWindow.y)
             if (ready) {
                 appSettings.SaveVideoGeometry(videoWindow.geometryKey(), videoWindow.x, videoWindow.y,
                                               videoWindow.width, videoWindow.height)

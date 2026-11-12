@@ -172,7 +172,7 @@ bit_rate=8000000
 last_serial=192.168.31.114:5555
 
 [ui]
-show_console=true
+show_console=false   # 默认隐藏；点界面「命令行」按钮才会变 true
 ```
 
 ### 6. 环境变量（调试用）
@@ -336,7 +336,8 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | P10 | 窗口解耦（transientParent）、状态归到标题栏 | ✅ |
 | P11 | 工具栏并进投屏窗，只剩控制窗 + 投屏窗两扇 | ✅ |
 | P12 | 主窗「命令行」开关，控制台显隐记进配置 | ✅ |
-| P13 | 帧链路埋点（收/推/丢/渲/积压）+ 配置收进 config 目录 | ✅ |
+| P13 | 帧链路埋点 + 到帧即画、画质可调（有线/无线分档）、配置进 config 目录 | ✅ |
+| P14 | 横竖屏位置分开记、横屏默认 1300×600、全屏保留工具栏、Inno Setup 打包 | ✅ |
 
 ## 已知限制
 
@@ -364,6 +365,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [自动连接](docs/自动连接.md) | 启动自动连上次设备、只做一次、存哪 |
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
+| [打包发布](docs/打包发布.md) | Inno Setup 打包、stage 收集、为什么不能装 Program Files |
 | [构建与测试](docs/构建与测试.md) | 命令、环境变量、测试清单、环境坑 |
 
 ---
