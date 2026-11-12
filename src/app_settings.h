@@ -31,7 +31,8 @@ public:
     bool ClipboardAutoSync() const;                                                             // 电脑剪贴板一变就推到设备
 
     // [ui] 段：老板键
-    QString BossKeyText() const;                                                                // 例如 Ctrl+Alt+B
+    QString BossKeyText() const;                                                                // 例如 Ctrl+Alt+B，界面里改过的优先
+    void SetBossKeyText(const QString &text);                                                   // 界面里改的写 window.ini
 
     // [ui] 段：控制台窗口要不要显示
     bool ShowConsole() const;

@@ -195,7 +195,7 @@ https://github.com/ruirui-y/qmlscrcpy/releases/download/v0.1.0/QmlScrcpy_Setup_0
 
 **老板键 `Ctrl+Alt+B`**：按一次藏起主窗和投屏窗（任务栏也看不到），再按一次原样恢复。窗口没焦点时也有效。断开设备时会自动恢复，不会出现"程序在跑但找不到窗口"。
 
-想换组合键，改 `config.ini`：
+想换组合键，两个办法：主窗右上角点那个显示 `Ctrl+Alt+B` 的按钮直接改（立即生效），或者改 `config.ini`：
 
 ```ini
 [ui]

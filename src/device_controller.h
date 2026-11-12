@@ -35,6 +35,7 @@ class DeviceController : public QObject
     Q_PROPERTY(int videoMaxFps READ VideoMaxFps NOTIFY VideoSettingsChanged)
     Q_PROPERTY(QString videoProfile READ VideoProfile NOTIFY VideoSettingsChanged)
     Q_PROPERTY(bool connected READ IsConnected NOTIFY ConnectedChanged)
+    Q_PROPERTY(QString bossKey READ BossKey NOTIFY BossKeyChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -52,6 +53,7 @@ public:
     int VideoMaxFps() const;                                                                    // 当前生效的帧率上限，0 = 不限
     QString VideoProfile() const;                                                               // wired 或 wireless，看当前连的是哪种
     bool IsConnected() const;                                                                   // 会话建起来没有，投屏窗靠它决定要不要显示
+    QString BossKey() const;                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -66,6 +68,8 @@ public:
     Q_INVOKABLE void ResetAllConfig();                                                          // 恢复默认配置，提示重启
     Q_INVOKABLE void SendClipboardToDevice();                                                   // 电脑剪贴板 → 设备，写完直接粘贴
     Q_INVOKABLE void PullClipboardFromDevice();                                                 // 设备剪贴板 → 电脑
+    Q_INVOKABLE void SetBossKeyHost(QObject *host);                                             // main 把 BossKey 对象交进来
+    Q_INVOKABLE bool SetBossKey(const QString &text);                                           // 界面改老板键：解析 → 重注册 → 记住
     Q_INVOKABLE void RegisterWindow(QObject *window);                                           // QML 把自己的窗口登记进来，老板键要藏它们
     Q_INVOKABLE void ToggleBossKey();                                                           // 一键隐藏/恢复所有窗口
 
@@ -92,6 +96,7 @@ signals:
     void ShowConsoleChanged();
     void VideoSettingsChanged();
     void ConnectedChanged();
+    void BossKeyChanged();
 
 private:
     void OnControlData();    // 控制 socket 有数据：解析设备消息（剪贴板推送、Ack）
@@ -127,6 +132,7 @@ private:
     quint64 clipboard_sequence_ = 0;                                                            // SetClipboard 的序号，设备 Ack 会带回
     bool suppress_clipboard_ = false;                                                           // 正在写电脑剪贴板，别把它再推回设备
     bool boss_hidden_ = false;                                                                  // 老板键是否已经把窗口藏起来了
+    QPointer<QObject> boss_key_host_;                                                           // BossKey 对象，改键时要重新注册
     QList<QPointer<QWindow>> app_windows_;                                                      // QML 登记进来的窗口，老板键只藏这些
     QList<QPointer<QWindow>> hidden_windows_;                                                   // 藏起来的窗口，恢复时逐个 show
     QMetaObject::Connection clipboard_connection_;                                              // 自动同步的剪贴板信号连接

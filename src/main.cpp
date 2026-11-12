@@ -106,6 +106,7 @@ int main(int argc, char *argv[])
     // 加载失败必须立刻报错退出，否则会静默变成一个看不见的空窗口
     // 老板键：全局热键，按一次藏起所有窗口，再按恢复
     qsc::BossKey boss_key;
+    controller.SetBossKeyHost(&boss_key);
     qsc::base::HotkeySpec hotkey;
     if (qsc::base::ParseHotkey(app_settings.BossKeyText(), &hotkey) && boss_key.Bind(hotkey))
     {

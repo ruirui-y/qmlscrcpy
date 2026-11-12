@@ -189,10 +189,23 @@ bool AppSettings::ClipboardAutoSync() const
     return ConfigStore().value(QStringLiteral("input/clipboard_autosync"), false).toBool();
 }
 
-// 老板键的组合，格式 Ctrl+Alt+B
+// 老板键的组合：界面里改过的（window.ini）优先，其次 config.ini
 QString AppSettings::BossKeyText() const
 {
+    const QString override_value = WindowStore().value(QStringLiteral("ui/boss_key")).toString();
+    if (!override_value.isEmpty())
+    {
+        return override_value;
+    }
     return ConfigStore().value(QStringLiteral("ui/boss_key"), QStringLiteral("Ctrl+Alt+B")).toString();
+}
+
+// 记下界面里改的老板键
+void AppSettings::SetBossKeyText(const QString &text)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("ui/boss_key"), text);
+    store.sync();
 }
 // 控制台窗口要不要显示：默认不显示，只有用户在界面上打开过才显示
 bool AppSettings::ShowConsole() const

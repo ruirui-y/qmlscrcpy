@@ -1,6 +1,8 @@
 #include "device_controller.h"
 
 #include "app_settings.h"
+#include "base/hotkey.h"
+#include "boss_key.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -107,6 +109,54 @@ void DeviceController::PullClipboardFromDevice()
     SetStatus(QStringLiteral("正在读取手机剪贴板 …"));
 }
 
+// 当前老板键文本，界面显示用
+QString DeviceController::BossKey() const
+{
+    return AppSettings().BossKeyText();
+}
+
+// main 把 BossKey 对象交进来，之后改键要靠它重新注册
+void DeviceController::SetBossKeyHost(QObject *host)
+{
+    boss_key_host_ = host;
+}
+
+// 界面改老板键：解析成功就重新注册并写进 window.ini，失败给出提示
+bool DeviceController::SetBossKey(const QString &text)
+{
+    qsc::base::HotkeySpec spec;
+    if (!qsc::base::ParseHotkey(text, &spec))
+    {
+        SetStatus(QStringLiteral("老板键格式不对：%1（示例 Ctrl+Alt+B）").arg(text));
+        return false;
+    }
+
+    auto *host = qobject_cast<qsc::BossKey *>(boss_key_host_.data());
+    if (host == nullptr)
+    {
+        SetStatus(QStringLiteral("老板键组件没就绪，重启程序再试"));
+        return false;
+    }
+
+    // Bind 会先摘掉旧热键：新键注册失败时要把旧键装回去，否则用户会失去老板键
+    const QString previous = AppSettings().BossKeyText();
+    qsc::base::HotkeySpec previous_spec;
+    if (!host->Bind(spec))
+    {
+        if (qsc::base::ParseHotkey(previous, &previous_spec))
+        {
+            host->Bind(previous_spec);
+        }
+        SetStatus(QStringLiteral("%1 可能被别的程序占用，已保留 %2")
+                      .arg(qsc::base::HotkeyText(spec), previous));
+        return false;
+    }
+
+    AppSettings().SetBossKeyText(qsc::base::HotkeyText(spec));
+    emit BossKeyChanged();
+    SetStatus(QStringLiteral("老板键已改为 %1").arg(qsc::base::HotkeyText(spec)));
+    return true;
+}
 // QML 把窗口登记进来：投屏窗在 QML 里声明在主窗内部，QWindow::parent 非空，
 // 不在 topLevelWindows() 里，只能让它们自己报到
 void DeviceController::RegisterWindow(QObject *window)

@@ -28,6 +28,8 @@ Window {
     // 位置和尺寸记在 window.ini，下次启动回到原处；拖动/缩放时防抖写盘
     property bool applying: false
     property bool ready: false
+    property string hint: ""    // 鼠标停在头部按钮上时的说明
+    property Item hintAnchor: null    // 提示挂在哪个按钮下面
 
     Component.onCompleted: {
         // 登记给老板键：主窗 + 投屏窗都要能被一键藏起来
@@ -205,6 +207,39 @@ Window {
         }
     }
 
+    // 悬浮说明气泡：浮在操作行上方，没有 MouseArea，不挡点击
+    Rectangle {
+        id: hintBubble
+
+        width: hintText.implicitWidth + 20
+        height: 24
+        radius: 6
+        z: 30
+        visible: controlWindow.hint.length > 0 && controlWindow.hintAnchor !== null
+        // 跟着悬停的按钮走：正中下方 6px，再夹在窗口左右边界内
+        x: {
+            if (!controlWindow.hintAnchor) {
+                return 0
+            }
+            const center = controlWindow.hintAnchor.mapToItem(null, controlWindow.hintAnchor.width / 2, 0).x
+            return Math.max(8, Math.min(controlWindow.width - width - 8, center - width / 2))
+        }
+        y: controlWindow.hintAnchor
+           ? controlWindow.hintAnchor.mapToItem(null, 0, controlWindow.hintAnchor.height + 6).y
+           : 0
+        color: "#101820"
+        border.width: 1
+        border.color: "#3a4150"
+
+        Text {
+            id: hintText
+            anchors.centerIn: parent
+            text: controlWindow.hint
+            color: "#cfe0f5"
+            font.pixelSize: 11
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
@@ -247,6 +282,8 @@ Window {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    onEntered: { controlWindow.hintAnchor = videoToggle; controlWindow.hint = qsTr("画质：帧率和码率，改完自动重连") }
+                    onExited: { controlWindow.hint = ""; controlWindow.hintAnchor = null }
                     onClicked: videoPopup.open()
                 }
             }
@@ -274,7 +311,38 @@ Window {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    onEntered: { controlWindow.hintAnchor = resetToggle; controlWindow.hint = qsTr("恢复默认配置：清空窗口状态并重新生成 config.ini") }
+                    onExited: { controlWindow.hint = ""; controlWindow.hintAnchor = null }
                     onClicked: resetPopup.open()
+                }
+            }
+
+            // 老板键：显示当前组合，点开可以改
+            Rectangle {
+                id: bossKeyToggle
+
+                Layout.preferredWidth: 104
+                Layout.preferredHeight: 26
+                radius: 6
+                color: bossKeyArea.containsMouse ? "#2e343e" : "#242932"
+                border.width: 1
+                border.color: "#333945"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: deviceController.bossKey
+                    color: "#cdd4de"
+                    font.pixelSize: 12
+                }
+
+                MouseArea {
+                    id: bossKeyArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: { controlWindow.hintAnchor = bossKeyToggle; controlWindow.hint = qsTr("更改老板键：一键隐藏或显示本程序所有窗口的快捷键") }
+                    onExited: { controlWindow.hint = ""; controlWindow.hintAnchor = null }
+                    onClicked: bossPopup.open()
                 }
             }
 
@@ -301,6 +369,8 @@ Window {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    onEntered: { controlWindow.hintAnchor = consoleToggle; controlWindow.hint = qsTr("命令行：显示或隐藏黑色控制台窗口") }
+                    onExited: { controlWindow.hint = ""; controlWindow.hintAnchor = null }
                     onClicked: deviceController.SetShowConsole(!deviceController.showConsole)
                 }
             }
@@ -411,6 +481,89 @@ Window {
                                 const mbps = parseFloat(bitrateField.text) || 8.0
                                 videoPopup.close()
                                 deviceController.ApplyVideoSettings(Math.round(mbps * 1000000), fps)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 老板键面板：改完立刻重新注册并写进 window.ini
+            Popup {
+                id: bossPopup
+
+                width: 260
+                padding: 8
+                x: Math.round((controlWindow.width - width) / 2) - 16
+                y: 18
+                modal: true
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                background: Rectangle {
+                    radius: 8
+                    color: "#1b1f26"
+                    border.width: 1
+                    border.color: "#2c323c"
+                }
+
+                contentItem: Column {
+                    spacing: 6
+
+                    Text {
+                        text: qsTr("老板键组合（至少带一个修饰键）")
+                        color: "#8b93a3"
+                        font.pixelSize: 11
+                    }
+
+                    TextField {
+                        id: bossKeyField
+
+                        width: parent.width
+                        height: 26
+                        text: deviceController.bossKey
+                        color: "#d8dee9"
+                        font.pixelSize: 13
+                        leftPadding: 10
+                        selectByMouse: true
+                        placeholderText: qsTr("Ctrl+Alt+B")
+
+                        background: Rectangle {
+                            radius: 6
+                            color: "#151920"
+                            border.width: 1
+                            border.color: "#2c323c"
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: qsTr("可用：Ctrl / Alt / Shift / Win 组合 A~Z、0~9、F1~F24、Space")
+                        color: "#6b7280"
+                        font.pixelSize: 9
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 26
+                        radius: 6
+                        color: bossApplyArea.containsMouse ? "#5aa9ff" : "#3f8fdd"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("应用")
+                            color: "#ffffff"
+                            font.pixelSize: 13
+                        }
+
+                        MouseArea {
+                            id: bossApplyArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (deviceController.SetBossKey(bossKeyField.text)) {
+                                    bossPopup.close()
+                                }
                             }
                         }
                     }
