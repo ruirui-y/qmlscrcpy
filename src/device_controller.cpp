@@ -173,6 +173,15 @@ void DeviceController::Disconnect()
 }
 
 // 停线程、清画布、关解码器、拆隧道
+// 把画布翻好的输入消息写进控制 socket；没连接时静默丢掉
+void DeviceController::SendControl(const QByteArray &message)
+{
+    if (!session_ || message.isEmpty())
+    {
+        return;
+    }
+    session_->SendControl(message);
+}
 void DeviceController::TearDown()
 {
     // 顺序不能反：读线程里存着解码器的裸指针，先停线程再销毁解码器

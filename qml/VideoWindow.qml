@@ -121,6 +121,7 @@ Window {
         VideoSurface {
             id: videoSurface
             objectName: "videoSurface"
+        focus: true    // 键盘事件只有拿到焦点才收得到
             Layout.fillWidth: true
             Layout.fillHeight: true
             keepAspect: false

@@ -28,6 +28,7 @@ target_link_libraries(QmlScrcpy PRIVATE
     qs_options
     qsc_session
     qsc_stream
+    qsc_input
     Qt5::Quick
     Qt5::QuickControls2
 )

@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QSize>
+#include <QByteArray>
 #include <QString>
 #include <QTcpServer>
 
@@ -35,7 +36,8 @@ public:
     ConnectResult Start();                                                                      // 阻塞跑完整套流程，成功后可以交给读线程和控制线程
     void Stop();                                                                                // 幂等，不管 Start 成没成功都能调
     QTcpSocket *TakeVideoSocket();                                                              // 成功后由调用方接管，没人接手时本对象负责关闭
-    QTcpSocket *TakeControlSocket();                                                            // 同上
+    QTcpSocket *TakeControlSocket();
+    bool SendControl(const QByteArray &message);                                                // 往控制 socket 写一条消息；没连上返回 false                                                            // 同上
 
 private:
     bool PushServer(QString *error);                                                            // 把 server jar 推到设备上

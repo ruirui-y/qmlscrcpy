@@ -483,6 +483,22 @@ QTcpSocket *ServerSession::TakeVideoSocket()
     return socket;
 }
 
+// 往控制 socket 写一条消息；只负责发，不等对方回应
+bool ServerSession::SendControl(const QByteArray &message)
+{
+    if (control_socket_ == nullptr || control_socket_->state() != QAbstractSocket::ConnectedState)
+    {
+        return false;
+    }
+
+    // write 只保证进缓冲，flush 尽量推出去；推不动也不报错，后面还会写
+    if (control_socket_->write(message) != message.size())
+    {
+        return false;
+    }
+    control_socket_->flush();
+    return true;
+}
 // 交出控制 socket，之后归发送方管
 QTcpSocket *ServerSession::TakeControlSocket()
 {

@@ -43,6 +43,7 @@ signals:
 
 private:
     void ApplyConnected(const qsc::session::ConnectResult &result);                             // 连接结果落地：接解码器和读线程
+    void SendControl(const QByteArray &message);                                                // 把画布翻好的输入消息写进控制 socket
     void TearDown();                                                                            // 停线程、关解码器、拆隧道
     void SetStatus(const QString &status);
 

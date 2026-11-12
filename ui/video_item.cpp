@@ -1,6 +1,9 @@
 #include "ui/video_item.h"
 
 #include <QDebug>
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
 #include <QElapsedTimer>
 #include <QMutexLocker>
 #include <QOpenGLContext>
@@ -276,6 +279,7 @@ void ResetGlState(QOpenGLFunctions *gl)
 VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
 {
     setFlag(QQuickItem::ItemHasContents, true);
+    setAcceptedMouseButtons(Qt::LeftButton);                                                    // 只认左键：右键留给后面做菜单
 
     // 重绘由 GUI 线程定时器发起：视频线程只存帧，不投递事件
     refresh_timer_ = new QTimer(this);
@@ -369,6 +373,8 @@ void VideoItem::Clear()
         pending_ = Frame();
         has_pending_ = false;
     }
+    // 断开时把按键重复计数一起清掉，下次连接不会从第 3 次重复开始
+    keys_.Reset();
     update();
 }
 
@@ -417,4 +423,103 @@ void VideoItem::geometryChanged(const QRectF &new_geometry, const QRectF &old_ge
     QQuickItem::geometryChanged(new_geometry, old_geometry);
     // 画布尺寸变了，FBO 也要跟着变，请一次重绘让渲染线程重新拿尺寸
     update();
+}
+
+// 坐标换算器要用最新的画布尺寸和帧尺寸，每次事件前同步一次（都是几个赋值，开销可忽略）
+void VideoItem::SyncMapper()
+{
+    mapper_.SetFrameSize(FrameSize());
+    mapper_.SetItemSize(QSizeF(width(), height()));
+    mapper_.SetKeepAspect(KeepAspect());
+}
+
+// 消息为空说明点在黑边上或者键没映射，不发
+void VideoItem::EmitControlMessage(const QByteArray &message)
+{
+    if (message.isEmpty())
+    {
+        return;
+    }
+    emit ControlMessageReady(message);
+}
+
+void VideoItem::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton)
+    {
+        QQuickFramebufferObject::mousePressEvent(event);
+        return;
+    }
+
+    // 点了才要键盘焦点，免得一启动就把焦点抢过来
+    forceActiveFocus();
+    SyncMapper();
+    EmitControlMessage(touch_.Press(event->localPos()));
+    event->accept();
+}
+
+void VideoItem::mouseMoveEvent(QMouseEvent *event)
+{
+    // 只有按着左键才发移动，否则设备会当成悬停乱跳
+    if ((event->buttons() & Qt::LeftButton) == 0)
+    {
+        QQuickFramebufferObject::mouseMoveEvent(event);
+        return;
+    }
+
+    SyncMapper();
+    EmitControlMessage(touch_.Move(event->localPos()));
+    event->accept();
+}
+
+void VideoItem::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton)
+    {
+        QQuickFramebufferObject::mouseReleaseEvent(event);
+        return;
+    }
+
+    SyncMapper();
+    EmitControlMessage(touch_.Release(event->localPos()));
+    event->accept();
+}
+
+void VideoItem::wheelEvent(QWheelEvent *event)
+{
+    // 一格的 delta 是 120，除下来就是滚了几格
+    const int notches = event->angleDelta().y() / 120;
+    if (notches == 0)
+    {
+        QQuickFramebufferObject::wheelEvent(event);
+        return;
+    }
+
+    SyncMapper();
+    EmitControlMessage(touch_.Scroll(event->position(), notches));
+    event->accept();
+}
+
+void VideoItem::keyPressEvent(QKeyEvent *event)
+{
+    const QByteArray message = keys_.Press(event->key(), event->modifiers(), event->isAutoRepeat());
+    if (message.isEmpty())
+    {
+        QQuickFramebufferObject::keyPressEvent(event);
+        return;
+    }
+    EmitControlMessage(message);
+    event->accept();
+}
+
+void VideoItem::keyReleaseEvent(QKeyEvent *event)
+{
+    const QByteArray message = keys_.Release(event->key(), event->modifiers());
+    if (message.isEmpty())
+    {
+        QQuickFramebufferObject::keyReleaseEvent(event);
+        return;
+    }
+    EmitControlMessage(message);
+    event->accept();
 }
