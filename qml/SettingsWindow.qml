@@ -334,7 +334,7 @@ Window {
 
                     Text {
                         anchors.centerIn: parent
-                        text: qsTr("打开目录")
+                        text: qsTr("打开首页")
                         color: "#cdd4de"
                         font.pixelSize: 12
                     }

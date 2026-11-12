@@ -4,7 +4,9 @@ add_library(qsc_base STATIC
     console_window.cpp
     console_window.h
     hotkey.cpp
+    task_runner.cpp
     hotkey.h
+    task_runner.h
     log.cpp
     log.h
 )

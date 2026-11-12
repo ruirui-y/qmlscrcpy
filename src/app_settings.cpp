@@ -4,7 +4,10 @@
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include "base/task_runner.h"
+
 #include <QSettings>
+#include <QThread>
 
 namespace
 {
@@ -419,9 +422,43 @@ void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width,
     store.setValue(QStringLiteral("w"), width);
     store.setValue(QStringLiteral("h"), height);
     store.endGroup();
-    store.sync();
+    // 不调 sync()：本函数在"拖动/缩放停手"后触发，同步落盘会在 GUI 线程卡一下。
+    // QSettings 自己会批次写盘，程序正常退出时也会 flush。
 }
 
+// 位置和尺寸一起丢到后台线程写盘。
+// 停手后主线程直接写 ini 会卡一下（QSettings 的落盘是同步的），所以这里换成独立线程：
+// 线程里自己开一个 QSettings，写完 sync 再退出，主线程只负责传值。
+void AppSettings::SaveVideoStateAsync(const QString &pos_key, int x, int y,
+                                      const QString &geom_key, int width, int height)
+{
+    const QString path = WindowPath();
+    const bool save_geometry = width > 0 && height > 0;
+
+    qsc::base::TaskRunner::Instance().Post([path, pos_key, x, y, geom_key, width, height, save_geometry]()
+    {
+        QSettings store(path, QSettings::IniFormat);
+        store.setIniCodec("UTF-8");
+
+        store.beginGroup(pos_key);
+        store.setValue(QStringLiteral("x"), x);
+        store.setValue(QStringLiteral("y"), y);
+        store.endGroup();
+
+        // 尺寸只在定下来之后才记，否则会写进一堆临时值
+        if (save_geometry)
+        {
+            store.beginGroup(geom_key);
+            store.setValue(QStringLiteral("x"), x);
+            store.setValue(QStringLiteral("y"), y);
+            store.setValue(QStringLiteral("w"), width);
+            store.setValue(QStringLiteral("h"), height);
+            store.endGroup();
+        }
+
+        store.sync();
+    });
+}
 // 读窗口位置；没记录过返回 (-1,-1)
 QPoint AppSettings::VideoPosition(const QString &key) const
 {
@@ -441,5 +478,5 @@ void AppSettings::SaveVideoPosition(const QString &key, int x, int y)
     store.setValue(QStringLiteral("x"), x);
     store.setValue(QStringLiteral("y"), y);
     store.endGroup();
-    store.sync();
+    // 同上：位置保存也在拖动结束时触发，别同步落盘
 }

@@ -2,6 +2,7 @@
 
 #include "app_settings.h"
 #include "base/hotkey.h"
+#include "base/task_runner.h"
 #include "boss_key.h"
 
 #include <QCoreApplication>
@@ -235,7 +236,9 @@ void DeviceController::RegisterWindow(QObject *window)
     app_windows_.append(raw);
 }
 
-// 在手机上打开上传目录：拉起系统文件管理，定位到 Download/QmlScrcpy
+// 在手机上打开上传目录：优先拉起厂商的文件管理，其次是 AOSP 的文档界面。
+// 厂商 App 基本都不支持深链到子目录（试过 file_path / path / 目录 URI，只会停在首页），
+// 所以这里只负责打开文件管理，路径靠状态栏提示。
 void DeviceController::OpenUploadDir()
 {
     if (session_ == nullptr)
@@ -247,41 +250,41 @@ void DeviceController::OpenUploadDir()
     const QString upload_dir = AppSettings().UploadDir();
     const QString serial = device_name_;
 
-    // 目录要先存在，否则文件管理器打开会失败
+    // 状态栏给人看，把路径换成手机上看到的叫法：/sdcard/Download/x → 下载/x
+    QString display_dir = upload_dir;
+    display_dir.remove(QStringLiteral("/sdcard/"));
+    display_dir.replace(QStringLiteral("Download"), QStringLiteral("下载"));
+
+    // 目录要先存在，否则打开后看不到东西
     qsc::adb::Run(QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("mkdir")
                                 << QStringLiteral("-p") << upload_dir, 5000);
 
-    // /sdcard/Download/QmlScrcpy → content://…/document/primary%3ADownload%2FQmlScrcpy
-    // 只处理 /sdcard 下的路径，别的路径退回"打开下载目录"
-    QString document_uri;
-    if (upload_dir.startsWith(QStringLiteral("/sdcard/")))
+    // 各家文件管理的主界面，按机型依次试；第一个能拉起来的就用它
+    static const QStringList kFileManagers{
+        QStringLiteral("com.coloros.filemanager/com.oplus.filemanager.main.ui.MainActivity"),   // OPPO / realme / OnePlus
+        QStringLiteral("com.android.fileexplorer/.FileExplorerTabActivity"),                    // 小米
+        QStringLiteral("com.huawei.hidisk/.filemanager.FileManager"),                           // 华为 / 荣耀
+        QStringLiteral("com.sec.android.app.myfiles/.common.MainActivity"),                     // 三星
+    };
+    for (const QString &component : kFileManagers)
     {
-        QString relative = upload_dir.mid(QStringLiteral("/sdcard/").size());
-        relative.replace(QLatin1Char('/'), QStringLiteral("%2F"));
-        document_uri = QStringLiteral("content://com.android.externalstorage.documents/document/primary%%3A%1")
-                           .arg(relative);
-    }
-
-    if (!document_uri.isEmpty())
-    {
-        const qsc::adb::AdbResult opened = qsc::adb::Run(
-            QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("am")
-                          << QStringLiteral("start") << QStringLiteral("-n")
-                          << QStringLiteral("com.android.documentsui/.files.FilesActivity")
-                          << QStringLiteral("-d") << document_uri, 8000);
+        const qsc::adb::AdbResult opened =
+            qsc::adb::Run(QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell")
+                                        << QStringLiteral("am") << QStringLiteral("start") << QStringLiteral("-n")
+                                        << component, 8000);
         if (opened.Ok())
         {
-            SetStatus(QStringLiteral("已在手机上打开 %1（部分机型会停在「下载」根目录）").arg(upload_dir));
+            SetStatus(QStringLiteral("已打开文件管理首页，文件在「%1」").arg(display_dir));
             return;
         }
     }
 
-    // 退路：打开系统下载目录
+    // 没有厂商文件管理就退到 AOSP 的「下载」界面
     const qsc::adb::AdbResult fallback = qsc::adb::Run(
         QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("am")
                       << QStringLiteral("start") << QStringLiteral("-a") << QStringLiteral("android.intent.action.VIEW_DOWNLOADS"),
         8000);
-    SetStatus(fallback.Ok() ? QStringLiteral("已在手机上打开「下载」目录，文件在 QmlScrcpy 文件夹里")
+    SetStatus(fallback.Ok() ? QStringLiteral("已打开「下载」界面，文件在「%1」").arg(display_dir)
                             : QStringLiteral("打不开文件管理器：%1").arg(fallback.ErrorText()));
 }
 // 拖进投屏窗的文件：逐个 adb push 到 /sdcard/Download/，进度实时刷到状态栏
@@ -317,10 +320,16 @@ void DeviceController::PushFiles(const QList<QUrl> &urls)
 
     const QString serial = device_name_;
     const QString upload_dir = AppSettings().UploadDir();
-    SetStatus(QStringLiteral("正在传 %1 个文件到手机 %2 …").arg(paths.size()).arg(upload_dir));
+
+    // 同样换成手机上看到的叫法，状态栏里统一用中文目录名
+    QString display_dir = upload_dir;
+    display_dir.remove(QStringLiteral("/sdcard/"));
+    display_dir.replace(QStringLiteral("Download"), QStringLiteral("下载"));
+
+    SetStatus(QStringLiteral("正在传 %1 个文件到「%2」…").arg(paths.size()).arg(display_dir));
 
     // adb push 是阻塞的，整个循环丢到工作线程；进度用 Queued 调用回主线程改状态
-    QThread *worker = QThread::create([this, serial, paths, upload_dir]()
+    qsc::base::TaskRunner::Instance().Post([this, serial, paths, upload_dir, display_dir]()
     {
         int done = 0;
         for (const QString &path : paths)
@@ -350,14 +359,12 @@ void DeviceController::PushFiles(const QList<QUrl> &urls)
             ++done;
         }
 
-        QMetaObject::invokeMethod(this, [this, done]()
+        QMetaObject::invokeMethod(this, [this, done, display_dir]()
         {
-            SetStatus(done == 1 ? QStringLiteral("文件已传到手机 Download/")
-                                : QStringLiteral("%1 个文件已传到手机 Download/").arg(done));
+            SetStatus(done == 1 ? QStringLiteral("文件已传到「%1」").arg(display_dir)
+                                : QStringLiteral("%1 个文件已传到「%2」").arg(done).arg(display_dir));
         }, Qt::QueuedConnection);
     });
-    QObject::connect(worker, &QThread::finished, worker, &QObject::deleteLater);
-    worker->start();
 }
 // 老板键：第一次按藏起所有登记过的窗口，再按恢复
 void DeviceController::ToggleBossKey()
@@ -684,7 +691,7 @@ void DeviceController::EnableWifi()
     wifi_busy_ = true;
     SetStatus(QStringLiteral("正在切无线调试（会断开当前连接）…"));
 
-    QThread *worker = QThread::create([this, serial]()
+    qsc::base::TaskRunner::Instance().Post([this, serial]()
     {
         const DeviceController::WifiSwitchResult result = DeviceController::SwitchToWifiBlocking(serial);
         QMetaObject::invokeMethod(this, [this, result]()
@@ -692,8 +699,6 @@ void DeviceController::EnableWifi()
             ApplyWifiResult(result);
         }, Qt::QueuedConnection);
     });
-    QObject::connect(worker, &QThread::finished, worker, &QObject::deleteLater);
-    worker->start();
 }
 
 // 工作线程算完，回主线程刷新列表和状态

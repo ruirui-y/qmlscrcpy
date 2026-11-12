@@ -71,6 +71,8 @@ public:
     // [video_pos] 段：窗口位置
     Q_INVOKABLE QPoint VideoPosition(const QString &key) const;
     Q_INVOKABLE void SaveVideoPosition(const QString &key, int x, int y);
+    Q_INVOKABLE void SaveVideoStateAsync(const QString &pos_key, int x, int y,
+                                         const QString &geom_key, int width, int height);       // 后台线程落盘，不卡 UI
 
 private:
     void EnsureDefaultConfig();                                                                 // 第一次运行写一份带注释的模板，免得用户对着空文件猜

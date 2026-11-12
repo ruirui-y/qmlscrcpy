@@ -14,6 +14,7 @@
 #include "app_settings.h"
 #include "base/console_window.h"
 #include "base/hotkey.h"
+#include "base/task_runner.h"
 #include "boss_key.h"
 #include "base/log.h"
 #include "device_controller.h"
@@ -183,5 +184,9 @@ int main(int argc, char *argv[])
         });
     }
 
-    return app.exec();
+    const int exit_code = app.exec();
+
+    // 退出前把后台任务线程收掉，免得 QThread 在静态析构里被强杀
+    qsc::base::ShutdownTaskRunner();
+    return exit_code;
 }

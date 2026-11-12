@@ -343,10 +343,20 @@ Window {
                     videoWindow.x = pressWindow.x + (current.x - pressGlobal.x)
                     videoWindow.y = pressWindow.y + (current.y - pressGlobal.y)
                 }
+
+                // 滚轮滚动侧边栏：Flickable 的 interactive 关了，滚动只能自己算
+                onWheel: {
+                    const max_y = Math.max(0, toolFlick.contentHeight - toolFlick.height)
+                    toolFlick.contentY = Math.max(0, Math.min(max_y, toolFlick.contentY - wheel.angleDelta.y / 2))
+                }
             }
 
-            // 按钮多、横屏窗口又只有 400 高，包一层 Flickable 才不会把下面的按钮裁掉
+            // 按钮多、横屏窗口又只有 400 高，包一层 Flickable 才不会把下面的按钮裁掉。
+            // interactive 必须关掉：开着的话它会把鼠标按下都吃掉，下面的 toolBarDragArea 就收不到事件，
+            // 结果就是"侧边栏拖不动窗口"。滚动改由 WheelHandler 处理。
             Flickable {
+                id: toolFlick
+
                 anchors.fill: parent
                 anchors.margins: 4
                 // 顶部 30px 留给标题栏的悬停提示条，不然第一个按钮（返回）会被挡住
@@ -354,7 +364,10 @@ Window {
                 contentWidth: width
                 contentHeight: toolColumn.implicitHeight
                 clip: true
+                interactive: false
                 boundsBehavior: Flickable.StopAtBounds
+
+
 
                 Column {
                     id: toolColumn
@@ -458,8 +471,8 @@ Window {
                 }
 
                 ToolButton {
-                    label: qsTr("目录")
-                    tip: qsTr("在手机上打开文件传输的目录（Download/QmlScrcpy）")
+                    label: qsTr("文件首页")
+                    tip: qsTr("打开手机「文件管理」首页，传过去的文件在 Download/QmlScrcpy")
                     onClicked: deviceController.OpenUploadDir()
                 }
 
@@ -769,14 +782,14 @@ Window {
     Timer {
         id: saveTimer
 
-        interval: 400
+        interval: 700
         repeat: false
         onTriggered: {
-            appSettings.SaveVideoPosition(videoWindow.positionKey(), videoWindow.x, videoWindow.y)
-            if (ready) {
-                appSettings.SaveVideoGeometry(videoWindow.geometryKey(), videoWindow.x, videoWindow.y,
-                                              videoWindow.width, videoWindow.height)
-            }
+            // 一次性交给后台线程：主线程写 ini 会卡那么一下
+            appSettings.SaveVideoStateAsync(videoWindow.positionKey(), videoWindow.x, videoWindow.y,
+                                            videoWindow.geometryKey(),
+                                            ready ? videoWindow.width : -1,
+                                            ready ? videoWindow.height : -1)
         }
     }
 
