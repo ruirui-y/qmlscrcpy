@@ -49,7 +49,7 @@ public:
     Q_INVOKABLE void SaveScreenshot();                                                          // 把当前画面存成 png
     Q_INVOKABLE void SetDisplayPower(bool on);                                                  // true 亮屏，false 息屏
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
-    Q_INVOKABLE void SendMenu();                                                                // 呼出菜单键
+    Q_INVOKABLE void SendRecents();                                                             // 多任务切换（最近任务）
 
 signals:
     void StatusChanged();

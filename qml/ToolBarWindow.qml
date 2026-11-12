@@ -95,8 +95,8 @@ Window {
         }
 
         ToolButton {
-            label: qsTr("菜单")
-            onClicked: deviceController.SendMenu()
+            label: qsTr("任务")
+            onClicked: deviceController.SendRecents()
         }
 
         ToolButton {
@@ -107,6 +107,7 @@ Window {
         }
 
         // 滑动手感：只在滑动模式下有用，范围 10~300 像素
+        // 上面一组粗调 ±5，下面一组微调 ±1
         Row {
             width: parent.width
             spacing: 4
@@ -114,14 +115,32 @@ Window {
 
             ToolButton {
                 width: (parent.width - parent.spacing) / 2
-                label: qsTr("滑 −")
-                onClicked: deviceController.AdjustDragPixels(-10)
+                label: qsTr("−5")
+                onClicked: deviceController.AdjustDragPixels(-5)
             }
 
             ToolButton {
                 width: (parent.width - parent.spacing) / 2
-                label: qsTr("滑 +")
-                onClicked: deviceController.AdjustDragPixels(10)
+                label: qsTr("+5")
+                onClicked: deviceController.AdjustDragPixels(5)
+            }
+        }
+
+        Row {
+            width: parent.width
+            spacing: 4
+            visible: deviceController.wheelMode === "drag"
+
+            ToolButton {
+                width: (parent.width - parent.spacing) / 2
+                label: qsTr("−1")
+                onClicked: deviceController.AdjustDragPixels(-1)
+            }
+
+            ToolButton {
+                width: (parent.width - parent.spacing) / 2
+                label: qsTr("+1")
+                onClicked: deviceController.AdjustDragPixels(1)
             }
         }
 

@@ -218,10 +218,11 @@ void DeviceController::SendBack()
     session_->SendControl(qsc::protocol::ControlMessage::BackOrScreenOn(false));
 }
 
-// 菜单键：安卓 KEYCODE_MENU（82）
-void DeviceController::SendMenu()
+// 多任务切换：安卓 KEYCODE_APP_SWITCH（187）
+// 不用 KEYCODE_MENU(82)——现代安卓应用基本不响应它，弹不出最近任务
+void DeviceController::SendRecents()
 {
-    SendKeycode(82);
+    SendKeycode(187);
 }
 // 息屏或亮屏：只关显示，不动锁屏状态
 void DeviceController::SetDisplayPower(bool on)
