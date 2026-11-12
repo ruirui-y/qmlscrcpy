@@ -14,6 +14,10 @@
 #include <QQuickWindow>
 #include "base/log.h"
 #include "adb/adb_args.h"
+#include "adb/net_address.h"
+
+#include <QHostAddress>
+#include <QNetworkInterface>
 #include "adb/adb_runner.h"
 #include "protocol/control_message.h"
 
@@ -83,48 +87,29 @@ QString ParseWifiAddress(const QString &route_output)
     return QString();
 }
 
+
+
 namespace
 {
 
-// 从 `ip route` 里只取 wlan 那行的 src，别拿移动网络的地址
-QString WifiAddressFromRoute(const QString &route_output)
+// 本机所有非回环 IPv4，用来判断"哪个候选地址和我同网段"
+QStringList HostLanAddresses()
 {
-    for (const QString &line : route_output.split(QLatin1Char('\n')))
+    QStringList addresses;
+    const QList<QHostAddress> all = QNetworkInterface::allAddresses();
+    for (const QHostAddress &address : all)
     {
-        if (!line.contains(QStringLiteral("wlan")))
+        if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback())
         {
-            continue;
-        }
-        const QStringList words = line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
-        for (int index = 0; index + 1 < words.size(); ++index)
-        {
-            if (words.at(index) == QStringLiteral("src"))
-            {
-                return words.at(index + 1);
-            }
+            addresses.append(address.toString());
         }
     }
-    return QString();
-}
-
-// `ip -f inet addr show wlan0` 里的 inet 那一行，路由表没有时用它兜底
-QString WifiAddressFromAddr(const QString &addr_output)
-{
-    for (const QString &line : addr_output.split(QLatin1Char('\n')))
-    {
-        const QString trimmed = line.trimmed();
-        if (!trimmed.startsWith(QStringLiteral("inet ")))
-        {
-            continue;
-        }
-        return trimmed.section(QLatin1Char(' '), 1, 1).section(QLatin1Char('/'), 0, 0);
-    }
-    return QString();
+    return addresses;
 }
 
 } // namespace
 
-// 切无线的全部阻塞动作：adb tcpip → 轮询问 IP → adb connect；只在工作线程里调
+// 切无线的全部阻塞动作：adb tcpip → 轮询收集候选 IP → 同网段优先逐个 connect
 DeviceController::WifiSwitchResult DeviceController::SwitchToWifiBlocking(const QString &serial)
 {
     WifiSwitchResult result;
@@ -136,15 +121,15 @@ DeviceController::WifiSwitchResult DeviceController::SwitchToWifiBlocking(const 
         return result;
     }
 
-    // adbd 重启要一两秒，轮询到拿到 wifi 地址为止
-    QString address;
-    for (int attempt = 0; attempt < 8 && address.isEmpty(); ++attempt)
+    // adbd 重启要一两秒，轮询到能读到地址为止；手机上可能同时有移动网络，全收下来再排序
+    QStringList candidates;
+    for (int attempt = 0; attempt < 8 && candidates.isEmpty(); ++attempt)
     {
         QThread::msleep(500);
         const qsc::adb::AdbResult route = qsc::adb::Run(
             qsc::adb::AdbArgs::Shell(serial, QStringList() << QStringLiteral("ip") << QStringLiteral("route")), 5000);
-        address = WifiAddressFromRoute(QString::fromUtf8(route.std_out_));
-        if (!address.isEmpty())
+        candidates = qsc::adb::RouteAddresses(QString::fromUtf8(route.std_out_));
+        if (!candidates.isEmpty())
         {
             break;
         }
@@ -153,33 +138,44 @@ DeviceController::WifiSwitchResult DeviceController::SwitchToWifiBlocking(const 
                                                            << QStringLiteral("inet") << QStringLiteral("addr")
                                                            << QStringLiteral("show") << QStringLiteral("wlan0")),
             5000);
-        address = WifiAddressFromAddr(QString::fromUtf8(addr.std_out_));
+        const QString inet = qsc::adb::AddrInet(QString::fromUtf8(addr.std_out_));
+        if (!inet.isEmpty())
+        {
+            candidates.append(inet);
+        }
     }
 
-    if (address.isEmpty())
+    if (candidates.isEmpty())
     {
-        result.message_ = QStringLiteral("只看到移动网络的地址，没找到 wifi：先把手机连上 wifi 再切");
+        result.message_ = QStringLiteral("没读到设备地址：检查手机是否连着 wifi");
         return result;
     }
 
-    const QString endpoint = QStringLiteral("%1:5555").arg(address);
-    for (int attempt = 0; attempt < 3; ++attempt)
+    // 和本机同网段的排前面，逐个试；成功一个就收工
+    const QStringList ordered = qsc::adb::OrderByLocalLan(candidates, HostLanAddresses());
+    QString tried;
+    for (const QString &address : ordered)
     {
-        const qsc::adb::AdbResult connected = qsc::adb::Run(qsc::adb::AdbArgs::Connect(endpoint), 8000);
-        const QString output = QString::fromUtf8(connected.std_out_);
-        if (connected.Ok() && !output.contains(QStringLiteral("failed")))
+        const QString endpoint = QStringLiteral("%1:5555").arg(address);
+        for (int attempt = 0; attempt < 2; ++attempt)
         {
-            result.ok_ = true;
-            result.endpoint_ = endpoint;
-            return result;
+            const qsc::adb::AdbResult connected = qsc::adb::Run(qsc::adb::AdbArgs::Connect(endpoint), 8000);
+            const QString output = QString::fromUtf8(connected.std_out_);
+            if (connected.Ok() && !output.contains(QStringLiteral("failed")))
+            {
+                result.ok_ = true;
+                result.endpoint_ = endpoint;
+                return result;
+            }
+            QThread::msleep(600);
         }
-        QThread::msleep(800);
+        tried += endpoint + QLatin1Char(' ');
     }
 
-    result.message_ = QStringLiteral("adb connect %1 失败：电脑和设备要连同一个 wifi").arg(endpoint);
+    result.message_ = QStringLiteral("adb connect 都失败（试过 %1）：电脑和设备要连同一个 wifi")
+                          .arg(tried.trimmed());
     return result;
 }
-
 // 切无线：先把当前会话收干净，阻塞的 adb 调用丢给工作线程，界面不会假死
 void DeviceController::EnableWifi()
 {

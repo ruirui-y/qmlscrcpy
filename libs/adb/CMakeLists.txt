@@ -8,8 +8,10 @@
 add_library(qsc_adb STATIC
     adb_args.cpp
     adb_runner.cpp
+    net_address.cpp
     adb_args.h
     adb_runner.h
+    net_address.h
 )
 
 target_include_directories(qsc_adb PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
