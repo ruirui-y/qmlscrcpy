@@ -81,11 +81,12 @@ public:
     Q_INVOKABLE void SendClipboardToDevice();                                                   // 电脑剪贴板 → 设备，写完直接粘贴
     Q_INVOKABLE void PullClipboardFromDevice();                                                 // 设备剪贴板 → 电脑
     Q_INVOKABLE void SetBossKeyHost(QObject *host);                                             // main 把 BossKey 对象交进来
-    Q_INVOKABLE bool SetBossKey(const QString &text);
-    Q_INVOKABLE bool SetShortcut(const QString &name, const QString &sequence);
-    Q_INVOKABLE bool SetUploadDir(const QString &dir);                                          // 改上传目录并记住                 // name: back/home/screenshot/fullscreen                                           // 界面改老板键：解析 → 重注册 → 记住
+    Q_INVOKABLE bool SetBossKey(const QString &text);                                           // 界面改老板键：解析 → 重注册 → 记住                                  
+    Q_INVOKABLE bool SetShortcut(const QString &name, const QString &sequence);                 // name: back/home/screenshot/fullscreen
+    Q_INVOKABLE bool SetUploadDir(const QString &dir);                                          // 改上传目录并记住                                                            
     Q_INVOKABLE void RegisterWindow(QObject *window);                                           // QML 把自己的窗口登记进来，老板键要藏它们
     Q_INVOKABLE void PushFiles(const QList<QUrl> &urls);                                        // 拖进投屏窗的文件：推到手机 Download/
+    Q_INVOKABLE void OpenUploadDir();                                                           // 在手机上打开上传目录                                        
     Q_INVOKABLE void ToggleBossKey();                                                           // 一键隐藏/恢复所有窗口
 
     // 启动时挑一个串号自动连：优先上次连过的，其次环境变量给的，都要在在线列表里

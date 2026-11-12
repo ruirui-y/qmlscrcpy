@@ -190,7 +190,13 @@ Window {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: videoWindow.visible = false
+                            // 关窗就等于断开：只藏窗口的话主窗还显示"已连接"，再点连接也叫不回来
+                            onClicked: {
+                                if (deviceController.connected) {
+                                    deviceController.Disconnect()
+                                }
+                                videoWindow.visible = false
+                            }
                         }
                     }
                 }
@@ -339,10 +345,22 @@ Window {
                 }
             }
 
-            Column {
+            // 按钮多、横屏窗口又只有 400 高，包一层 Flickable 才不会把下面的按钮裁掉
+            Flickable {
                 anchors.fill: parent
                 anchors.margins: 4
-                spacing: 4
+                // 顶部 30px 留给标题栏的悬停提示条，不然第一个按钮（返回）会被挡住
+                anchors.topMargin: 34
+                contentWidth: width
+                contentHeight: toolColumn.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                Column {
+                    id: toolColumn
+
+                    width: parent.width
+                    spacing: 4
 
                 ToolButton {
                     label: qsTr("返回")
@@ -440,6 +458,12 @@ Window {
                 }
 
                 ToolButton {
+                    label: qsTr("目录")
+                    tip: qsTr("在手机上打开文件传输的目录（Download/QmlScrcpy）")
+                    onClicked: deviceController.OpenUploadDir()
+                }
+
+                ToolButton {
                     label: videoWindow.displayOff ? qsTr("亮屏") : qsTr("息屏")
                     tip: qsTr("只关/开屏幕显示，不动锁屏和电源状态")
                     active: videoWindow.displayOff
@@ -475,6 +499,7 @@ Window {
                     tip: qsTr("把窗口尺寸恢复成默认（横屏 900x400，竖屏按画面比例）")
                     onClicked: videoWindow.resetToDefault()
                 }
+            }
             }
         }
     }
@@ -579,7 +604,14 @@ Window {
         applying = false
     }
 
-    // 窗口级快捷键：先于画面里的按键处理，所以这几个组合不会再发给设备。
+    // 用系统方式关窗（Alt+F4）也要断开，保持"没有窗口 = 没有连接"
+    onClosing: {
+        if (deviceController.connected) {
+            deviceController.Disconnect()
+        }
+    }
+
+    // 登记给老板键：设置窗开着时按老板键也要一起藏起来    // 窗口级快捷键：先于画面里的按键处理，所以这几个组合不会再发给设备。
     // 组合来自设置窗，留空表示禁用（binding 会取到空串，Shortcut 自动失效）
     Shortcut {
         sequence: deviceController.shortcutBack
@@ -716,6 +748,12 @@ Window {
             applying = true
             width = Math.max(minimumWidth, saved.width)
             height = Math.max(minimumHeight, saved.height)
+            applying = false
+        } else if (nowLandscape) {
+            // 第一次进横屏：用默认 900x400，别按帧比例算（那样会撑得很大，用户得手动点复位）
+            applying = true
+            width = Math.min(900, Math.round(Screen.desktopAvailableWidth * 0.9))
+            height = Math.min(400 + titleBar.height, Math.round(Screen.desktopAvailableHeight * 0.9))
             applying = false
         } else {
             fitToFrame()

@@ -15,7 +15,8 @@ Window {
     visible: false
     color: "#14161a"
     flags: Qt.Window | Qt.FramelessWindowHint
-    modality: Qt.ApplicationModal    // 打开时挡住主窗，避免改一半又去点连接
+    // 非模态：模态窗会挡住其它窗口的拖放事件，开着设置就没法往投屏窗拖文件了
+    modality: Qt.NonModal
     transientParent: null
 
     // 登记给老板键：设置窗开着时按老板键也要一起藏起来
@@ -320,6 +321,30 @@ Window {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: deviceController.SetUploadDir(uploadDirField.text)
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 72
+                    Layout.preferredHeight: 28
+                    radius: 6
+                    color: openDirArea.containsMouse ? "#2e343e" : "#242932"
+                    border.width: 1
+                    border.color: "#333945"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("打开目录")
+                        color: "#cdd4de"
+                        font.pixelSize: 12
+                    }
+
+                    MouseArea {
+                        id: openDirArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: deviceController.OpenUploadDir()
                     }
                 }
             }

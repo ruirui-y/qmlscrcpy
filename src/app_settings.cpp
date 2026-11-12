@@ -93,6 +93,16 @@ AppSettings::AppSettings(QObject *parent) : QObject(parent)
 
     // 老版本把画质覆盖值存在 [video] 里（不分有线无线），现在分档了，清掉免得和 [video_wired] 混着看
     QSettings &window_store = WindowStore();
+
+    // 一次性迁移：横屏默认尺寸从"按帧比例"改成了 900x400。
+    // 老用户的 window.ini 里存着按旧算法算出来的大尺寸，光改代码看不到效果，所以这里清一次。
+    if (!window_store.contains(QStringLiteral("ui/landscape_default_v2")))
+    {
+        window_store.remove(QStringLiteral("video_window_landscape"));
+        window_store.remove(QStringLiteral("video_pos_landscape"));
+        window_store.setValue(QStringLiteral("ui/landscape_default_v2"), true);
+        window_store.sync();
+    }
     if (window_store.contains(QStringLiteral("video/bit_rate")))
     {
         window_store.remove(QStringLiteral("video"));

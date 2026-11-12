@@ -235,6 +235,55 @@ void DeviceController::RegisterWindow(QObject *window)
     app_windows_.append(raw);
 }
 
+// 在手机上打开上传目录：拉起系统文件管理，定位到 Download/QmlScrcpy
+void DeviceController::OpenUploadDir()
+{
+    if (session_ == nullptr)
+    {
+        SetStatus(QStringLiteral("还没连接设备"));
+        return;
+    }
+
+    const QString upload_dir = AppSettings().UploadDir();
+    const QString serial = device_name_;
+
+    // 目录要先存在，否则文件管理器打开会失败
+    qsc::adb::Run(QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("mkdir")
+                                << QStringLiteral("-p") << upload_dir, 5000);
+
+    // /sdcard/Download/QmlScrcpy → content://…/document/primary%3ADownload%2FQmlScrcpy
+    // 只处理 /sdcard 下的路径，别的路径退回"打开下载目录"
+    QString document_uri;
+    if (upload_dir.startsWith(QStringLiteral("/sdcard/")))
+    {
+        QString relative = upload_dir.mid(QStringLiteral("/sdcard/").size());
+        relative.replace(QLatin1Char('/'), QStringLiteral("%2F"));
+        document_uri = QStringLiteral("content://com.android.externalstorage.documents/document/primary%%3A%1")
+                           .arg(relative);
+    }
+
+    if (!document_uri.isEmpty())
+    {
+        const qsc::adb::AdbResult opened = qsc::adb::Run(
+            QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("am")
+                          << QStringLiteral("start") << QStringLiteral("-n")
+                          << QStringLiteral("com.android.documentsui/.files.FilesActivity")
+                          << QStringLiteral("-d") << document_uri, 8000);
+        if (opened.Ok())
+        {
+            SetStatus(QStringLiteral("已在手机上打开 %1（部分机型会停在「下载」根目录）").arg(upload_dir));
+            return;
+        }
+    }
+
+    // 退路：打开系统下载目录
+    const qsc::adb::AdbResult fallback = qsc::adb::Run(
+        QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("am")
+                      << QStringLiteral("start") << QStringLiteral("-a") << QStringLiteral("android.intent.action.VIEW_DOWNLOADS"),
+        8000);
+    SetStatus(fallback.Ok() ? QStringLiteral("已在手机上打开「下载」目录，文件在 QmlScrcpy 文件夹里")
+                            : QStringLiteral("打不开文件管理器：%1").arg(fallback.ErrorText()));
+}
 // 拖进投屏窗的文件：逐个 adb push 到 /sdcard/Download/，进度实时刷到状态栏
 void DeviceController::PushFiles(const QList<QUrl> &urls)
 {

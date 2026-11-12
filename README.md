@@ -145,6 +145,7 @@ https://github.com/ruirui-y/qmlscrcpy/releases/download/v0.1.1/QmlScrcpy_Setup_0
 | 多任务 | 工具栏「任务」 |
 | 锁屏 / 点亮 | 工具栏「电源」（按一下手机电源键） |
 | 传文件到手机 | 文件拖进投屏窗，松手即传到手机 `Download/QmlScrcpy/`（设置里可改） |
+| 在手机上看传过去的文件 | 工具栏「目录」→ 手机弹出文件管理器 |
 | 截图 | 工具栏「截图」或 `Ctrl+Shift+S` → 存到 `screenshots\shot_日期_时间.png`，**同时复制到剪贴板** |
 | 关屏但不锁屏 | 工具栏「息屏」；再点一次「亮屏」 |
 | 窗口置顶 | 工具栏「置顶」 |
