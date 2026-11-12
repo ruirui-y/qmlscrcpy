@@ -6,7 +6,8 @@
 
 #include <memory>
 
-namespace qsc::stream {
+namespace qsc::stream
+{
 
 // 一帧解码后的 YUV420P 画面：三个平面指针 + 每行字节跨度。
 // 平面数据归 FFmpeg 的 AVFrame 所有，这里用 shared_ptr 一起带着走，最后一个 Frame

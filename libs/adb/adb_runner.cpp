@@ -5,8 +5,10 @@
 #include <QProcess>
 #include <QRegularExpression>
 
-namespace qsc::adb {
-namespace {
+namespace qsc::adb
+{
+namespace
+{
 
 // 显式设置过的 adb 路径。只在启动时写一次，不做线程保护。
 QString &ExplicitAdbPath()
@@ -20,7 +22,8 @@ QString &ExplicitAdbPath()
 QString AdbResult::ErrorText() const
 {
     const QString from_err = QString::fromUtf8(std_err_).trimmed();
-    if (!from_err.isEmpty()) {
+    if (!from_err.isEmpty())
+    {
         return from_err;
     }
     return QString::fromUtf8(std_out_).trimmed();
@@ -34,21 +37,26 @@ QList<AdbDevice> ParseDevices(const QByteArray &std_out)
     const QStringList lines = text.split(QLatin1Char('\n'));
     const QRegularExpression whitespace(QStringLiteral("\\s+"));
 
-    for (const QString &raw_line : lines) {
+    for (const QString &raw_line : lines)
+    {
         const QString line = raw_line.trimmed();                                                // 去掉 Windows 的 \r
-        if (line.isEmpty()) {
+        if (line.isEmpty())
+        {
             continue;
         }
-        if (line.startsWith(QLatin1String("List of devices"))) {
+        if (line.startsWith(QLatin1String("List of devices")))
+        {
             continue;
         }
         // adb 自己的噪声，比如 "* daemon not running; starting now at tcp:5037"
-        if (line.startsWith(QLatin1Char('*'))) {
+        if (line.startsWith(QLatin1Char('*')))
+        {
             continue;
         }
 
         const QStringList fields = line.split(whitespace, Qt::SkipEmptyParts);
-        if (fields.size() < 2) {
+        if (fields.size() < 2)
+        {
             continue;
         }
 
@@ -68,17 +76,20 @@ void SetAdbPath(const QString &path)
 
 QString AdbPath()
 {
-    if (!ExplicitAdbPath().isEmpty()) {
+    if (!ExplicitAdbPath().isEmpty())
+    {
         return ExplicitAdbPath();
     }
 
     const QByteArray from_env = qgetenv("QS_ADB_PATH");
-    if (!from_env.isEmpty()) {
+    if (!from_env.isEmpty())
+    {
         return QString::fromLocal8Bit(from_env);
     }
 
     const QString beside_exe = QCoreApplication::applicationDirPath() + QStringLiteral("/adb.exe");
-    if (QFileInfo::exists(beside_exe)) {
+    if (QFileInfo::exists(beside_exe))
+    {
         return beside_exe;
     }
 
@@ -95,13 +106,15 @@ AdbResult Run(const QStringList &args, int timeout_ms)
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.start();
 
-    if (!process.waitForStarted(5000)) {
+    if (!process.waitForStarted(5000))
+    {
         result.std_err_ = process.errorString().toUtf8();
         return result;
     }
     result.started_ = true;
 
-    if (!process.waitForFinished(timeout_ms)) {
+    if (!process.waitForFinished(timeout_ms))
+    {
         // 卡住的 adb 不能留：它占着设备锁，后面的命令全会被拖死
         process.kill();
         process.waitForFinished(2000);
@@ -124,8 +137,10 @@ QProcess *StartLongRunning(const QStringList &args, QString *error)
     process->setProcessChannelMode(QProcess::SeparateChannels);
     process->start();
 
-    if (!process->waitForStarted(5000)) {
-        if (error != nullptr) {
+    if (!process->waitForStarted(5000))
+    {
+        if (error != nullptr)
+        {
             *error = process->errorString();
         }
         delete process;

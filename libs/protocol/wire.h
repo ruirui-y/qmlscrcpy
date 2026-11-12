@@ -3,7 +3,8 @@
 #include <QByteArray>
 #include <QtGlobal>
 
-namespace qsc::protocol {
+namespace qsc::protocol
+{
 
 // 设备端按"整条消息不超过 256 KiB"分配接收缓冲区，超了直接断连接。
 // 控制消息和设备消息都受这个上限约束，所以放在最底层这个头里。
@@ -45,7 +46,8 @@ public:
 
     bool ReadU8(quint8 &value)
     {
-        if (!Ensure(1)) {
+        if (!Ensure(1))
+        {
             return false;
         }
         value = static_cast<quint8>(data_.at(pos_));
@@ -55,7 +57,8 @@ public:
 
     bool ReadU16(quint16 &value)
     {
-        if (!Ensure(2)) {
+        if (!Ensure(2))
+        {
             return false;
         }
         const auto *raw = reinterpret_cast<const quint8 *>(data_.constData() + pos_);
@@ -66,7 +69,8 @@ public:
 
     bool ReadU32(quint32 &value)
     {
-        if (!Ensure(4)) {
+        if (!Ensure(4))
+        {
             return false;
         }
         const auto *raw = reinterpret_cast<const quint8 *>(data_.constData() + pos_);
@@ -80,7 +84,8 @@ public:
     {
         quint32 high = 0;
         quint32 low = 0;
-        if (!ReadU32(high) || !ReadU32(low)) {
+        if (!ReadU32(high) || !ReadU32(low))
+        {
             return false;
         }
         value = (static_cast<quint64>(high) << 32) | low;
@@ -89,7 +94,8 @@ public:
 
     bool ReadBytes(int count, QByteArray &out)
     {
-        if (count < 0 || !Ensure(count)) {
+        if (count < 0 || !Ensure(count))
+        {
             return false;
         }
         out = data_.mid(pos_, count);
@@ -99,7 +105,8 @@ public:
 
     bool Skip(int count)                                                                        // 跳过不关心的字节，比如设备信息里那 64 字节设备名
     {
-        if (count < 0 || !Ensure(count)) {
+        if (count < 0 || !Ensure(count))
+        {
             return false;
         }
         pos_ += count;
@@ -113,7 +120,8 @@ public:
 private:
     bool Ensure(int count)
     {
-        if (!ok_ || count < 0 || Remaining() < count) {
+        if (!ok_ || count < 0 || Remaining() < count)
+        {
             ok_ = false;
             return false;
         }

@@ -1,10 +1,12 @@
 #include "adb/adb_args.h"
 
-namespace qsc::adb {
+namespace qsc::adb
+{
 
 QStringList AdbArgs::WithSerial(const QString &serial, const QStringList &rest)
 {
-    if (serial.isEmpty()) {
+    if (serial.isEmpty())
+    {
         return rest;
     }
 

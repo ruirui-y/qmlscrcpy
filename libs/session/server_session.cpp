@@ -16,8 +16,10 @@
 #include "adb/adb_runner.h"
 #include "protocol/wire.h"
 
-namespace qsc::session {
-namespace {
+namespace qsc::session
+{
+namespace
+{
 
 constexpr int kReverseAcceptTimeoutMs = 10000;                                                  // reverse 模式下等设备连过来
 constexpr int kForwardConnectAttempts = 30;                                                     // forward 模式下重试次数
@@ -55,7 +57,8 @@ ConnectResult ServerSession::Start()
 
     // 不传 scid 时服务端会自己抽一个，那我们就不知道 socket 名了。
     // 这里先定死一个，保证参数里的 scid 和 reverse/forward 用的 socket 名一致。
-    if (params_.scid_ == kScidUnset) {
+    if (params_.scid_ == kScidUnset)
+    {
         params_.scid_ = static_cast<quint32>(QRandomGenerator::global()->bounded(1, 0x7FFFFFFF));
     }
 
@@ -66,22 +69,26 @@ ConnectResult ServerSession::Start()
     timer.start();
 
     QString error;
-    if (!PushServer(&error)) {
+    if (!PushServer(&error))
+    {
         result.error_ = error;
         Stop();
         return result;
     }
-    if (!SetUpTunnel(&error)) {
+    if (!SetUpTunnel(&error))
+    {
         result.error_ = error;
         Stop();
         return result;
     }
-    if (!StartServerProcess(&error)) {
+    if (!StartServerProcess(&error))
+    {
         result.error_ = error;
         Stop();
         return result;
     }
-    if (!ConnectSockets(&result)) {
+    if (!ConnectSockets(&result))
+    {
         Stop();
         return result;
     }
@@ -96,7 +103,8 @@ ConnectResult ServerSession::Start()
 bool ServerSession::PushServer(QString *error)
 {
     const QString local_path = ResolveLocalServerPath();
-    if (!QFileInfo::exists(local_path)) {
+    if (!QFileInfo::exists(local_path))
+    {
         *error = QStringLiteral("找不到本地的 scrcpy-server：%1").arg(local_path);
         return false;
     }
@@ -104,7 +112,8 @@ bool ServerSession::PushServer(QString *error)
     const QStringList args =
         adb::AdbArgs::Push(params_.serial_, local_path, params_.server_remote_path_);
     const adb::AdbResult pushed = adb::Run(args, kPushTimeoutMs);
-    if (!pushed.Ok()) {
+    if (!pushed.Ok())
+    {
         *error = QStringLiteral("推送 scrcpy-server 失败：%1")
                      .arg(pushed.ErrorText());
         return false;
@@ -116,14 +125,17 @@ bool ServerSession::PushServer(QString *error)
 
 bool ServerSession::SetUpTunnel(QString *error)
 {
-    if (params_.use_reverse_) {
+    if (params_.use_reverse_)
+    {
         const QStringList reverse_args =
             adb::AdbArgs::Reverse(params_.serial_, SocketName(), params_.local_port_);
         const adb::AdbResult reversed = adb::Run(reverse_args);
 
         // reverse 设好后是本机先 listen，设备连过来
-        if (reversed.Ok()) {
-            if (!server_socket_.listen(QHostAddress::LocalHost, params_.local_port_)) {
+        if (reversed.Ok())
+        {
+            if (!server_socket_.listen(QHostAddress::LocalHost, params_.local_port_))
+            {
                 *error = QStringLiteral("本机监听 %1 端口失败：%2")
                              .arg(params_.local_port_)
                              .arg(server_socket_.errorString());
@@ -144,7 +156,8 @@ bool ServerSession::SetUpTunnel(QString *error)
     const QStringList forward_args =
         adb::AdbArgs::Forward(params_.serial_, params_.local_port_, SocketName());
     const adb::AdbResult forwarded = adb::Run(forward_args);
-    if (!forwarded.Ok()) {
+    if (!forwarded.Ok())
+    {
         *error = QStringLiteral("adb forward 失败：%1")
                      .arg(forwarded.ErrorText());
         return false;
@@ -165,7 +178,8 @@ bool ServerSession::StartServerProcess(QString *error)
 
     QString start_error;
     server_process_ = adb::StartLongRunning(args, &start_error);
-    if (server_process_ == nullptr) {
+    if (server_process_ == nullptr)
+    {
         *error = QStringLiteral("启动 scrcpy-server 失败：%1").arg(start_error);
         return false;
     }
@@ -173,7 +187,8 @@ bool ServerSession::StartServerProcess(QString *error)
     // 参数拼错时服务端会立刻退出。等一会儿看一眼，能把它的报错原样带出来，
     // 否则只能看到后面"连接超时"这种没有信息量的错误。
     // 800ms 是因为 JVM 启动本身就要几百毫秒，等太短会漏掉。
-    if (server_process_->waitForFinished(800)) {
+    if (server_process_->waitForFinished(800))
+    {
         DrainServerOutput();
         *error = QStringLiteral("scrcpy-server 立刻退出了：%1").arg(ServerOutputTail());
         return false;
@@ -185,7 +200,8 @@ bool ServerSession::StartServerProcess(QString *error)
 
 bool ServerSession::ConnectSockets(ConnectResult *result)
 {
-    if (forward_mode_) {
+    if (forward_mode_)
+    {
         return ConnectForForward(result);
     }
     return AcceptForReverse(result);
@@ -195,7 +211,8 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
 {
     // 设备端先连视频 socket，再连控制 socket，顺序不能反
     bool timed_out = false;
-    if (!server_socket_.waitForNewConnection(kReverseAcceptTimeoutMs, &timed_out) || timed_out) {
+    if (!server_socket_.waitForNewConnection(kReverseAcceptTimeoutMs, &timed_out) || timed_out)
+    {
         DrainServerOutput();
         result->error_ = QStringLiteral("等待设备连入超时（reverse），端口 %1；服务端输出：%2")
                              .arg(params_.local_port_)
@@ -203,7 +220,8 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
         return false;
     }
     video_socket_ = server_socket_.nextPendingConnection();
-    if (video_socket_ == nullptr) {
+    if (video_socket_ == nullptr)
+    {
         result->error_ = QStringLiteral("拿到视频 socket 失败");
         return false;
     }
@@ -211,7 +229,8 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
     // 先把视频通道上的设备信息读掉，再等控制连接。
     // adb 的 reverse 转发在一条通道还没被读走数据时会挡住下一条连接，
     // 所以这里不能"两条都收下再一起读"。
-    if (!ReadInfo(video_socket_, result)) {
+    if (!ReadInfo(video_socket_, result))
+    {
         DrainServerOutput();
         result->error_ += QStringLiteral("；服务端输出：%1").arg(ServerOutputTail());
         return false;
@@ -221,15 +240,18 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
     // 出问题时能看出"到底有没有连进来"和"监听还在不在"。
     QElapsedTimer control_wait;
     control_wait.start();
-    while (control_wait.elapsed() < kReverseAcceptTimeoutMs) {
-        if (server_socket_.hasPendingConnections() || server_socket_.waitForNewConnection(500)) {
+    while (control_wait.elapsed() < kReverseAcceptTimeoutMs)
+    {
+        if (server_socket_.hasPendingConnections() || server_socket_.waitForNewConnection(500))
+        {
             break;
         }
         qInfo() << "[session] 还在等控制 socket，" << control_wait.elapsed()
                 << "ms；监听中:" << server_socket_.isListening();
     }
 
-    if (!server_socket_.hasPendingConnections()) {
+    if (!server_socket_.hasPendingConnections())
+    {
         DrainServerOutput();
         const QString state = (server_process_ != nullptr
                                && server_process_->state() == QProcess::NotRunning)
@@ -241,7 +263,8 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
     }
 
     control_socket_ = server_socket_.nextPendingConnection();
-    if (control_socket_ == nullptr) {
+    if (control_socket_ == nullptr)
+    {
         result->error_ = QStringLiteral("拿到控制 socket 失败");
         return false;
     }
@@ -253,7 +276,8 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
 
 bool ServerSession::ConnectForForward(ConnectResult *result)
 {
-    for (int attempt = 0; attempt < kForwardConnectAttempts; ++attempt) {
+    for (int attempt = 0; attempt < kForwardConnectAttempts; ++attempt)
+    {
         auto *video = new QTcpSocket();
         auto *control = new QTcpSocket();
 
@@ -264,16 +288,20 @@ bool ServerSession::ConnectForForward(ConnectResult *result)
 
         bool ready = false;
         if (video->waitForConnected(kForwardConnectTimeoutMs)
-            && control->waitForConnected(kForwardConnectTimeoutMs)) {
-            if (video->waitForReadyRead(kForwardConnectTimeoutMs)) {
+            && control->waitForConnected(kForwardConnectTimeoutMs))
+            {
+            if (video->waitForReadyRead(kForwardConnectTimeoutMs))
+            {
                 video->read(1);                                                                 // 吃掉握手用的 dummy 字节
                 ready = ReadInfo(video, result);
             }
         }
 
-        if (ready) {
+        if (ready)
+        {
             // control 上也有一个 dummy 字节，吃掉免得后面当垃圾数据
-            if (control->waitForReadyRead(kForwardConnectTimeoutMs)) {
+            if (control->waitForReadyRead(kForwardConnectTimeoutMs))
+            {
                 control->read(1);
             }
             video_socket_ = video;
@@ -287,8 +315,10 @@ bool ServerSession::ConnectForForward(ConnectResult *result)
         QThread::msleep(kForwardConnectIntervalMs);
     }
 
-    if (video_socket_ == nullptr) {
-        if (result->error_.isEmpty()) {
+    if (video_socket_ == nullptr)
+    {
+        if (result->error_.isEmpty())
+        {
             result->error_ = QStringLiteral("连接视频 socket 失败（forward），重试 %1 次")
                                  .arg(kForwardConnectAttempts);
         }
@@ -311,15 +341,18 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
     QElapsedTimer timer;
     timer.start();
 
-    while (buffer.size() < kInfoBytes) {
-        if (timer.elapsed() > kInfoTimeoutMs) {
+    while (buffer.size() < kInfoBytes)
+    {
+        if (timer.elapsed() > kInfoTimeoutMs)
+        {
             result->error_ = QStringLiteral("读取设备信息超时，只收到 %1/%2 字节")
                                  .arg(buffer.size())
                                  .arg(kInfoBytes);
             return false;
         }
         if (!socket->waitForReadyRead(kInfoPollMs)
-            && socket->state() != QAbstractSocket::ConnectedState) {
+            && socket->state() != QAbstractSocket::ConnectedState)
+            {
             result->error_ = QStringLiteral("读取设备信息时连接断开");
             return false;
         }
@@ -327,13 +360,15 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
         // 只读还缺的字节数。用 readAll 会把设备信息之后的流数据一起读进来丢掉，
         // 那样第一个配置包（SPS/PPS）就没了，后面所有帧都解不出来。
         const QByteArray chunk = socket->read(kInfoBytes - buffer.size());
-        if (!chunk.isEmpty()) {
+        if (!chunk.isEmpty())
+        {
             buffer.append(chunk);
         }
     }
 
     int name_length = static_cast<int>(buffer.indexOf('\0'));
-    if (name_length <= 0 || name_length > kDeviceNameBytes) {
+    if (name_length <= 0 || name_length > kDeviceNameBytes)
+    {
         name_length = kDeviceNameBytes;
     }
     result->device_name_ = QString::fromUtf8(buffer.left(name_length));
@@ -343,7 +378,8 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
     quint32 width = 0;
     quint32 height = 0;
     if (!reader.Skip(kDeviceNameBytes) || !reader.ReadU32(codec_id) || !reader.ReadU32(width)
-        || !reader.ReadU32(height)) {
+        || !reader.ReadU32(height))
+        {
         result->error_ = QStringLiteral("设备信息解析失败");
         return false;
     }
@@ -355,7 +391,8 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
 
 void ServerSession::DrainServerOutput()
 {
-    if (server_process_ == nullptr) {
+    if (server_process_ == nullptr)
+    {
         return;
     }
     // readAll* 不会阻塞，有多少拿多少
@@ -366,12 +403,14 @@ void ServerSession::DrainServerOutput()
 QString ServerSession::ServerOutputTail() const
 {
     const QString text = QString::fromUtf8(server_output_).trimmed();
-    if (text.isEmpty()) {
+    if (text.isEmpty())
+    {
         return QStringLiteral("(无输出)");
     }
     // 报错信息里只留最后一段，前面的多是 JVM 噪声
     static constexpr int kTailChars = 600;
-    if (text.size() <= kTailChars) {
+    if (text.size() <= kTailChars)
+    {
         return text;
     }
     return QStringLiteral("…") + text.right(kTailChars);
@@ -379,13 +418,17 @@ QString ServerSession::ServerOutputTail() const
 
 void ServerSession::RemoveTunnel()
 {
-    if (!tunnel_enabled_) {
+    if (!tunnel_enabled_)
+    {
         return;
     }
 
-    if (forward_mode_) {
+    if (forward_mode_)
+    {
         adb::Run(adb::AdbArgs::ForwardRemove(params_.serial_, params_.local_port_), 5000);
-    } else {
+    }
+    else
+    {
         adb::Run(adb::AdbArgs::ReverseRemove(params_.serial_, SocketName()), 5000);
     }
     tunnel_enabled_ = false;
@@ -393,7 +436,8 @@ void ServerSession::RemoveTunnel()
 
 QString ServerSession::ResolveLocalServerPath() const
 {
-    if (!params_.server_local_path_.isEmpty()) {
+    if (!params_.server_local_path_.isEmpty())
+    {
         return params_.server_local_path_;
     }
     // 默认和 exe 放一起：部署时 third_party/scrcpy-server 会被拷到输出目录
@@ -407,12 +451,14 @@ QString ServerSession::SocketName() const
 
 void ServerSession::Stop()
 {
-    if (video_socket_ != nullptr) {
+    if (video_socket_ != nullptr)
+    {
         video_socket_->close();
         delete video_socket_;
         video_socket_ = nullptr;
     }
-    if (control_socket_ != nullptr) {
+    if (control_socket_ != nullptr)
+    {
         control_socket_->close();
         delete control_socket_;
         control_socket_ = nullptr;
@@ -420,7 +466,8 @@ void ServerSession::Stop()
 
     server_socket_.close();
 
-    if (server_process_ != nullptr) {
+    if (server_process_ != nullptr)
+    {
         // adb shell 起来的是一个长驻进程，杀掉 adb 客户端会连带把设备上的服务端收掉
         server_process_->kill();
         server_process_->waitForFinished(3000);

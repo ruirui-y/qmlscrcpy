@@ -3,7 +3,8 @@
 #include <QAtomicInteger>
 #include <QtGlobal>
 
-namespace qsc::stream {
+namespace qsc::stream
+{
 
 // 链路各段的耗时累计（微秒）和帧数，每秒结算一次并清零。
 // 设 QS_PERF=1 打开（默认只累加，几乎不影响性能）。

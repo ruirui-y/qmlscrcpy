@@ -85,7 +85,8 @@ void ProtocolTest::VideoHeaderNeedsTwelveBytes()
 {
     VideoPacketHeader header;
     QByteArray bytes;
-    for (int i = 0; i < VideoPacketHeader::kSize - 1; ++i) {
+    for (int i = 0; i < VideoPacketHeader::kSize - 1; ++i)
+    {
         bytes.append(static_cast<char>(i));
     }
 
@@ -163,7 +164,8 @@ void ProtocolTest::InjectTextTruncatesOnCharBoundary()
     // "a" + 100 个汉字 = 1 + 300 = 301 字节。截到 300 会劈开最后一个汉字，
     // 必须退到 298，否则设备端收到半个 UTF-8 字符就是乱码
     QString mixed = QStringLiteral("a");
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 100; ++i)
+    {
         mixed.append(QChar(0x4E2D));  // 中
     }
     const QByteArray mixed_bytes = ControlMessage::InjectText(mixed);

@@ -4,7 +4,8 @@
 #include <QString>
 #include <QtGlobal>
 
-namespace qsc::protocol {
+namespace qsc::protocol
+{
 
 // 设备端主动发过来的消息，走控制 socket 的反方向：剪贴板推送、剪贴板确认、虚拟键鼠输出。
 // 解析是增量的——同一个 TCP 包里可能连着好几条，调用方按返回的消耗字节数往下切。

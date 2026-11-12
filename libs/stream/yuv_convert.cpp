@@ -12,17 +12,20 @@ extern "C"
 #include <libswscale/swscale.h>
 }
 
-namespace qsc::stream {
+namespace qsc::stream
+{
 
 YuvConvert::YuvConvert() = default;
 
 YuvConvert::~YuvConvert()
 {
-    if (rgb_frame_ != nullptr) {
+    if (rgb_frame_ != nullptr)
+    {
         av_frame_free(&rgb_frame_);
         rgb_frame_ = nullptr;
     }
-    if (context_ != nullptr) {
+    if (context_ != nullptr)
+    {
         sws_freeContext(context_);
         context_ = nullptr;
     }
@@ -30,15 +33,18 @@ YuvConvert::~YuvConvert()
 
 bool YuvConvert::EnsureBuffers(const QSize &size)
 {
-    if (context_ != nullptr && size_ == size) {
+    if (context_ != nullptr && size_ == size)
+    {
         return true;
     }
 
-    if (rgb_frame_ != nullptr) {
+    if (rgb_frame_ != nullptr)
+    {
         av_frame_free(&rgb_frame_);
         rgb_frame_ = nullptr;
     }
-    if (context_ != nullptr) {
+    if (context_ != nullptr)
+    {
         sws_freeContext(context_);
         context_ = nullptr;
     }
@@ -46,7 +52,8 @@ bool YuvConvert::EnsureBuffers(const QSize &size)
     context_ = sws_getContext(size.width(), size.height(), AV_PIX_FMT_YUV420P, size.width(),
                               size.height(), AV_PIX_FMT_RGB32, SWS_FAST_BILINEAR, nullptr, nullptr,
                               nullptr);
-    if (context_ == nullptr) {
+    if (context_ == nullptr)
+    {
         return false;
     }
 
@@ -54,14 +61,16 @@ bool YuvConvert::EnsureBuffers(const QSize &size)
     // 直接往 QImage 的缓冲里写会越界：sws_scale 按自己的粒度整块写，QImage 的缓冲
     // 没有那点尾巴，堆就被写坏了（表现为 0xC0000374）。
     rgb_frame_ = av_frame_alloc();
-    if (rgb_frame_ == nullptr) {
+    if (rgb_frame_ == nullptr)
+    {
         return false;
     }
     rgb_frame_->format = AV_PIX_FMT_RGB32;
     rgb_frame_->width = size.width();
     rgb_frame_->height = size.height();
     if (av_image_alloc(rgb_frame_->data, rgb_frame_->linesize, size.width(), size.height(),
-                       AV_PIX_FMT_RGB32, 32) < 0) {
+                       AV_PIX_FMT_RGB32, 32) < 0)
+                       {
         av_frame_free(&rgb_frame_);
         rgb_frame_ = nullptr;
         return false;
@@ -73,7 +82,8 @@ bool YuvConvert::EnsureBuffers(const QSize &size)
 
 QImage YuvConvert::Convert(const Frame &frame)
 {
-    if (!frame.IsValid() || !EnsureBuffers(frame.Size())) {
+    if (!frame.IsValid() || !EnsureBuffers(frame.Size()))
+    {
         return QImage();
     }
 
@@ -85,7 +95,8 @@ QImage YuvConvert::Convert(const Frame &frame)
 
     // 再按行拷进 QImage：转换结果和 Qt 的像素缓冲彻底解耦，谁也别越界写对方的
     QImage image(size_, QImage::Format_RGB32);
-    for (int row = 0; row < size_.height(); ++row) {
+    for (int row = 0; row < size_.height(); ++row)
+    {
         std::memcpy(image.scanLine(row), rgb_frame_->data[0] + row * rgb_frame_->linesize[0],
                     static_cast<std::size_t>(size_.width()) * 4);
     }

@@ -10,14 +10,16 @@
 
 using namespace qsc::adb;
 
-namespace {
+namespace
+{
 
 // QCOMPARE 是宏，直接写 QStringList{"a", "b"} 的话花括号里的逗号会被当成宏参数分隔符。
 // 包一层函数，逗号就落在括号里了。
 QStringList Argv(std::initializer_list<QString> parts)
 {
     QStringList list;
-    for (const QString &part : parts) {
+    for (const QString &part : parts)
+    {
         list << part;
     }
     return list;
@@ -189,7 +191,8 @@ void AdbArgsTest::RunRealAdbVersion()
 {
     // 真跑一次 adb，验证 QProcess 这条路通不通。
     // 没配 QS_ADB_PATH 就跳过：单测不该依赖机器上装没装 platform-tools。
-    if (!qEnvironmentVariableIsSet("QS_ADB_PATH")) {
+    if (!qEnvironmentVariableIsSet("QS_ADB_PATH"))
+    {
         QSKIP("未设置 QS_ADB_PATH，跳过真实 adb 调用");
     }
 

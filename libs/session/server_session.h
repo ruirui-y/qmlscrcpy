@@ -10,7 +10,8 @@
 class QProcess;
 class QTcpSocket;
 
-namespace qsc::session {
+namespace qsc::session
+{
 
 // 一次连接尝试的结果。失败时 error_ 直接拿去显示，不抛异常。
 struct ConnectResult

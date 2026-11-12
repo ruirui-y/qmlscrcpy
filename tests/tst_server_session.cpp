@@ -29,13 +29,15 @@ private slots:
 void ServerSessionTest::ConnectAndReadFirstPacket()
 {
     if (!qEnvironmentVariableIsSet("QS_ADB_PATH")
-        || !qEnvironmentVariableIsSet("QS_DEVICE_SERIAL")) {
+        || !qEnvironmentVariableIsSet("QS_DEVICE_SERIAL"))
+        {
         QSKIP("未设置 QS_ADB_PATH / QS_DEVICE_SERIAL，跳过真机用例");
     }
 
     const QString serial = QString::fromLocal8Bit(qgetenv("QS_DEVICE_SERIAL"));
     QString server_path = QString::fromLocal8Bit(qgetenv("QS_SCRCPY_SERVER"));
-    if (server_path.isEmpty()) {
+    if (server_path.isEmpty())
+    {
         server_path = QStringLiteral(QS_DEFAULT_SERVER_PATH);
     }
 
@@ -46,7 +48,8 @@ void ServerSessionTest::ConnectAndReadFirstPacket()
     params.max_size_ = 720;
     params.log_level_ = QStringLiteral("debug");
     // 设 QS_FORWARD=1 强制走 forward 模式，用来隔离 reverse 的问题
-    if (qEnvironmentVariableIsSet("QS_FORWARD")) {
+    if (qEnvironmentVariableIsSet("QS_FORWARD"))
+    {
         params.use_reverse_ = false;
     }
 
@@ -69,8 +72,10 @@ void ServerSessionTest::ConnectAndReadFirstPacket()
     QByteArray buffer;
     QElapsedTimer timer;
     timer.start();
-    while (buffer.size() < VideoPacketHeader::kSize && timer.elapsed() < 5000) {
-        if (video->waitForReadyRead(500)) {
+    while (buffer.size() < VideoPacketHeader::kSize && timer.elapsed() < 5000)
+    {
+        if (video->waitForReadyRead(500))
+        {
             buffer.append(video->readAll());
         }
     }

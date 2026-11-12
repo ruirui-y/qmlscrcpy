@@ -28,12 +28,14 @@ private slots:
 void StreamTest::DecodeLiveStream()
 {
     if (!qEnvironmentVariableIsSet("QS_ADB_PATH")
-        || !qEnvironmentVariableIsSet("QS_DEVICE_SERIAL")) {
+        || !qEnvironmentVariableIsSet("QS_DEVICE_SERIAL"))
+        {
         QSKIP("未设置 QS_ADB_PATH / QS_DEVICE_SERIAL，跳过真机用例");
     }
 
     QString server_path = QString::fromLocal8Bit(qgetenv("QS_SCRCPY_SERVER"));
-    if (server_path.isEmpty()) {
+    if (server_path.isEmpty())
+    {
         server_path = QStringLiteral(QS_DEFAULT_SERVER_PATH);
     }
 
@@ -65,14 +67,18 @@ void StreamTest::DecodeLiveStream()
     timer.start();
 
     // 读够 60 个包或者 8 秒就停，够看清解不解得开
-    while (packets < 60 && timer.elapsed() < 8000) {
-        while (buffer.size() < VideoPacketHeader::kSize) {
-            if (!video->waitForReadyRead(500)) {
+    while (packets < 60 && timer.elapsed() < 8000)
+    {
+        while (buffer.size() < VideoPacketHeader::kSize)
+        {
+            if (!video->waitForReadyRead(500))
+            {
                 break;
             }
             buffer.append(video->readAll());
         }
-        if (buffer.size() < VideoPacketHeader::kSize) {
+        if (buffer.size() < VideoPacketHeader::kSize)
+        {
             break;
         }
 
@@ -80,13 +86,16 @@ void StreamTest::DecodeLiveStream()
         QVERIFY(VideoPacketHeader::Parse(buffer, header));
 
         const int need = VideoPacketHeader::kSize + static_cast<int>(header.size_);
-        while (buffer.size() < need) {
-            if (!video->waitForReadyRead(500)) {
+        while (buffer.size() < need)
+        {
+            if (!video->waitForReadyRead(500))
+            {
                 break;
             }
             buffer.append(video->readAll());
         }
-        if (buffer.size() < need) {
+        if (buffer.size() < need)
+        {
             break;
         }
 
@@ -95,15 +104,18 @@ void StreamTest::DecodeLiveStream()
         ++packets;
 
         // 前 3 个包把头部字节打出来：判断是 Annex-B（00 00 00 01）还是长度前缀
-        if (packets <= 3) {
+        if (packets <= 3)
+        {
             qInfo() << "packet" << packets << "config" << header.IsConfig() << "size"
                     << payload.size() << "head" << payload.left(16).toHex(' ');
-            if (header.IsConfig()) {
+            if (header.IsConfig())
+            {
                 qInfo() << "config full hex" << payload.toHex(' ');
             }
         }
 
-        if (!decoder.Push(payload, header.IsConfig(), header.PtsUs(), frames, &error)) {
+        if (!decoder.Push(payload, header.IsConfig(), header.PtsUs(), frames, &error))
+        {
             QVERIFY2(false, error.toUtf8().constData());
         }
     }

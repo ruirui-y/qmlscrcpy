@@ -8,7 +8,8 @@
 struct AVFrame;
 struct SwsContext;
 
-namespace qsc::stream {
+namespace qsc::stream
+{
 
 // YUV420P 转 RGB32（CPU 转）。
 //

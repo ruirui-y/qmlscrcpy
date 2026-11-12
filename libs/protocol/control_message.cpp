@@ -2,8 +2,10 @@
 
 #include "protocol/wire.h"
 
-namespace qsc::protocol {
-namespace {
+namespace qsc::protocol
+{
+namespace
+{
 
 // 位置 = 4 字节 x + 4 字节 y + 2 字节宽 + 2 字节高，单位都是像素
 void AppendPosition(QByteArray &out, const QPoint &position, const QSize &screen_size)
@@ -41,13 +43,15 @@ qint16 ToI16Fixed(float value)
 QByteArray TruncateUtf8(const QString &text, int max_bytes)
 {
     const QByteArray utf8 = text.toUtf8();
-    if (utf8.size() <= max_bytes) {
+    if (utf8.size() <= max_bytes)
+    {
         return utf8;
     }
 
     int cut = max_bytes;
     // UTF-8 的续字节都是 10xxxxxx，往回退到字符起始字节
-    while (cut > 0 && (static_cast<quint8>(utf8.at(cut)) & 0xC0) == 0x80) {
+    while (cut > 0 && (static_cast<quint8>(utf8.at(cut)) & 0xC0) == 0x80)
+    {
         --cut;
     }
     return utf8.left(cut);

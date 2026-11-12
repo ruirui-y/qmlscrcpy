@@ -2,18 +2,21 @@
 
 #include "protocol/wire.h"
 
-namespace qsc::protocol {
+namespace qsc::protocol
+{
 
 bool VideoPacketHeader::Parse(const QByteArray &buffer, VideoPacketHeader &header)
 {
-    if (buffer.size() < kSize) {
+    if (buffer.size() < kSize)
+    {
         return false;
     }
 
     WireReader reader(buffer);
     VideoPacketHeader parsed;
     // 顺序固定：先 8 字节标志位+时间戳，再 4 字节长度
-    if (!reader.ReadU64(parsed.pts_flags_) || !reader.ReadU32(parsed.size_)) {
+    if (!reader.ReadU64(parsed.pts_flags_) || !reader.ReadU32(parsed.size_))
+    {
         return false;
     }
 

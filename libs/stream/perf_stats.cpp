@@ -2,7 +2,8 @@
 
 #include <QDebug>
 
-namespace qsc::stream {
+namespace qsc::stream
+{
 
 PerfStats &PerfStats::Get()
 {
@@ -12,7 +13,8 @@ PerfStats &PerfStats::Get()
 
 void PerfStats::ReportAndReset()
 {
-    if (!enabled) {
+    if (!enabled)
+    {
         return;
     }
 
@@ -22,7 +24,8 @@ void PerfStats::ReportAndReset()
     const qint64 convert_total = convert_us.fetchAndStoreRelaxed(0);
     const qint64 upload_total = upload_us.fetchAndStoreRelaxed(0);
 
-    if (frame_count <= 0) {
+    if (frame_count <= 0)
+    {
         qInfo() << "[perf] 这一秒没有新帧";
         return;
     }

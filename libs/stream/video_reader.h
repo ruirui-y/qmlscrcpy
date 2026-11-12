@@ -12,7 +12,8 @@
 
 class QTcpSocket;
 
-namespace qsc::stream {
+namespace qsc::stream
+{
 
 class H264Decoder;
 

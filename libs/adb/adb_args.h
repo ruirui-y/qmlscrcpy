@@ -4,7 +4,8 @@
 #include <QStringList>
 #include <QtGlobal>
 
-namespace qsc::adb {
+namespace qsc::adb
+{
 
 // adb 命令的参数拼装，全是纯函数：给输入产出 argv，不碰进程也不碰文件。
 // 单独拆出来的理由：参数顺序、-s 放哪儿、带空格的路径会不会被拆成两个参数，

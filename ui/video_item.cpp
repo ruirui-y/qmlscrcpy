@@ -13,7 +13,8 @@
 
 using qsc::stream::Frame;
 
-namespace {
+namespace
+{
 
 // 顶点着色器：顶点是裁剪空间坐标，直接用
 const char *const kVertexShader = R"(
@@ -83,7 +84,8 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
     keep_aspect_ = video_item->KeepAspect();
 
     const Frame frame = video_item->TakePendingFrame();
-    if (!frame.IsValid()) {
+    if (!frame.IsValid())
+    {
         return;
     }
 
@@ -94,12 +96,15 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
     const int widths[3] = {size.width(), (size.width() + 1) / 2, (size.width() + 1) / 2};
     const int heights[3] = {size.height(), (size.height() + 1) / 2, (size.height() + 1) / 2};
 
-    for (int i = 0; i < 3; ++i) {
-        if (data[i] == nullptr || widths[i] <= 0 || heights[i] <= 0) {
+    for (int i = 0; i < 3; ++i)
+    {
+        if (data[i] == nullptr || widths[i] <= 0 || heights[i] <= 0)
+        {
             return;
         }
         planes_[i].resize(widths[i] * heights[i]);
-        for (int row = 0; row < heights[i]; ++row) {
+        for (int row = 0; row < heights[i]; ++row)
+        {
             memcpy(planes_[i].data() + row * widths[i],
                    data[i] + static_cast<qsizetype>(row) * strides[i], widths[i]);
         }
@@ -112,12 +117,14 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
 
 void YuvRenderer::EnsureProgram()
 {
-    if (program_ready_) {
+    if (program_ready_)
+    {
         return;
     }
 
     if (!program_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
-        || !program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentShader)) {
+        || !program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentShader))
+        {
         qWarning() << "[video] 着色器编译失败:" << program_.log();
         // 失败也标记成 ready：每帧重试编译只会刷屏
         program_ready_ = true;
@@ -126,7 +133,8 @@ void YuvRenderer::EnsureProgram()
 
     program_.bindAttributeLocation("vertexCoords", 0);
     program_.bindAttributeLocation("texCoords", 1);
-    if (!program_.link()) {
+    if (!program_.link())
+    {
         qWarning() << "[video] 着色器链接失败:" << program_.log();
     }
     program_ready_ = true;
@@ -137,7 +145,8 @@ void YuvRenderer::render()
     QOpenGLFunctions *gl = QOpenGLContext::currentContext() != nullptr
                                ? QOpenGLContext::currentContext()->functions()
                                : nullptr;
-    if (gl == nullptr) {
+    if (gl == nullptr)
+    {
         return;
     }
 
@@ -148,7 +157,8 @@ void YuvRenderer::render()
     gl->glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     gl->glClear(GL_COLOR_BUFFER_BIT);
 
-    if (frame_size_.isEmpty() || widths_[0] <= 0) {
+    if (frame_size_.isEmpty() || widths_[0] <= 0)
+    {
         return;
     }
 
@@ -156,9 +166,12 @@ void YuvRenderer::render()
     upload_timer.start();
 
     // 建纹理 + 上传：只在有像素时才做
-    if (dirty_) {
-        for (int i = 0; i < 3; ++i) {
-            if (textures_[i] == 0) {
+    if (dirty_)
+    {
+        for (int i = 0; i < 3; ++i)
+        {
+            if (textures_[i] == 0)
+            {
                 gl->glGenTextures(1, &textures_[i]);
                 gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -178,12 +191,14 @@ void YuvRenderer::render()
         qsc::stream::PerfStats::Get().upload_us.fetchAndAddRelaxed(upload_timer.nsecsElapsed() / 1000);
     }
 
-    if (!program_.isLinked()) {
+    if (!program_.isLinked())
+    {
         return;
     }
 
     program_.bind();
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; ++i)
+    {
         gl->glActiveTexture(GL_TEXTURE0 + i);
         gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
     }
@@ -205,15 +220,19 @@ void YuvRenderer::DrawQuad(QOpenGLFunctions *gl, float width, float height)
     float top = 1.0f;
     float bottom = -1.0f;
 
-    if (keep_aspect_ && !frame_size_.isEmpty() && width > 0.0f && height > 0.0f) {
+    if (keep_aspect_ && !frame_size_.isEmpty() && width > 0.0f && height > 0.0f)
+    {
         const float item_aspect = width / height;
         const float frame_aspect = static_cast<float>(frame_size_.width()) / frame_size_.height();
-        if (frame_aspect > item_aspect) {
+        if (frame_aspect > item_aspect)
+        {
             // 画面比窗口更宽：上下各留一条黑边
             const float scale = item_aspect / frame_aspect;
             top = scale;
             bottom = -scale;
-        } else {
+        }
+        else
+        {
             // 画面比窗口更高：左右各留一条黑边
             const float scale = frame_aspect / item_aspect;
             left = -scale;
@@ -293,7 +312,8 @@ int VideoItem::Fps() const
 
 void VideoItem::SetKeepAspect(bool keep_aspect)
 {
-    if (keep_aspect_.exchange(keep_aspect) == keep_aspect) {
+    if (keep_aspect_.exchange(keep_aspect) == keep_aspect)
+    {
         return;
     }
     emit KeepAspectChanged();
@@ -302,7 +322,8 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
 
 void VideoItem::Present(const Frame &frame)
 {
-    if (!frame.IsValid()) {
+    if (!frame.IsValid())
+    {
         return;
     }
 
@@ -321,7 +342,8 @@ void VideoItem::Present(const Frame &frame)
 Frame VideoItem::TakePendingFrame()
 {
     QMutexLocker locker(&mutex_);
-    if (!has_pending_) {
+    if (!has_pending_)
+    {
         return Frame();
     }
     const Frame frame = pending_;
@@ -355,13 +377,15 @@ void VideoItem::OnRefreshTimer()
     }
 
     // 尺寸变了（设备旋转）才通知 QML；在 GUI 线程 emit，跨线程的事一点都不做
-    if (current_size != notified_size_) {
+    if (current_size != notified_size_)
+    {
         notified_size_ = current_size;
         emit FrameSizeChanged();
     }
 
     const int arrived = frames_arrived_.loadAcquire();
-    if (arrived != frames_painted_) {
+    if (arrived != frames_painted_)
+    {
         frames_painted_ = arrived;
         update();
     }
@@ -373,7 +397,8 @@ void VideoItem::UpdateFps()
     const int arrived = frames_arrived_.loadAcquire();
     const int frames = arrived - last_arrived;
     last_arrived = arrived;
-    if (frames == fps_) {
+    if (frames == fps_)
+    {
         return;
     }
     fps_ = frames;

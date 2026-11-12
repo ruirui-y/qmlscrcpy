@@ -9,7 +9,8 @@
 struct AVCodecContext;
 struct AVPacket;
 
-namespace qsc::stream {
+namespace qsc::stream
+{
 
 // H.264 软解。输入是裸 Annex-B 数据：配置包（SPS/PPS）和数据包都往里送，
 // FFmpeg 自己按 in-band 参数集解析，不用我们手工拼 extradata。

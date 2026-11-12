@@ -3,7 +3,8 @@
 #include <QByteArray>
 #include <QtGlobal>
 
-namespace qsc::protocol {
+namespace qsc::protocol
+{
 
 // 视频流里每个包前面的 12 字节头：8 字节标志位+时间戳，4 字节负载长度，全大端。
 // 配置包不是视频帧、不能送解码器，但必须单独留下来，否则后面所有帧都解不出来。

@@ -30,14 +30,16 @@ QString DeviceController::ProposedSerial() const
 void DeviceController::SetSurface(QObject *surface)
 {
     surface_ = qobject_cast<VideoItem *>(surface);
-    if (surface_ == nullptr) {
+    if (surface_ == nullptr)
+    {
         qWarning() << "[controller] 传进来的不是 VideoSurface";
     }
 }
 
 void DeviceController::SetStatus(const QString &status)
 {
-    if (status_ == status) {
+    if (status_ == status)
+    {
         return;
     }
     status_ = status;
@@ -48,15 +50,18 @@ void DeviceController::RefreshDevices()
 {
     // 只是列一下设备，几十毫秒，直接在主线程做
     const qsc::adb::AdbResult result = qsc::adb::Run(QStringList{QStringLiteral("devices")}, 5000);
-    if (!result.Ok()) {
+    if (!result.Ok())
+    {
         SetStatus(QStringLiteral("adb devices 失败：%1").arg(result.ErrorText()));
         return;
     }
 
     QStringList serials;
     const QList<qsc::adb::AdbDevice> devices = qsc::adb::ParseDevices(result.std_out_);
-    for (const qsc::adb::AdbDevice &device : devices) {
-        if (device.state_ == QStringLiteral("device")) {
+    for (const qsc::adb::AdbDevice &device : devices)
+    {
+        if (device.state_ == QStringLiteral("device"))
+        {
             serials << device.serial_;
         }
     }
@@ -70,11 +75,13 @@ void DeviceController::RefreshDevices()
 
 void DeviceController::Connect(const QString &serial)
 {
-    if (serial.trimmed().isEmpty()) {
+    if (serial.trimmed().isEmpty())
+    {
         SetStatus(QStringLiteral("先填序列号"));
         return;
     }
-    if (reader_ != nullptr) {
+    if (reader_ != nullptr)
+    {
         SetStatus(QStringLiteral("已经连着了，先断开"));
         return;
     }
@@ -100,12 +107,14 @@ void DeviceController::Connect(const QString &serial)
 
 void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
 {
-    if (!result.ok_) {
+    if (!result.ok_)
+    {
         SetStatus(QStringLiteral("连接失败：%1").arg(result.error_));
         TearDown();
         return;
     }
-    if (surface_ == nullptr) {
+    if (surface_ == nullptr)
+    {
         SetStatus(QStringLiteral("连上了，但界面里没有视频画布"));
         TearDown();
         return;
@@ -113,14 +122,16 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
 
     decoder_ = std::make_unique<qsc::stream::H264Decoder>();
     QString error;
-    if (!decoder_->Open(&error)) {
+    if (!decoder_->Open(&error))
+    {
         SetStatus(QStringLiteral("解码器打开失败：%1").arg(error));
         TearDown();
         return;
     }
 
     QTcpSocket *video = session_->TakeVideoSocket();
-    if (video == nullptr) {
+    if (video == nullptr)
+    {
         SetStatus(QStringLiteral("没有拿到视频 socket"));
         TearDown();
         return;
@@ -136,7 +147,8 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     // （拖窗口时 GUI 线程会被系统模态循环卡住，排队连接会把帧堆起来，松手后一口气补帧）
     QObject::connect(reader_, &qsc::stream::VideoReader::FrameReady, surface_, &VideoItem::Present,
                      Qt::DirectConnection);
-    QObject::connect(reader_, &qsc::stream::VideoReader::Failed, this, [this](const QString &reason) {
+    QObject::connect(reader_, &qsc::stream::VideoReader::Failed, this, [this](const QString &reason)
+    {
         SetStatus(QStringLiteral("视频出错：%1").arg(reason));
     });
     reader_->start();
@@ -150,7 +162,8 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
 
 void DeviceController::Disconnect()
 {
-    if (reader_ == nullptr && !session_) {
+    if (reader_ == nullptr && !session_)
+    {
         SetStatus(QStringLiteral("没在连接"));
         return;
     }
@@ -161,16 +174,19 @@ void DeviceController::Disconnect()
 void DeviceController::TearDown()
 {
     // 顺序不能反：读线程里存着解码器的裸指针，先停线程再销毁解码器
-    if (reader_ != nullptr) {
+    if (reader_ != nullptr)
+    {
         reader_->Stop();
         delete reader_;
         reader_ = nullptr;
     }
-    if (decoder_) {
+    if (decoder_)
+    {
         decoder_->Close();
         decoder_.reset();
     }
-    if (session_) {
+    if (session_)
+    {
         session_->Stop();
         session_.reset();
     }

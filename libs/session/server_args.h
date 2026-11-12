@@ -4,7 +4,8 @@
 #include <QStringList>
 #include <QtGlobal>
 
-namespace qsc::session {
+namespace qsc::session
+{
 
 // 拉起安卓端 scrcpy-server 需要的参数。
 // 字段名尽量和服务器那边的 key=value 参数名对齐，方便对着它的文档核对。

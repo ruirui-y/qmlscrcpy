@@ -7,7 +7,8 @@
 
 class QProcess;
 
-namespace qsc::adb {
+namespace qsc::adb
+{
 
 // 一次 adb 调用的结果。
 // 故意区分"进程没起来"和"起来了但退出码非 0"：前者是环境问题（找不到 adb.exe），

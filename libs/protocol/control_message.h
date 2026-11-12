@@ -8,7 +8,8 @@
 
 #include "protocol/wire.h"
 
-namespace qsc::protocol {
+namespace qsc::protocol
+{
 
 // 客户端发给设备的控制消息，走控制 socket。每条 = 1 字节类型 + 负载，整数全是 32 位大端。
 // 类型号就是线上协议里的数字，对齐 scrcpy 3.x 的 ControlMessage.Type，顺序不能动。

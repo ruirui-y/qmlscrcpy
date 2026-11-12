@@ -6,13 +6,15 @@
 
 using namespace qsc::session;
 
-namespace {
+namespace
+{
 
 // QCOMPARE 是宏，直接写 QStringList{"a", "b"} 的逗号会被当成宏参数分隔符，包一层
 QStringList Argv(std::initializer_list<QString> parts)
 {
     QStringList list;
-    for (const QString &part : parts) {
+    for (const QString &part : parts)
+    {
         list << part;
     }
     return list;
@@ -21,8 +23,10 @@ QStringList Argv(std::initializer_list<QString> parts)
 // 参数里有没有以某个前缀开头的一段
 bool HasArg(const QStringList &args, const QString &prefix)
 {
-    for (const QString &arg : args) {
-        if (arg.startsWith(prefix)) {
+    for (const QString &arg : args)
+    {
+        if (arg.startsWith(prefix))
+        {
             return true;
         }
     }

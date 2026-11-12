@@ -3,7 +3,8 @@
 #include <QCoreApplication>
 #include <QSettings>
 
-namespace {
+namespace
+{
 
 // 配置写在 exe 旁边的 userdata.ini：用户能直接看到、删掉也不影响启动
 QSettings &Store()
@@ -27,7 +28,8 @@ QRect AppSettings::VideoGeometry(const QString &key) const
     const int height = store.value(QStringLiteral("h"), -1).toInt();
     store.endGroup();
 
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0)
+    {
         return QRect();
     }
     return QRect(x, y, width, height);
@@ -35,7 +37,8 @@ QRect AppSettings::VideoGeometry(const QString &key) const
 
 void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width, int height)
 {
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0)
+    {
         return;
     }
 

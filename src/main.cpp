@@ -16,20 +16,24 @@
 #include "stream/perf_stats.h"
 #include "ui/video_item.h"
 
-namespace {
+namespace
+{
 
 // 抓投屏那扇窗（真正持有 VideoSurface 的那扇）截图，调试用
 QQuickWindow *FindVideoWindow()
 {
     const QList<QWindow *> windows = QGuiApplication::topLevelWindows();
-    for (QWindow *window : windows) {
+    for (QWindow *window : windows)
+    {
         auto *quick_window = qobject_cast<QQuickWindow *>(window);
-        if (quick_window == nullptr) {
+        if (quick_window == nullptr)
+        {
             continue;
         }
         // 控制窗的对象树里也挂着视频窗（QML 里嵌套声明），所以要确认这一项真的属于它
         auto *video_item = quick_window->findChild<VideoItem *>();
-        if (video_item != nullptr && video_item->window() == quick_window) {
+        if (video_item != nullptr && video_item->window() == quick_window)
+        {
             return quick_window;
         }
     }
@@ -73,8 +77,10 @@ int main(int argc, char *argv[])
     // 加载失败必须立刻报错退出，否则会静默变成一个看不见的空窗口
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreated, &app,
-        [](QObject *object, const QUrl &objectUrl) {
-            if (object) {
+        [](QObject *object, const QUrl &objectUrl)
+        {
+            if (object)
+            {
                 return;
             }
             qCritical() << "QML 加载失败:" << objectUrl.toString();
@@ -90,16 +96,20 @@ int main(int argc, char *argv[])
 
     // 调试方便：设了 QS_DEVICE_SERIAL 就自动连，省得每次点按钮
     const QString auto_serial = QString::fromLocal8Bit(qgetenv("QS_DEVICE_SERIAL"));
-    if (!auto_serial.isEmpty()) {
+    if (!auto_serial.isEmpty())
+    {
         controller.Connect(auto_serial);
     }
 
     // 调试用：QS_GRAB=路径 时等画面出来抓一张截图再退出，方便无人值守核对
     const QString grab_path = QString::fromLocal8Bit(qgetenv("QS_GRAB"));
-    if (!grab_path.isEmpty()) {
-        QTimer::singleShot(6000, &app, [grab_path]() {
+    if (!grab_path.isEmpty())
+    {
+        QTimer::singleShot(6000, &app, [grab_path]()
+        {
             QQuickWindow *video_window = FindVideoWindow();
-            if (video_window == nullptr) {
+            if (video_window == nullptr)
+            {
                 qInfo() << "[app] 没找到投屏窗口";
                 QCoreApplication::quit();
                 return;
@@ -110,9 +120,11 @@ int main(int argc, char *argv[])
             qInfo() << "[app] screenshot" << grab_path << image.size() << saved;
 
             // 顺手把控制窗也存一张，方便核对状态文字和帧率
-            for (QWindow *window : QGuiApplication::topLevelWindows()) {
+            for (QWindow *window : QGuiApplication::topLevelWindows())
+            {
                 auto *quick_window = qobject_cast<QQuickWindow *>(window);
-                if (quick_window == nullptr || quick_window == video_window) {
+                if (quick_window == nullptr || quick_window == video_window)
+                {
                     continue;
                 }
                 const QString control_path = grab_path + QStringLiteral(".control.png");
