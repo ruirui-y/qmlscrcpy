@@ -60,6 +60,12 @@ keep_days=15
 wheel_mode=scroll
 # 滑动模式下一格滚轮手指移动多少像素（太小会被当点击，太大一下翻过头）
 drag_pixels=60
+# 电脑剪贴板一变就自动推到设备（会同步敏感内容，默认关）
+clipboard_autosync=false
+
+# 老板键：一键隐藏/恢复所有窗口，格式 Ctrl+Alt+B
+[ui]
+boss_key=Ctrl+Alt+B
 
 # 视频采集：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
 [video]
@@ -177,6 +183,17 @@ void AppSettings::SetDragPixels(int pixels)
     store.sync();
 }
 
+// 电脑剪贴板一变就推到设备（默认关：某些场景会把敏感内容同步过去）
+bool AppSettings::ClipboardAutoSync() const
+{
+    return ConfigStore().value(QStringLiteral("input/clipboard_autosync"), false).toBool();
+}
+
+// 老板键的组合，格式 Ctrl+Alt+B
+QString AppSettings::BossKeyText() const
+{
+    return ConfigStore().value(QStringLiteral("ui/boss_key"), QStringLiteral("Ctrl+Alt+B")).toString();
+}
 // 控制台窗口要不要显示：默认不显示，只有用户在界面上打开过才显示
 bool AppSettings::ShowConsole() const
 {

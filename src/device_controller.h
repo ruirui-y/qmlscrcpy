@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QSize>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
@@ -62,7 +63,11 @@ public:
     Q_INVOKABLE void AdjustDragPixels(int delta);                                               // 滑动像素加减，立即生效并记住
     Q_INVOKABLE void SetShowConsole(bool show);                                                 // 显示或隐藏命令行窗口，并记住
     Q_INVOKABLE void ApplyVideoSettings(int bit_rate, int max_fps);                             // 改码率/帧率并重连生效
-    Q_INVOKABLE void ResetAllConfig();                                                          // 恢复默认配置，提示重启                                                 
+    Q_INVOKABLE void ResetAllConfig();                                                          // 恢复默认配置，提示重启
+    Q_INVOKABLE void SendClipboardToDevice();                                                   // 电脑剪贴板 → 设备，写完直接粘贴
+    Q_INVOKABLE void PullClipboardFromDevice();                                                 // 设备剪贴板 → 电脑
+    Q_INVOKABLE void RegisterWindow(QObject *window);                                           // QML 把自己的窗口登记进来，老板键要藏它们
+    Q_INVOKABLE void ToggleBossKey();                                                           // 一键隐藏/恢复所有窗口
 
     // 启动时挑一个串号自动连：优先上次连过的，其次环境变量给的，都要在在线列表里
     Q_INVOKABLE QString PickStartupSerial(const QString &fallback) const;
@@ -89,6 +94,9 @@ signals:
     void ConnectedChanged();
 
 private:
+    void OnControlData();    // 控制 socket 有数据：解析设备消息（剪贴板推送、Ack）
+    void OnLocalClipboardChanged();    // 电脑剪贴板变了（开了自动同步才接）
+
     // 切无线三步的结果，工作线程算完交回给主线程
     struct WifiSwitchResult
     {
@@ -114,6 +122,14 @@ private:
     QString device_name_;                                                                       // 当前连着的设备串号
     QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
     QStringList devices_;                                                                       // 给 QML 下拉框用的设备地址
+    QTcpSocket *control_reader_ = nullptr;                                                      // 控制 socket，读设备消息用
+    QByteArray control_buffer_;                                                                 // 控制 socket 的半条消息缓存
+    quint64 clipboard_sequence_ = 0;                                                            // SetClipboard 的序号，设备 Ack 会带回
+    bool suppress_clipboard_ = false;                                                           // 正在写电脑剪贴板，别把它再推回设备
+    bool boss_hidden_ = false;                                                                  // 老板键是否已经把窗口藏起来了
+    QList<QPointer<QWindow>> app_windows_;                                                      // QML 登记进来的窗口，老板键只藏这些
+    QList<QPointer<QWindow>> hidden_windows_;                                                   // 藏起来的窗口，恢复时逐个 show
+    QMetaObject::Connection clipboard_connection_;                                              // 自动同步的剪贴板信号连接
     bool connected_ = false;                                                                    // 会话活着就是 true
     QString video_profile_ = QStringLiteral("wired");                                           // 当前连接方式的画质档位
     bool show_console_ = false;                                                                  // 控制台窗口显示状态

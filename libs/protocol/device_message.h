@@ -13,9 +13,9 @@ struct DeviceMessage
 {
     enum class Type : quint8
     {
-        Clipboard = 1,                                                                          // 设备剪贴板变了，内容一起推过来
-        AckClipboard = 2,                                                                       // 确认收到了我们发过去的剪贴板
-        UhidOutput = 3,                                                                         // 虚拟键鼠的输出事件，P4 之前不支持
+        Clipboard = 0,                                                                          // 设备剪贴板变了，内容一起推过来
+        AckClipboard = 1,                                                                       // 确认收到了我们发过去的剪贴板
+        UhidOutput = 2,                                                                         // 虚拟键鼠的输出事件，P4 之前不支持
     };
 
     Type type_ = Type::Clipboard;                                                               // 刚解出来的这条是哪一种

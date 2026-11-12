@@ -27,6 +27,12 @@ public:
     // [input] 段：滚轮模式，window.ini 里选过的优先，其次 config.ini 的默认值
     QString WheelMode() const;
     void SetWheelMode(const QString &mode);
+    // [input] 段：剪贴板
+    bool ClipboardAutoSync() const;                                                             // 电脑剪贴板一变就推到设备
+
+    // [ui] 段：老板键
+    QString BossKeyText() const;                                                                // 例如 Ctrl+Alt+B
+
     // [ui] 段：控制台窗口要不要显示
     bool ShowConsole() const;
     void SetShowConsole(bool show);

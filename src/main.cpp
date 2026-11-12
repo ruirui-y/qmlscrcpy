@@ -13,6 +13,8 @@
 
 #include "app_settings.h"
 #include "base/console_window.h"
+#include "base/hotkey.h"
+#include "boss_key.h"
 #include "base/log.h"
 #include "device_controller.h"
 #include "stream/frame.h"
@@ -102,6 +104,20 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &app_settings);
 
     // 加载失败必须立刻报错退出，否则会静默变成一个看不见的空窗口
+    // 老板键：全局热键，按一次藏起所有窗口，再按恢复
+    qsc::BossKey boss_key;
+    qsc::base::HotkeySpec hotkey;
+    if (qsc::base::ParseHotkey(app_settings.BossKeyText(), &hotkey) && boss_key.Bind(hotkey))
+    {
+        QObject::connect(&boss_key, &qsc::BossKey::Triggered, &controller, &DeviceController::ToggleBossKey);
+        app.installNativeEventFilter(&boss_key);
+        qInfo() << "[app] 老板键已注册" << qsc::base::HotkeyText(hotkey);
+    }
+    else
+    {
+        qWarning() << "[app] 老板键注册失败，检查 config.ini 的 ui/boss_key：" << app_settings.BossKeyText();
+    }
+
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreated, &app,
         [](QObject *object, const QUrl &objectUrl)

@@ -382,6 +382,18 @@ Window {
                 }
 
                 ToolButton {
+                    label: qsTr("发给手机")
+                    tip: qsTr("把电脑剪贴板里的文字写进手机剪贴板，并自动粘贴到当前输入框")
+                    onClicked: deviceController.SendClipboardToDevice()
+                }
+
+                ToolButton {
+                    label: qsTr("取回电脑")
+                    tip: qsTr("读取手机剪贴板，写进电脑剪贴板")
+                    onClicked: deviceController.PullClipboardFromDevice()
+                }
+
+                ToolButton {
                     label: videoWindow.displayOff ? qsTr("亮屏") : qsTr("息屏")
                     tip: qsTr("只关/开屏幕显示，不动锁屏和电源状态")
                     active: videoWindow.displayOff
@@ -503,6 +515,7 @@ Window {
 
         // QML 加载时可能已经连上了（自启动连上次设备），按当前状态决定露不露脸
         visible = deviceController.connected
+        deviceController.RegisterWindow(videoWindow)
         deviceController.SetSurface(videoSurface)
 
         applying = true

@@ -3,6 +3,8 @@
 add_library(qsc_base STATIC
     console_window.cpp
     console_window.h
+    hotkey.cpp
+    hotkey.h
     log.cpp
     log.h
 )

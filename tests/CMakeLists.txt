@@ -67,11 +67,17 @@ target_link_libraries(tst_key PRIVATE qsc_input Qt5::Test)
 add_test(NAME key COMMAND tst_key)
 qs_deploy_qt_runtime(tst_key)
 
+# 老板键配置解析：纯字符串处理
+add_executable(tst_hotkey tst_hotkey.cpp)
+target_link_libraries(tst_hotkey PRIVATE qsc_base Qt5::Test)
+add_test(NAME hotkey COMMAND tst_hotkey)
+qs_deploy_qt_runtime(tst_hotkey)
+
 # 无线地址解析与排序：纯字符串处理
 add_executable(tst_net_address tst_net_address.cpp)
 target_link_libraries(tst_net_address PRIVATE qsc_adb Qt5::Test)
 add_test(NAME net_address COMMAND tst_net_address)
 qs_deploy_qt_runtime(tst_net_address)
 
-set_tests_properties(protocol adb server_args server_session ffmpeg stream input key net_address PROPERTIES
+set_tests_properties(protocol adb server_args server_session ffmpeg stream input key net_address hotkey PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QS_QT_ROOT}/bin")

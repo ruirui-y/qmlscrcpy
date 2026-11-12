@@ -485,6 +485,11 @@ QTcpSocket *ServerSession::TakeVideoSocket()
     return socket;
 }
 
+// 控制 socket 指针，调用方只读不拥有
+QTcpSocket *ServerSession::ControlSocket() const
+{
+    return control_socket_;
+}
 // 往控制 socket 写一条消息；只负责发，不等对方回应
 bool ServerSession::SendControl(const QByteArray &message)
 {

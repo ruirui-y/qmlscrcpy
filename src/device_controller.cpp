@@ -9,6 +9,7 @@
 #include <QClipboard>
 #include <QRegularExpression>
 #include <QThread>
+#include <QTimer>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
@@ -22,6 +23,7 @@
 #include <QNetworkInterface>
 #include "adb/adb_runner.h"
 #include "protocol/control_message.h"
+#include "protocol/device_message.h"
 
 #include <QDebug>
 #include <QTcpSocket>
@@ -70,6 +72,165 @@ void DeviceController::SetSurface(QObject *surface)
     surface_->SetDragPixels(drag_pixels_);
 }
 
+// 电脑剪贴板发给设备：写入 + 让设备直接粘贴
+void DeviceController::SendClipboardToDevice()
+{
+    if (session_ == nullptr)
+    {
+        SetStatus(QStringLiteral("还没连接设备"));
+        return;
+    }
+
+    const QString text = QGuiApplication::clipboard()->text();
+    if (text.isEmpty())
+    {
+        SetStatus(QStringLiteral("电脑剪贴板没有文字"));
+        return;
+    }
+
+    ++clipboard_sequence_;
+    SendControl(qsc::protocol::ControlMessage::SetClipboard(clipboard_sequence_, true, text));
+    SetStatus(QStringLiteral("剪贴板已发给手机（%1 字），已自动粘贴").arg(text.size()));
+}
+
+// 把设备的剪贴板取到电脑
+void DeviceController::PullClipboardFromDevice()
+{
+    if (session_ == nullptr)
+    {
+        SetStatus(QStringLiteral("还没连接设备"));
+        return;
+    }
+
+    ++clipboard_sequence_;
+    SendControl(qsc::protocol::ControlMessage::GetClipboard(qsc::protocol::ClipboardAction::Copy));
+    SetStatus(QStringLiteral("正在读取手机剪贴板 …"));
+}
+
+// QML 把窗口登记进来：投屏窗在 QML 里声明在主窗内部，QWindow::parent 非空，
+// 不在 topLevelWindows() 里，只能让它们自己报到
+void DeviceController::RegisterWindow(QObject *window)
+{
+    QWindow *raw = qobject_cast<QWindow *>(window);
+    if (raw == nullptr)
+    {
+        return;
+    }
+    for (const QPointer<QWindow> &existing : app_windows_)
+    {
+        if (existing == raw)
+        {
+            return;
+        }
+    }
+    app_windows_.append(raw);
+}
+
+// 老板键：第一次按藏起所有登记过的窗口，再按恢复
+void DeviceController::ToggleBossKey()
+{
+    if (!boss_hidden_)
+    {
+        hidden_windows_.clear();
+        for (const QPointer<QWindow> &window : app_windows_)
+        {
+            if (!window.isNull() && window->isVisible())
+            {
+                hidden_windows_.append(window);
+                window->hide();
+            }
+        }
+        boss_hidden_ = true;
+        SetStatus(QStringLiteral("已隐藏 %1 个窗口，再按一次老板键恢复").arg(hidden_windows_.size()));
+
+        // Qt 会在窗口隐藏后因为激活/曝光事件把它重新显示一次（投屏窗实测必现），
+        // 这里等下一轮事件循环再补一刀，之后就稳住了
+        QTimer::singleShot(0, this, [this]()
+        {
+            if (!boss_hidden_)
+            {
+                return;
+            }
+            for (const QPointer<QWindow> &window : hidden_windows_)
+            {
+                if (!window.isNull() && window->isVisible())
+                {
+                    window->hide();
+                }
+            }
+        });
+        return;
+    }
+
+    for (const QPointer<QWindow> &window : hidden_windows_)
+    {
+        if (!window.isNull())
+        {
+            window->show();
+        }
+    }
+    hidden_windows_.clear();
+    boss_hidden_ = false;
+    SetStatus(QStringLiteral("窗口已恢复"));
+}
+
+// 控制 socket 有数据：按协议切出设备消息，剪贴板推过来就写进电脑剪贴板
+void DeviceController::OnControlData()
+{
+    if (control_reader_ == nullptr)
+    {
+        return;
+    }
+
+    control_buffer_.append(control_reader_->readAll());
+    for (;;)
+    {
+        qsc::protocol::DeviceMessage message;
+        const qint32 consumed = qsc::protocol::DeviceMessage::TryParse(control_buffer_, message);
+        if (consumed == 0)
+        {
+            break;                                                                              // 半条消息，等下一次数据
+        }
+        if (consumed < 0)
+        {
+            qWarning() << "[session] 设备消息解析失败，丢弃缓存" << control_buffer_.size();
+            control_buffer_.clear();
+            break;
+        }
+        control_buffer_.remove(0, consumed);
+
+        if (message.type_ == qsc::protocol::DeviceMessage::Type::Clipboard)
+        {
+            // 写电脑剪贴板时会触发 dataChanged，别把同一条内容又推回设备
+            suppress_clipboard_ = true;
+            QGuiApplication::clipboard()->setText(message.text_);
+            suppress_clipboard_ = false;
+            SetStatus(QStringLiteral("已从手机取回剪贴板（%1 字）").arg(message.text_.size()));
+        }
+        else if (message.type_ == qsc::protocol::DeviceMessage::Type::AckClipboard)
+        {
+            qCDebug(qsc::base::lcInput) << "[clipboard] 设备确认序号" << message.sequence_;
+        }
+    }
+}
+
+// 电脑剪贴板变了且开了自动同步：推给设备（suppress 期间跳过，避免自己写自己的回环）
+void DeviceController::OnLocalClipboardChanged()
+{
+    if (suppress_clipboard_ || session_ == nullptr)
+    {
+        return;
+    }
+
+    const QString text = QGuiApplication::clipboard()->text();
+    if (text.isEmpty())
+    {
+        return;
+    }
+
+    ++clipboard_sequence_;
+    SendControl(qsc::protocol::ControlMessage::SetClipboard(clipboard_sequence_, false, text));
+}
 // 恢复默认配置：清掉 window.ini、删掉 config.ini，当前会话不重启不会变
 void DeviceController::ResetAllConfig()
 {
@@ -630,6 +791,21 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     });
     reader_->start();
 
+    // 控制 socket 是双向的：设备会主动推剪贴板、回 Ack，这里挂上读
+    control_reader_ = session_->ControlSocket();
+    if (control_reader_ != nullptr)
+    {
+        QObject::connect(control_reader_, &QTcpSocket::readyRead, this, &DeviceController::OnControlData);
+        control_buffer_.clear();
+    }
+
+    // 开了自动同步就盯着电脑剪贴板
+    if (AppSettings().ClipboardAutoSync() && clipboard_connection_ == QMetaObject::Connection())
+    {
+        clipboard_connection_ = QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
+                                                 this, &DeviceController::OnLocalClipboardChanged);
+    }
+
     // 记住这次连的设备，下次启动优先连它
     AppSettings().SetLastSerial(device_name_);
 
@@ -674,6 +850,28 @@ void DeviceController::SendControl(const QByteArray &message)
 // 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {
+    // 断线了就把老板键藏起来的窗口放回去，否则用户找不到界面
+    if (boss_hidden_)
+    {
+        for (const QPointer<QWindow> &window : hidden_windows_)
+        {
+            if (!window.isNull())
+            {
+                window->show();
+            }
+        }
+        hidden_windows_.clear();
+        boss_hidden_ = false;
+    }
+
+    // 控制 socket 的读连接跟着会话走，这里断干净
+    if (control_reader_ != nullptr)
+    {
+        QObject::disconnect(control_reader_, nullptr, this, nullptr);
+        control_reader_ = nullptr;
+    }
+    control_buffer_.clear();
+
     // 会话没了就把投屏窗收起来，回到"只有主窗"的状态
     if (connected_)
     {

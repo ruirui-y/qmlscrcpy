@@ -30,6 +30,9 @@ Window {
     property bool ready: false
 
     Component.onCompleted: {
+        // 登记给老板键：主窗 + 投屏窗都要能被一键藏起来
+        deviceController.RegisterWindow(controlWindow)
+        deviceController.RegisterWindow(videoWindow)
         applying = true
         const saved = appSettings.VideoGeometry("control_window")
         if (saved.width > 0) {

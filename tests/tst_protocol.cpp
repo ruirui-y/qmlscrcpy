@@ -32,6 +32,7 @@ private slots:
     void DeviceMessageClipboard();
     void DeviceMessagePartialReturnsZero();
     void DeviceMessageBadTypeIsError();
+    void DeviceMessageTypeNumbersMatchScrcpy();
 };
 
 // 标志位在高位，时间戳在低 62 位
@@ -376,6 +377,14 @@ void ProtocolTest::DeviceMessageClipboard()
     QCOMPARE(message.sequence_, quint64(0x1122334455667788ULL));
 }
 
+// 类型号必须和 scrcpy 服务端一致：CLIPBOARD=0 / ACK_CLIPBOARD=1 / UHID_OUTPUT=2
+// 之前写成 1/2/3，单测用枚举名自比所以一直是绿的，实际收不到设备剪贴板
+void ProtocolTest::DeviceMessageTypeNumbersMatchScrcpy()
+{
+    QCOMPARE(static_cast<quint8>(DeviceMessage::Type::Clipboard), quint8(0));
+    QCOMPARE(static_cast<quint8>(DeviceMessage::Type::AckClipboard), quint8(1));
+    QCOMPARE(static_cast<quint8>(DeviceMessage::Type::UhidOutput), quint8(2));
+}
 // 半包返回 0，表示还要继续等
 void ProtocolTest::DeviceMessagePartialReturnsZero()
 {
@@ -400,14 +409,16 @@ void ProtocolTest::DeviceMessageBadTypeIsError()
     DeviceMessage message;
 
     // UhidOutput：明确不支持，必须报错让上层断开，而不是当"数据不够"一直等
-    QCOMPARE(DeviceMessage::TryParse(QByteArray(1, static_cast<char>(3)), message), qint32(-1));
+    QCOMPARE(DeviceMessage::TryParse(
+                 QByteArray(1, static_cast<char>(static_cast<quint8>(DeviceMessage::Type::UhidOutput))), message),
+             qint32(-1));
 
     // 完全不认识的类型
     QCOMPARE(DeviceMessage::TryParse(QByteArray(1, static_cast<char>(99)), message), qint32(-1));
 
-    // 长度大到离谱，说明字节流已经错位
+    // 长度大到离谱，说明字节流已经错位（用 Clipboard 的真实类型号，别写死数字）
     QByteArray oversized;
-    AppendU8(oversized, 1);
+    AppendU8(oversized, static_cast<quint8>(DeviceMessage::Type::Clipboard));
     AppendU32(oversized, static_cast<quint32>(kMaxMessageBytes) + 1u);
     QCOMPARE(DeviceMessage::TryParse(oversized, message), qint32(-1));
 }

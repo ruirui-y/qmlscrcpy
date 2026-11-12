@@ -37,6 +37,7 @@ public:
     void Stop();                                                                                // 幂等，不管 Start 成没成功都能调
     QTcpSocket *TakeVideoSocket();                                                              // 成功后由调用方接管，没人接手时本对象负责关闭
     QTcpSocket *TakeControlSocket();
+    QTcpSocket *ControlSocket() const;                                                          // 控制 socket，读设备消息用；所有权还是会话的
     bool SendControl(const QByteArray &message);                                                // 往控制 socket 写一条消息；没连上返回 false                                                            // 同上
 
 private:
