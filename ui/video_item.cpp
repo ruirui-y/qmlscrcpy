@@ -12,6 +12,7 @@
 #include <QOpenGLShaderProgram>
 #include <QTimer>
 
+#include "base/log.h"
 #include "stream/perf_stats.h"
 
 using qsc::stream::Frame;
@@ -438,11 +439,14 @@ void VideoItem::EmitControlMessage(const QByteArray &message)
 {
     if (message.isEmpty())
     {
+        qCDebug(qsc::base::lcInput) << "消息为空，丢掉（点在黑边上或键没映射）";
         return;
     }
+    qCDebug(qsc::base::lcInput) << "发出消息" << message.size() << "字节" << message.left(2).toHex();
     emit ControlMessageReady(message);
 }
 
+// 鼠标按下：先拿焦点，再换算坐标发触摸按下
 void VideoItem::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton)
@@ -458,6 +462,7 @@ void VideoItem::mousePressEvent(QMouseEvent *event)
     event->accept();
 }
 
+// 按住移动才发，否则设备会当成悬停
 void VideoItem::mouseMoveEvent(QMouseEvent *event)
 {
     // 只有按着左键才发移动，否则设备会当成悬停乱跳
@@ -472,6 +477,7 @@ void VideoItem::mouseMoveEvent(QMouseEvent *event)
     event->accept();
 }
 
+// 鼠标抬起：发触摸抬起
 void VideoItem::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton)
@@ -485,6 +491,7 @@ void VideoItem::mouseReleaseEvent(QMouseEvent *event)
     event->accept();
 }
 
+// 滚轮按下 120 为一格，换算成滚动消息
 void VideoItem::wheelEvent(QWheelEvent *event)
 {
     // 一格的 delta 是 120，除下来就是滚了几格
@@ -500,6 +507,7 @@ void VideoItem::wheelEvent(QWheelEvent *event)
     event->accept();
 }
 
+// 按键按下：没映射的键交回基类处理
 void VideoItem::keyPressEvent(QKeyEvent *event)
 {
     const QByteArray message = keys_.Press(event->key(), event->modifiers(), event->isAutoRepeat());
@@ -512,6 +520,7 @@ void VideoItem::keyPressEvent(QKeyEvent *event)
     event->accept();
 }
 
+// 按键抬起：同时清掉这个键的重复计数
 void VideoItem::keyReleaseEvent(QKeyEvent *event)
 {
     const QByteArray message = keys_.Release(event->key(), event->modifiers());

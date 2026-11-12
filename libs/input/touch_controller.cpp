@@ -21,23 +21,27 @@ constexpr float kScrollUnitsPerNotch = 16.0f;
 
 TouchController::TouchController(const CoordinateMapper *mapper) : mapper_(mapper) {}
 
+// 左键按下：换算坐标后发触摸按下
 QByteArray TouchController::Press(const QPointF &pos)
 {
     pressed_ = true;
     return MakeTouch(kActionDown, pos);
 }
 
+// 按住拖动：发触摸移动
 QByteArray TouchController::Move(const QPointF &pos)
 {
     return MakeTouch(kActionMove, pos);
 }
 
+// 左键抬起：压力归零、清按键状态
 QByteArray TouchController::Release(const QPointF &pos)
 {
     pressed_ = false;
     return MakeTouch(kActionUp, pos);
 }
 
+// 滚轮：正数表示往上滚
 QByteArray TouchController::Scroll(const QPointF &pos, int notches)
 {
     if (mapper_ == nullptr)

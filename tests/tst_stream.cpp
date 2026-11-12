@@ -25,6 +25,7 @@ private slots:
     void DecodeLiveStream();
 };
 
+// 真机码流喂解码器，确认能解出 YUV420P
 void StreamTest::DecodeLiveStream()
 {
     if (!qEnvironmentVariableIsSet("QS_ADB_PATH")
@@ -44,7 +45,7 @@ void StreamTest::DecodeLiveStream()
     params.server_local_path_ = server_path;
     params.bit_rate_ = 2000000;
     params.max_size_ = 720;
-    params.log_level_ = QStringLiteral("error");    // 只看错误，别刷屏
+    params.log_level_ = QStringLiteral("error");                                                // 只看错误，别刷屏
 
     ServerSession session(params);
     const ConnectResult result = session.Start();

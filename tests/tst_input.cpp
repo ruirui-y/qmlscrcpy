@@ -15,12 +15,14 @@ quint8 U8(const QByteArray &data, int offset)
     return static_cast<quint8>(data.at(offset));
 }
 
+// 从大端字节里读 2 字节
 quint16 U16(const QByteArray &data, int offset)
 {
     return static_cast<quint16>((static_cast<quint8>(data.at(offset)) << 8)
                                 | static_cast<quint8>(data.at(offset + 1)));
 }
 
+// 从大端字节里读 4 字节
 quint32 U32(const QByteArray &data, int offset)
 {
     quint32 value = 0;
@@ -31,6 +33,7 @@ quint32 U32(const QByteArray &data, int offset)
     return value;
 }
 
+// 从大端字节里读 8 字节
 quint64 U64(const QByteArray &data, int offset)
 {
     quint64 value = 0;
@@ -41,6 +44,7 @@ quint64 U64(const QByteArray &data, int offset)
     return value;
 }
 
+// 按有符号读 2 字节定点
 qint16 I16(const QByteArray &data, int offset)
 {
     return static_cast<qint16>(U16(data, offset));

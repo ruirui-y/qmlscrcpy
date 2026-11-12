@@ -26,6 +26,7 @@ target_include_directories(QmlScrcpy PRIVATE ${PROJECT_SOURCE_DIR})
 
 target_link_libraries(QmlScrcpy PRIVATE
     qs_options
+    qsc_base
     qsc_session
     qsc_stream
     qsc_input

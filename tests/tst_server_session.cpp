@@ -26,6 +26,7 @@ private slots:
     void ConnectAndReadFirstPacket();
 };
 
+// 真机建链并读到第一个视频包
 void ServerSessionTest::ConnectAndReadFirstPacket()
 {
     if (!qEnvironmentVariableIsSet("QS_ADB_PATH")

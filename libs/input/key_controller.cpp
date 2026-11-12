@@ -57,6 +57,7 @@ QByteArray KeyController::Release(int qt_key, Qt::KeyboardModifiers modifiers)
     return protocol::ControlMessage::InjectKeycode(event);
 }
 
+// 清掉所有按键的重复计数
 void KeyController::Reset()
 {
     repeats_.clear();

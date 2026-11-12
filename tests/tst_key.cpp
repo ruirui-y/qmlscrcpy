@@ -7,11 +7,13 @@
 namespace
 {
 
+// 读 1 字节
 quint8 U8(const QByteArray &data, int offset)
 {
     return static_cast<quint8>(data.at(offset));
 }
 
+// 从大端字节里读 4 字节
 quint32 U32(const QByteArray &data, int offset)
 {
     quint32 value = 0;

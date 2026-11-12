@@ -1,27 +1,112 @@
 #include "app_settings.h"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QSettings>
 
 namespace
 {
 
-// 配置写在 exe 旁边的 userdata.ini：用户能直接看到、删掉也不影响启动
-QSettings &Store()
+// 两个文件都在 exe 旁边：绿色软件，拷走整目录就能用
+QString FilePathInExeDir(const char *file_name)
 {
-    static QSettings settings(QCoreApplication::applicationDirPath() + QStringLiteral("/userdata.ini"),
-                              QSettings::IniFormat);
+    return QCoreApplication::applicationDirPath() + QLatin1Char('/') + QString::fromLatin1(file_name);
+}
+
+// 用户配置：只读，绝不让 QSettings 改写，否则注释会被转义成 %23 之类
+QSettings &ConfigStore()
+{
+    static QSettings settings(FilePathInExeDir("config.ini"), QSettings::IniFormat);
     return settings;
 }
 
+// 程序自己的状态：读写都在这，随便重写
+QSettings &WindowStore()
+{
+    static QSettings settings(FilePathInExeDir("window.ini"), QSettings::IniFormat);
+    return settings;
+}
+
+// 默认配置模板，带注释；只在文件不存在时写一次
+const char *const kDefaultConfig = R"(# QmlScrcpy 配置，改完重启生效
+# 日志级别：debug / info / warning / critical
+[log]
+level=info
+to_file=true
+keep_days=15
+
+# 视频采集：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
+[video]
+max_size=0
+bit_rate=12000000
+)";
+
 } // namespace
 
-AppSettings::AppSettings(QObject *parent) : QObject(parent) {}
+AppSettings::AppSettings(QObject *parent) : QObject(parent)
+{
+    EnsureDefaultConfig();
+}
 
-// 读上次记下的窗口位置和大小
+// config.ini 不存在时写一份带注释的模板
+void AppSettings::EnsureDefaultConfig()
+{
+    // 已经存在就不动，用户改过的值不能被覆盖
+    if (QFile::exists(ConfigPath()))
+    {
+        return;
+    }
+
+    QFile file(ConfigPath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        return;
+    }
+    file.write(kDefaultConfig);
+    file.close();
+}
+
+QString AppSettings::ConfigPath() const
+{
+    return FilePathInExeDir("config.ini");
+}
+
+QString AppSettings::WindowPath() const
+{
+    return FilePathInExeDir("window.ini");
+}
+
+// 日志级别：配置里写字符串，解析交给调用方
+QString AppSettings::LogLevelText() const
+{
+    return ConfigStore().value(QStringLiteral("log/level"), QStringLiteral("info")).toString();
+}
+
+bool AppSettings::LogToFile() const
+{
+    return ConfigStore().value(QStringLiteral("log/to_file"), true).toBool();
+}
+
+int AppSettings::LogKeepDays() const
+{
+    return ConfigStore().value(QStringLiteral("log/keep_days"), 15).toInt();
+}
+
+// 采集长边上限：0 表示不缩放
+int AppSettings::VideoMaxSize() const
+{
+    return ConfigStore().value(QStringLiteral("video/max_size"), 0).toInt();
+}
+
+int AppSettings::VideoBitRate() const
+{
+    return ConfigStore().value(QStringLiteral("video/bit_rate"), 12000000).toInt();
+}
+
+// 读窗口尺寸；没记录过返回空矩形
 QRect AppSettings::VideoGeometry(const QString &key) const
 {
-    QSettings &store = Store();
+    QSettings &store = WindowStore();
     store.beginGroup(key);
     const int x = store.value(QStringLiteral("x"), -1).toInt();
     const int y = store.value(QStringLiteral("y"), -1).toInt();
@@ -36,7 +121,7 @@ QRect AppSettings::VideoGeometry(const QString &key) const
     return QRect(x, y, width, height);
 }
 
-// 记下窗口位置和大小
+// 记窗口尺寸；位置和尺寸一起写，读的时候方便
 void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width, int height)
 {
     if (width <= 0 || height <= 0)
@@ -44,7 +129,7 @@ void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width,
         return;
     }
 
-    QSettings &store = Store();
+    QSettings &store = WindowStore();
     store.beginGroup(key);
     store.setValue(QStringLiteral("x"), x);
     store.setValue(QStringLiteral("y"), y);
@@ -54,10 +139,10 @@ void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width,
     store.sync();
 }
 
-// 读上次记下的窗口位置
+// 读窗口位置；没记录过返回 (-1,-1)
 QPoint AppSettings::VideoPosition(const QString &key) const
 {
-    QSettings &store = Store();
+    QSettings &store = WindowStore();
     store.beginGroup(key);
     const int x = store.value(QStringLiteral("x"), -1).toInt();
     const int y = store.value(QStringLiteral("y"), -1).toInt();
@@ -65,10 +150,10 @@ QPoint AppSettings::VideoPosition(const QString &key) const
     return QPoint(x, y);
 }
 
-// 只记窗口位置
+// 只记位置，不碰尺寸
 void AppSettings::SaveVideoPosition(const QString &key, int x, int y)
 {
-    QSettings &store = Store();
+    QSettings &store = WindowStore();
     store.beginGroup(key);
     store.setValue(QStringLiteral("x"), x);
     store.setValue(QStringLiteral("y"), y);

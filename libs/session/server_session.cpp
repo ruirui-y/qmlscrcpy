@@ -1,5 +1,7 @@
 #include "session/server_session.h"
 
+#include "base/log.h"
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QElapsedTimer>
@@ -488,6 +490,7 @@ bool ServerSession::SendControl(const QByteArray &message)
 {
     if (control_socket_ == nullptr || control_socket_->state() != QAbstractSocket::ConnectedState)
     {
+        qCDebug(qsc::base::lcInput) << "控制 socket 不可用" << (control_socket_ == nullptr);
         return false;
     }
 

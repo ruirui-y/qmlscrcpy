@@ -54,6 +54,7 @@ private slots:
     void ScidIsFixedWidthHexWhenSet();
 };
 
+// 默认参数只带必须的那几个
 void ServerArgsTest::DefaultArgs_shape()
 {
     ServerParams params;
@@ -70,6 +71,7 @@ void ServerArgsTest::DefaultArgs_shape()
     QVERIFY(args.contains(QStringLiteral("audio=false")));
 }
 
+// 没设置的可选参数不出现
 void ServerArgsTest::DefaultArgs_omitsOptionalParams()
 {
     ServerParams params;
@@ -86,6 +88,7 @@ void ServerArgsTest::DefaultArgs_omitsOptionalParams()
     QCOMPARE(HasArg(args, QStringLiteral("scid=")), false);
 }
 
+// max_size 为 0 时不传
 void ServerArgsTest::MaxSizeZeroIsOmitted()
 {
     ServerParams params;
@@ -96,6 +99,7 @@ void ServerArgsTest::MaxSizeZeroIsOmitted()
     QVERIFY(ServerArgs::Build(params).contains(QStringLiteral("max_size=1080")));
 }
 
+// max_fps 只有正数才传
 void ServerArgsTest::MaxFpsOnlyWhenPositive()
 {
     ServerParams params;
@@ -106,6 +110,7 @@ void ServerArgsTest::MaxFpsOnlyWhenPositive()
     QCOMPARE(HasArg(ServerArgs::Build(params), QStringLiteral("max_fps")), false);
 }
 
+// 只有 forward 模式才传 tunnel_forward
 void ServerArgsTest::TunnelForwardOnlyInForwardMode()
 {
     ServerParams params;
@@ -116,6 +121,7 @@ void ServerArgsTest::TunnelForwardOnlyInForwardMode()
     QCOMPARE(HasArg(ServerArgs::Build(params), QStringLiteral("tunnel_forward")), false);
 }
 
+// 采集方向的测试数据
 void ServerArgsTest::CaptureOrientationVariants_data()
 {
     QTest::addColumn<int>("lock");
@@ -129,6 +135,7 @@ void ServerArgsTest::CaptureOrientationVariants_data()
     QTest::newRow("锁原始方向") << 2 << 0 << QStringLiteral("capture_orientation=@");
 }
 
+// 锁定和解锁两种方向参数形式
 void ServerArgsTest::CaptureOrientationVariants()
 {
     QFETCH(int, lock);
@@ -142,6 +149,7 @@ void ServerArgsTest::CaptureOrientationVariants()
     QVERIFY(ServerArgs::Build(params).contains(expected));
 }
 
+// 可选参数只有设了才出现
 void ServerArgsTest::OptionalParamsAppearOnlyWhenSet()
 {
     ServerParams params;
@@ -162,6 +170,7 @@ void ServerArgsTest::OptionalParamsAppearOnlyWhenSet()
     QCOMPARE(args.count(QStringLiteral("codec_options=profile=1,level=2")), 1);
 }
 
+// scid 传了就按 8 位十六进制
 void ServerArgsTest::ScidIsFixedWidthHexWhenSet()
 {
     ServerParams params;

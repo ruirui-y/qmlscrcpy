@@ -17,6 +17,7 @@
 | P4a | 输入层：坐标换算 + 触摸/滚轮消息（5 项单测） | ✅ |
 | P4b | 输入层：键盘映射 + metaState + 自动重复（7 项单测） | ✅ |
 | P4c | 接线：画布收鼠标键盘 → 控制 socket | ✅ |
+| P4d | 日志模块（按天分文件、保留 15 天）+ INI 配置 | ✅ 输入仍在排查 |
 
 已经能用的功能：
 
@@ -49,6 +50,7 @@
 | [视频链路](docs/视频链路.md) | 切帧、解码、Frame 引用计数、耗时埋点 |
 | [渲染方案](docs/渲染方案.md) | 三种渲染路径对比、为什么用 FBO、踩坑记录 |
 | [输入层](docs/输入层.md) | 坐标换算公式、触摸/滚轮消息、键盘（进行中） |
+| [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、输入排查四步 |
 | [构建与测试](docs/构建与测试.md) | 命令、环境变量、测试清单、环境坑 |
 
 ## 构建与测试
@@ -71,6 +73,7 @@ Qt 装在别处就改 `CMakePresets.json` 里 `CMAKE_PREFIX_PATH` 那一行。
 $env:QS_ADB_PATH="C:\path\to\adb.exe"
 $env:QS_DEVICE_SERIAL="192.168.31.115:5555"   # 可选，设了就自动连
 $env:QS_PERF="1"                              # 可选，打印每秒链路耗时
+$env:QS_LOG_LEVEL="debug"                     # 可选，临时提高日志级别
 build\windows-debug\bin\Debug\QmlScrcpy.exe
 ```
 

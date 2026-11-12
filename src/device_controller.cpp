@@ -1,5 +1,8 @@
 #include "device_controller.h"
 
+#include "app_settings.h"
+#include "base/log.h"
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QTcpSocket>
@@ -93,8 +96,9 @@ void DeviceController::Connect(const QString &serial)
     qsc::session::ServerParams params;
     params.serial_ = serial.trimmed();
     params.server_local_path_ = QCoreApplication::applicationDirPath() + "/scrcpy-server";
-    params.max_size_ = 0;                                                                       // 0 = 不缩放，用设备原生分辨率；720 拉到全屏窗口就是糊的
-    params.bit_rate_ = 12000000;                                                                // 原生分辨率下 8 Mbps 也不够，给到 12 Mbps
+    AppSettings settings;                                                                        // 采集参数走配置，改 config.ini 就能调
+    params.max_size_ = settings.VideoMaxSize();                                                 // 0 = 不缩放，用设备原生分辨率
+    params.bit_rate_ = settings.VideoBitRate();
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下（建链是阻塞的）
@@ -178,10 +182,13 @@ void DeviceController::SendControl(const QByteArray &message)
 {
     if (!session_ || message.isEmpty())
     {
+        qCDebug(qsc::base::lcInput) << "没有会话，输入消息丢掉" << message.size();
         return;
     }
-    session_->SendControl(message);
+    const bool sent = session_->SendControl(message);
+    qCDebug(qsc::base::lcInput) << "写控制 socket" << message.size() << "字节 结果" << sent;
 }
+// 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {
     // 顺序不能反：读线程里存着解码器的裸指针，先停线程再销毁解码器

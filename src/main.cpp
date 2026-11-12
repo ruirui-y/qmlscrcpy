@@ -11,6 +11,7 @@
 #include <QWindow>
 
 #include "app_settings.h"
+#include "base/log.h"
 #include "device_controller.h"
 #include "stream/frame.h"
 #include "stream/perf_stats.h"
@@ -70,6 +71,23 @@ int main(int argc, char *argv[])
     // 连接/断开这套逻辑放控制器里，界面只负责点按钮和绑状态文字
     DeviceController controller;
     AppSettings app_settings;
+
+    // 日志要先装好：QML 加载失败这类信息只能靠 message handler 拿到
+    qsc::base::LogConfig log_config;
+    log_config.level = qsc::base::ParseLevel(app_settings.LogLevelText());
+    if (app_settings.LogToFile())
+    {
+        log_config.dir_path = QCoreApplication::applicationDirPath() + QStringLiteral("/Log");
+        log_config.keep_days = app_settings.LogKeepDays();
+    }
+    // 命令行临时调级别，不用改配置文件
+    const QByteArray env_level = qgetenv("QS_LOG_LEVEL");
+    if (!env_level.isEmpty())
+    {
+        log_config.level = qsc::base::ParseLevel(QString::fromLocal8Bit(env_level));
+    }
+    qsc::base::Init(log_config);
+    qInfo() << "[app] 配置" << app_settings.ConfigPath() << "窗口状态" << app_settings.WindowPath() << "日志目录" << log_config.dir_path;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("deviceController"), &controller);

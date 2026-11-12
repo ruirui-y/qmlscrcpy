@@ -11,7 +11,6 @@
 using namespace qsc::protocol;
 
 // 协议层的契约测试：断言的是"线上字节长什么样"，不是实现细节。
-// 每条消息的布局都对着 scrcpy 3.x 的 ControlMessage 抄，改错一个字节这里就该红。
 class ProtocolTest : public QObject
 {
     Q_OBJECT
@@ -35,10 +34,11 @@ private slots:
     void DeviceMessageBadTypeIsError();
 };
 
+// 标志位在高位，时间戳在低 62 位
 void ProtocolTest::VideoHeaderStoresFlagsInTopBits()
 {
     VideoPacketHeader header;
-    header.pts_flags_ = VideoPacketHeader::kConfigFlag | 0x0012D687ULL;  // 1234567 微秒
+    header.pts_flags_ = VideoPacketHeader::kConfigFlag | 0x0012D687ULL;                         // 1234567 微秒
     header.size_ = 0x00001000;
 
     const QByteArray bytes = header.Serialize();
@@ -46,12 +46,13 @@ void ProtocolTest::VideoHeaderStoresFlagsInTopBits()
 
     // 大端：最高位在第一个字节，配置包的标志一置上就该是 0x80
     QCOMPARE(static_cast<quint8>(bytes.at(0)), quint8(0x80));
-    QCOMPARE(static_cast<quint8>(bytes.at(8)), quint8(0x00));   // 长度高字节
+    QCOMPARE(static_cast<quint8>(bytes.at(8)), quint8(0x00));                                   // 长度高字节
     QCOMPARE(static_cast<quint8>(bytes.at(9)), quint8(0x00));
     QCOMPARE(static_cast<quint8>(bytes.at(10)), quint8(0x10));
-    QCOMPARE(static_cast<quint8>(bytes.at(11)), quint8(0x00));  // 长度低字节
+    QCOMPARE(static_cast<quint8>(bytes.at(11)), quint8(0x00));                                  // 长度低字节
 }
 
+// 标志位组合的测试数据
 void ProtocolTest::VideoHeaderFlagCombinations_data()
 {
     QTest::addColumn<quint64>("pts_flags");
@@ -66,6 +67,7 @@ void ProtocolTest::VideoHeaderFlagCombinations_data()
                               << true << true << qint64(0x44);
 }
 
+// 各种标志位组合都能正确解析
 void ProtocolTest::VideoHeaderFlagCombinations()
 {
     QFETCH(quint64, pts_flags);
@@ -81,6 +83,7 @@ void ProtocolTest::VideoHeaderFlagCombinations()
     QCOMPARE(header.PtsUs(), pts_us);
 }
 
+// 不足 12 字节时解析失败
 void ProtocolTest::VideoHeaderNeedsTwelveBytes()
 {
     VideoPacketHeader header;
@@ -94,6 +97,7 @@ void ProtocolTest::VideoHeaderNeedsTwelveBytes()
     QCOMPARE(VideoPacketHeader::Parse(bytes, header), false);
 }
 
+// 序列化再解析能回到原值
 void ProtocolTest::VideoHeaderRoundTrip()
 {
     VideoPacketHeader original;
@@ -108,12 +112,13 @@ void ProtocolTest::VideoHeaderRoundTrip()
     QCOMPARE(parsed.PtsUs(), qint64(987654321));
 }
 
+// 按键消息 14 字节的字段位置
 void ProtocolTest::KeycodeLayout()
 {
     KeycodeEvent event;
-    event.action_ = 0;         // 按下
-    event.keycode_ = 4;        // AKEYCODE_BACK
-    event.repeat_ = 2;         // 长按第三次
+    event.action_ = 0;                                                                          // 按下
+    event.keycode_ = 4;                                                                         // AKEYCODE_BACK
+    event.repeat_ = 2;                                                                          // 长按第三次
     event.meta_state_ = 0x1000;
 
     const QByteArray bytes = ControlMessage::InjectKeycode(event);
@@ -140,6 +145,7 @@ void ProtocolTest::KeycodeLayout()
     QCOMPARE(meta_state, quint32(0x1000));
 }
 
+// 注文本按 UTF-8 字符边界截断
 void ProtocolTest::InjectTextTruncatesOnCharBoundary()
 {
     // 短的照原样写：类型 1 + 长度 4 + 正文 3
@@ -162,11 +168,10 @@ void ProtocolTest::InjectTextTruncatesOnCharBoundary()
     QCOMPARE(long_ascii.size(), 1 + 4 + kMaxInjectTextBytes);
 
     // "a" + 100 个汉字 = 1 + 300 = 301 字节。截到 300 会劈开最后一个汉字，
-    // 必须退到 298，否则设备端收到半个 UTF-8 字符就是乱码
     QString mixed = QStringLiteral("a");
     for (int i = 0; i < 100; ++i)
     {
-        mixed.append(QChar(0x4E2D));  // 中
+        mixed.append(QChar(0x4E2D));                                                            // 中
     }
     const QByteArray mixed_bytes = ControlMessage::InjectText(mixed);
 
@@ -179,15 +184,16 @@ void ProtocolTest::InjectTextTruncatesOnCharBoundary()
 
     QCOMPARE(mixed_length, quint32(298));
     const QString decoded = QString::fromUtf8(mixed_body);
-    QCOMPARE(decoded.size(), 100);  // 1 个 a + 99 个汉字
+    QCOMPARE(decoded.size(), 100);                                                              // 1 个 a + 99 个汉字
     QCOMPARE(decoded.at(0), QChar('a'));
     QCOMPARE(decoded.at(1), QChar(0x4E2D));
 }
 
+// 触摸消息 32 字节的字段位置
 void ProtocolTest::TouchLayout()
 {
     TouchEvent event;
-    event.action_ = 0;                    // 按下
+    event.action_ = 0;                                                                          // 按下
     event.pointer_id_ = 0xFFFFFFFFFFFFFFFFULL;
     event.position_ = QPoint(100, 200);
     event.screen_size_ = QSize(1080, 1920);
@@ -234,6 +240,7 @@ void ProtocolTest::TouchLayout()
     QCOMPARE(buttons, quint32(1));
 }
 
+// 压力定点值的测试数据
 void ProtocolTest::TouchPressureIsFixedPoint_data()
 {
     QTest::addColumn<float>("pressure");
@@ -246,6 +253,7 @@ void ProtocolTest::TouchPressureIsFixedPoint_data()
     QTest::newRow("超 1 截到上限") << 2.0f << quint16(0xFFFF);
 }
 
+// 压力按 16 位定点编码
 void ProtocolTest::TouchPressureIsFixedPoint()
 {
     QFETCH(float, pressure);
@@ -262,6 +270,7 @@ void ProtocolTest::TouchPressureIsFixedPoint()
     QCOMPARE(actual, expected);
 }
 
+// 滚轮归一化并夹到 -1 到 1
 void ProtocolTest::ScrollNormalizesAndClamps()
 {
     ScrollEvent event;
@@ -275,7 +284,7 @@ void ProtocolTest::ScrollNormalizesAndClamps()
     QCOMPARE(static_cast<quint16>((static_cast<quint8>(bytes.at(13)) << 8) | static_cast<quint8>(bytes.at(14))),
              quint16(0x7FFF));
     QCOMPARE(static_cast<quint16>((static_cast<quint8>(bytes.at(15)) << 8) | static_cast<quint8>(bytes.at(16))),
-             quint16(0x8000));  // -32768 按无符号看
+             quint16(0x8000));                                                                  // -32768 按无符号看
 
     // 8 格 → 归一化 0.5 → 0x4000
     event.h_scroll_ = 8.0f;
@@ -287,6 +296,7 @@ void ProtocolTest::ScrollNormalizesAndClamps()
              quint16(0x0000));
 }
 
+// 无负载消息只有类型字节
 void ProtocolTest::SimpleMessagesCarryNoPayload()
 {
     QCOMPARE(ControlMessage::CollapsePanels(), QByteArray(1, static_cast<char>(7)));
@@ -302,7 +312,7 @@ void ProtocolTest::SimpleMessagesCarryNoPayload()
     const QByteArray back_down = ControlMessage::BackOrScreenOn(true);
     QCOMPARE(back_down.size(), 2);
     QCOMPARE(static_cast<quint8>(back_down.at(0)), quint8(4));
-    QCOMPARE(static_cast<quint8>(back_down.at(1)), quint8(0));  // 0 = ACTION_DOWN
+    QCOMPARE(static_cast<quint8>(back_down.at(1)), quint8(0));                                  // 0 = ACTION_DOWN
 
     const QByteArray get_clipboard = ControlMessage::GetClipboard(ClipboardAction::Cut);
     QCOMPARE(get_clipboard.size(), 2);
@@ -310,6 +320,7 @@ void ProtocolTest::SimpleMessagesCarryNoPayload()
     QCOMPARE(static_cast<quint8>(get_clipboard.at(1)), quint8(2));
 }
 
+// 剪贴板消息的字段布局
 void ProtocolTest::ClipboardLayout()
 {
     const QByteArray bytes = ControlMessage::SetClipboard(0x0102030405060708ULL, true, QStringLiteral("hi"));
@@ -340,6 +351,7 @@ void ProtocolTest::ClipboardLayout()
     QCOMPARE(empty.size(), 14);
 }
 
+// 解析设备发来的剪贴板
 void ProtocolTest::DeviceMessageClipboard()
 {
     const QByteArray utf8 = QStringLiteral("剪贴板").toUtf8();
@@ -364,6 +376,7 @@ void ProtocolTest::DeviceMessageClipboard()
     QCOMPARE(message.sequence_, quint64(0x1122334455667788ULL));
 }
 
+// 半包返回 0，表示还要继续等
 void ProtocolTest::DeviceMessagePartialReturnsZero()
 {
     DeviceMessage message;
@@ -381,6 +394,7 @@ void ProtocolTest::DeviceMessagePartialReturnsZero()
     QCOMPARE(DeviceMessage::TryParse(partial, message), qint32(0));
 }
 
+// 未知类型返回 -1，表示流坏了
 void ProtocolTest::DeviceMessageBadTypeIsError()
 {
     DeviceMessage message;

@@ -14,7 +14,6 @@ namespace
 {
 
 // QCOMPARE 是宏，直接写 QStringList{"a", "b"} 的话花括号里的逗号会被当成宏参数分隔符。
-// 包一层函数，逗号就落在括号里了。
 QStringList Argv(std::initializer_list<QString> parts)
 {
     QStringList list;
@@ -28,8 +27,6 @@ QStringList Argv(std::initializer_list<QString> parts)
 } // namespace
 
 // adb 参数拼装的契约测试。
-// 断言的是"最终交给 QProcess 的 argv 长什么样"——出问题的地方永远是参数顺序、
-// -s 的位置、带空格的路径被拆成两个参数这类细节。
 class AdbArgsTest : public QObject
 {
     Q_OBJECT
@@ -49,11 +46,13 @@ private slots:
     void RunRealAdbVersion();
 };
 
+// 只有一台设备时不带 -s，参数就是一条 devices
 void AdbArgsTest::DevicesIsBareCommand()
 {
     QCOMPARE(AdbArgs::Devices(), Argv({QStringLiteral("devices")}));
 }
 
+// -s 和序列号插在参数最前面
 void AdbArgsTest::SerialIsInsertedAtFront()
 {
     const QStringList args = AdbArgs::Push(QStringLiteral("ABC"), QStringLiteral("C:/x.apk"),
@@ -65,14 +64,15 @@ void AdbArgsTest::SerialIsInsertedAtFront()
     QCOMPARE(args.at(2), QStringLiteral("push"));
 }
 
+// serial 为空时不留下孤零零的 -s
 void AdbArgsTest::EmptySerialIsOmitted()
 {
     // 只有一台设备时 serial 可以为空，这时不能留下一个孤零零的 -s，
-    // 否则 adb 会把后面的子命令当成序列号
     const QStringList args = AdbArgs::Shell(QString(), QStringList{QStringLiteral("getprop")});
     QCOMPARE(args, Argv({QStringLiteral("shell"), QStringLiteral("getprop")}));
 }
 
+// 带空格的本地路径必须保持成一个参数
 void AdbArgsTest::PushKeepsPathWithSpacesAsOneArgument()
 {
     const QStringList args = AdbArgs::Push(QStringLiteral("ABC"),
@@ -84,6 +84,7 @@ void AdbArgsTest::PushKeepsPathWithSpacesAsOneArgument()
     QCOMPARE(args.at(4), QStringLiteral("/sdcard/我的 文件.apk"));
 }
 
+// reverse 是设备侧名字在前、本机 tcp 端口在后
 void AdbArgsTest::ReverseUsesTcpLocalAndLocalAbstractRemote()
 {
     const QStringList args = AdbArgs::Reverse(QStringLiteral("ABC"),
@@ -100,6 +101,7 @@ void AdbArgsTest::ReverseUsesTcpLocalAndLocalAbstractRemote()
                    QStringLiteral("--remove"), QStringLiteral("localabstract:scrcpy_000003e7")}));
 }
 
+// forward 反过来：本机端口在前、设备侧名字在后
 void AdbArgsTest::ForwardVariants()
 {
     QCOMPARE(AdbArgs::Forward(QStringLiteral("ABC"), 27183, QStringLiteral("scrcpy_00000001")),
@@ -112,6 +114,7 @@ void AdbArgsTest::ForwardVariants()
                    QStringLiteral("--remove"), QStringLiteral("tcp:27183")}));
 }
 
+// shell 命令每个词单独成参数，不拼字符串
 void AdbArgsTest::ShellKeepsEveryWordSeparate()
 {
     const QStringList command{QStringLiteral("CLASSPATH=/data/local/tmp/scrcpy-server.jar"),
@@ -130,6 +133,7 @@ void AdbArgsTest::ShellKeepsEveryWordSeparate()
     QCOMPARE(args.at(7), QStringLiteral("3.3.3"));
 }
 
+// tcpip 和 connect 不吃 -s
 void AdbArgsTest::TcpipAndConnectDoNotTakeSerial()
 {
     QCOMPARE(AdbArgs::Tcpip(QStringLiteral("ABC"), 5555),
@@ -143,6 +147,7 @@ void AdbArgsTest::TcpipAndConnectDoNotTakeSerial()
              Argv({QStringLiteral("disconnect"), QStringLiteral("192.168.0.174:5555")}));
 }
 
+// socket 名固定 8 位十六进制
 void AdbArgsTest::SocketNameIsFixedWidthHex()
 {
     QCOMPARE(AdbArgs::SocketName(0u), QStringLiteral("scrcpy_00000000"));
@@ -153,6 +158,7 @@ void AdbArgsTest::SocketNameIsFixedWidthHex()
     QCOMPARE(AdbArgs::SocketName(1u).size(), 15);
 }
 
+// 解析设备列表时跳过表头、兼容 CRLF
 void AdbArgsTest::ParseDevicesHandlesCrLfAndHeader()
 {
     // Windows 上 adb 输出的是 \r\n，state 后面会带一个 \r，不 trim 就比不对
@@ -173,6 +179,7 @@ void AdbArgsTest::ParseDevicesHandlesCrLfAndHeader()
     QCOMPARE(devices.at(3).state_, QStringLiteral("unauthorized"));
 }
 
+// adb 自己打的噪声行不影响解析
 void AdbArgsTest::ParseDevicesIgnoresAdbNoise()
 {
     const QByteArray sample = "* daemon not running; starting now at tcp:5037\r\n"
@@ -187,10 +194,10 @@ void AdbArgsTest::ParseDevicesIgnoresAdbNoise()
     QCOMPARE(devices.at(0).state_, QStringLiteral("device"));
 }
 
+// 真跑一次 adb version，验证 QProcess 这条路
 void AdbArgsTest::RunRealAdbVersion()
 {
     // 真跑一次 adb，验证 QProcess 这条路通不通。
-    // 没配 QS_ADB_PATH 就跳过：单测不该依赖机器上装没装 platform-tools。
     if (!qEnvironmentVariableIsSet("QS_ADB_PATH"))
     {
         QSKIP("未设置 QS_ADB_PATH，跳过真实 adb 调用");

@@ -9,4 +9,4 @@ add_library(qsc_session STATIC
 
 target_include_directories(qsc_session PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-target_link_libraries(qsc_session PUBLIC qsc_adb qsc_protocol Qt5::Network)
+target_link_libraries(qsc_session PUBLIC qsc_base qsc_adb qsc_protocol Qt5::Network)

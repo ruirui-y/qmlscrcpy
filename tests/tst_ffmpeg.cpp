@@ -15,7 +15,6 @@ extern "C"
 }
 
 // 验证 third_party 里那份预编译 FFmpeg 真的能用：版本够、H.264 解码器在、上下文能开。
-// 这几条一旦红，P3 的视频链路根本没得谈，所以放在最前面当护栏。
 class FfmpegTest : public QObject
 {
     Q_OBJECT
@@ -28,12 +27,14 @@ private slots:
     void SwscaleHandlesPaddedStrides();
 };
 
+// FFmpeg 版本要够我们用到的 API
 void FfmpegTest::VersionIsUsable()
 {
     qInfo() << "avcodec" << avcodec_version() << "avutil" << avutil_version();
     QVERIFY(avcodec_version() >= AV_VERSION_INT(58, 0, 0));
 }
 
+// H.264 解码器必须存在
 void FfmpegTest::H264DecoderIsAvailable()
 {
     const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_H264);
@@ -41,6 +42,7 @@ void FfmpegTest::H264DecoderIsAvailable()
     QCOMPARE(codec->id, AV_CODEC_ID_H264);
 }
 
+// 按 H.264 能打开解码上下文
 void FfmpegTest::DecoderContextOpens()
 {
     const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_H264);
@@ -55,11 +57,10 @@ void FfmpegTest::DecoderContextOpens()
     QVERIFY(context == nullptr);
 }
 
+// 自造 32x32 的 YUV420P 帧走一遍转换
 void FfmpegTest::SwscaleConvertsSyntheticFrame()
 {
     // 自己造一个 32x32 的 YUV420P 帧走一遍转换。
-    // 这条不依赖解码器和设备：它过了就说明 sws_scale 的调用方式没问题，
-    // 崩溃只可能出在真实帧的平面指针或跨度上。
     const int width = 32;
     const int height = 32;
     const int chroma_width = width / 2;
@@ -81,10 +82,10 @@ void FfmpegTest::SwscaleConvertsSyntheticFrame()
     QVERIFY(image.pixelColor(width / 2, height / 2).isValid());
 }
 
+// 行跨度带填充时转换也不能错位
 void FfmpegTest::SwscaleHandlesPaddedStrides()
 {
     // 用真机的真实尺寸和真实跨度：328x720，Y 跨度 384、UU/VV 跨度 192。
-    // 过了说明转换对"跨度 > 宽度"没问题，那真机上的崩溃就只可能是帧数据本身的归属。
     const int width = 328;
     const int height = 720;
     const int stride_y = 384;

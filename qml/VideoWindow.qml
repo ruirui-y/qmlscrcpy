@@ -247,7 +247,7 @@ Window {
             x = position.x
             y = position.y
         }
-        const saved = appSettings.VideoGeometry("video")
+        const saved = appSettings.VideoGeometry("video_window")
         if (saved.width > 0) {
             width = saved.width
             height = saved.height
@@ -259,7 +259,7 @@ Window {
     // 第一帧到了、用户又没定过尺寸：把窗口调成和帧一样的物理像素（纹理 1:1 不插值）。
     // 原生分辨率常常比屏幕还大，所以宽和高都要按屏幕可用区域收缩，不能只夹宽度。
     onFrameSizeChanged: {
-        if (frameSize.width <= 0 || appSettings.VideoGeometry("video").width > 0) {
+        if (frameSize.width <= 0 || appSettings.VideoGeometry("video_window").width > 0) {
             return
         }
         const ratio = Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
@@ -296,7 +296,7 @@ Window {
         onTriggered: {
             appSettings.SaveVideoPosition("video_pos", videoWindow.x, videoWindow.y)
             if (ready) {
-                appSettings.SaveVideoGeometry("video", videoWindow.x, videoWindow.y,
+                appSettings.SaveVideoGeometry("video_window", videoWindow.x, videoWindow.y,
                                               videoWindow.width, videoWindow.height)
             }
         }

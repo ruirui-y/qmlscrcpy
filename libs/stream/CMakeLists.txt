@@ -14,4 +14,4 @@ add_library(qsc_stream STATIC
 
 target_include_directories(qsc_stream PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-target_link_libraries(qsc_stream PUBLIC qsc_protocol qs_ffmpeg Qt5::Core Qt5::Gui Qt5::Network)
+target_link_libraries(qsc_stream PUBLIC qsc_base qsc_protocol qs_ffmpeg Qt5::Core Qt5::Gui Qt5::Network)
