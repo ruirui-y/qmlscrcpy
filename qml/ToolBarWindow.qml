@@ -18,6 +18,24 @@ Window {
     visible: target !== null && target.visible
     color: "#1c1c1c"
     flags: Qt.Window | Qt.FramelessWindowHint | (pinned ? Qt.WindowStaysOnTopHint : Qt.NoHint)
+    // 独立窗口：主窗最小化时它不该跟着走，但投屏窗最小化时它要跟着
+    transientParent: null
+
+    // 跟着投屏窗一起最小化 / 还原（两扇独立窗口，不手动同步就会只剩一个）
+    Connections {
+        target: toolWindow.target
+
+        function onVisibilityChanged() {
+            if (!toolWindow.target) {
+                return
+            }
+            if (toolWindow.target.visibility === Window.Minimized) {
+                toolWindow.showMinimized()
+            } else if (toolWindow.target.visibility !== Window.Minimized && toolWindow.visibility === Window.Minimized) {
+                toolWindow.showNormal()
+            }
+        }
+    }
 
     // 贴紧投屏窗右侧；快到屏幕边缘就翻到左边
     function followX() {

@@ -35,6 +35,8 @@ Window {
            ? "QmlScrcpy — " + deviceController.deviceName : qsTr("QmlScrcpy — 投屏")
     color: "#000000"
     flags: Qt.Window | Qt.FramelessWindowHint
+    // 不做控制窗的附属窗口：否则主窗最小化会把投屏窗一起带走
+    transientParent: null
 
     ColumnLayout {
         anchors.fill: parent
@@ -73,8 +75,22 @@ Window {
                 anchors.left: parent.left
                 anchors.leftMargin: 22    // 让开左上角那个缩放把手
                 anchors.verticalCenter: parent.verticalCenter
-                text: videoWindow.title
-                color: "#d0d6de"
+                // 默认显示设备名 + 帧率 + 分辨率；有悬停提示时临时顶替
+                text: {
+                    if (deviceController.hint.length > 0) {
+                        return deviceController.hint
+                    }
+                    let text = deviceController.deviceName.length > 0
+                            ? deviceController.deviceName : qsTr("未连接")
+                    if (videoWindow.fps > 0) {
+                        text += "   " + videoWindow.fps + " fps"
+                    }
+                    if (videoWindow.frameSize.width > 0) {
+                        text += "   " + videoWindow.frameSize.width + "x" + videoWindow.frameSize.height
+                    }
+                    return text
+                }
+                color: deviceController.hint.length > 0 ? "#8fb8ff" : "#d0d6de"
                 font.pixelSize: 14
                 font.bold: true
             }

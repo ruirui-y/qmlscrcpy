@@ -220,20 +220,6 @@ Window {
             }
 
             Item { Layout.fillWidth: true }
-
-            Text {
-                text: videoWindow.fps > 0 ? videoWindow.fps + " fps" : qsTr("-- fps")
-                color: "#7c8698"
-                font.pixelSize: 12
-            }
-
-            Text {
-                text: videoWindow.frameSize.width > 0
-                      ? videoWindow.frameSize.width + " x " + videoWindow.frameSize.height
-                      : ""
-                color: "#7c8698"
-                font.pixelSize: 12
-            }
         }
 
         // 唯一的一行操作：输入 → 设备菜单 → 刷新 → 连接 → 断开
@@ -318,15 +304,6 @@ Window {
             }
         }
 
-        // 悬停提示（工具栏按钮上鼠标停一下，这里显示一句说明）
-        Text {
-            Layout.fillWidth: true
-            visible: deviceController.hint.length > 0
-            text: deviceController.hint
-            color: "#8fb8ff"
-            font.pixelSize: 12
-            elide: Text.ElideRight
-        }
 
         // 状态
         RowLayout {
