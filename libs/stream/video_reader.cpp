@@ -104,14 +104,12 @@ void VideoReader::run()
             return;
         }
 
-        // 切出负载，再把这一帧（头加负载）从缓冲区前头删掉
-        // 不删的话下一轮又从同一位置切，同一帧会被反复解码
+        // 切出负载并把整帧从缓冲区删掉，不删会反复解同一帧
         const QByteArray payload = buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
         buffer.remove(0, total);
         perf.read_us.fetchAndAddRelaxed(read_timer.nsecsElapsed() / 1000);
 
-        // 配置包（SPS/PPS）在 Push 里只存下来、不产生画面，所以这里不判断类型
-        // 容器复用：clear 只把大小归零，容量留着，省掉每帧的重新分配
+        // 配置包只存不放画面；容器复用，clear 只清大小不释放容量
         frames.clear();
         stage_timer.start();
         const bool pushed = decoder_->Push(payload, header.IsConfig(), header.PtsUs(), frames, &error);
@@ -123,8 +121,7 @@ void VideoReader::run()
             return;
         }
 
-        // 建链时用的是直连，所以这里等于就地调用 VideoItem::Present，
-        // 不进 GUI 线程的事件队列，拖窗口时也不会堆帧
+        // 直连：这里等于就地调 VideoItem::Present，不进 GUI 线程队列
         for (const Frame &frame : frames)
         {
             perf.frames.fetchAndAddRelaxed(1);

@@ -26,10 +26,7 @@ public:
     bool Open(QString *error);                                                                  // 找 H.264 解码器并打开上下文
     void Close();                                                                               // 释放上下文，可以重复调
 
-    // 送一个包，解出来的帧追加到 frames（通常 0 或 1 个）。返回 false 时 error 有原因。
-    // 配置包（SPS/PPS）不收帧：先存起来，跟下一个数据包拼在一起送。
-    // 单独送参数集时 FFmpeg 会报 "no frame!" 并返回 INVALIDDATA；拼上切片就没这个问题，
-    // 设备旋转后换新参数集也走同一条路。
+    // 送一个包，解出的帧追加到 frames（通常 0 或 1 个）；失败时 error 有原因
     bool Push(const QByteArray &data, bool is_config, qint64 pts_us, QVector<Frame> &frames,
               QString *error);
 

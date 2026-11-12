@@ -56,8 +56,7 @@ ConnectResult ServerSession::Start()
     // 具体原因写在 AcceptForReverse 和 ConnectForForward 里。
     ConnectResult result;
 
-    // 不传 scid 时服务端会自己抽一个，那我们就不知道 socket 名了。
-    // 这里先定死一个，保证参数里的 scid 和 reverse/forward 用的 socket 名一致。
+    // 不传 scid 服务端会自己抽一个，我们就不知道 socket 名；这里先定死一个
     if (params_.scid_ == kScidUnset)
     {
         params_.scid_ = static_cast<quint32>(QRandomGenerator::global()->bounded(1, 0x7FFFFFFF));
@@ -148,8 +147,7 @@ bool ServerSession::SetUpTunnel(QString *error)
             return true;
         }
 
-        // 国产机上 reverse 会报 "more than one device"（同一台机器挂了 USB + 无线两条通道），
-        // 这是 adb 自己的问题，不能因此整体失败，必须降级到 forward
+        // 国产机 reverse 会报 more than one device（USB+无线两条通道），照样降级 forward
         qWarning() << "[session] adb reverse 失败，降级 forward："
                    << reversed.ErrorText();
     }
@@ -185,9 +183,7 @@ bool ServerSession::StartServerProcess(QString *error)
         return false;
     }
 
-    // 参数拼错时服务端会立刻退出。等一会儿看一眼，能把它的报错原样带出来，
-    // 否则只能看到后面"连接超时"这种没有信息量的错误。
-    // 800ms 是因为 JVM 启动本身就要几百毫秒，等太短会漏掉。
+    // 参数拼错服务端会立刻退出；等一会儿看一眼能把它的报错原样带出来
     if (server_process_->waitForFinished(800))
     {
         DrainServerOutput();
@@ -229,9 +225,7 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
         return false;
     }
 
-    // 先把视频通道上的设备信息读掉，再等控制连接。
-    // adb 的 reverse 转发在一条通道还没被读走数据时会挡住下一条连接，
-    // 所以这里不能"两条都收下再一起读"。
+    // 先把视频通道上的设备信息读掉，再等控制连接
     if (!ReadInfo(video_socket_, result))
     {
         DrainServerOutput();
@@ -239,8 +233,7 @@ bool ServerSession::AcceptForReverse(ConnectResult *result)
         return false;
     }
 
-    // 第二条：控制 socket。用轮询而不是一次长的 waitForNewConnection，
-    // 出问题时能看出"到底有没有连进来"和"监听还在不在"。
+    // 第二条控制连接用轮询：adb 转发会把两条连接串行化，一次长等会一直超时
     QElapsedTimer control_wait;
     control_wait.start();
     while (control_wait.elapsed() < kReverseAcceptTimeoutMs)
@@ -285,8 +278,7 @@ bool ServerSession::ConnectForForward(ConnectResult *result)
         auto *video = new QTcpSocket();
         auto *control = new QTcpSocket();
 
-        // 两条连接都要先建好，服务端才会往下走：它先发 1 个 dummy 字节，
-        // 然后要等到控制 socket 也连上才开始发设备信息。先连一条就急着读会一直等下去。
+        // 两条连接都建好服务端才往下走：它先发 1 个 dummy 字节
         video->connectToHost(QHostAddress::LocalHost, params_.local_port_);
         control->connectToHost(QHostAddress::LocalHost, params_.local_port_);
 
@@ -337,11 +329,7 @@ bool ServerSession::ConnectForForward(ConnectResult *result)
 // 读 server 发来的设备信息：名字长度、名字、宽高
 bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
 {
-    // 设备信息固定 76 字节：
-    //   [0..63]   设备名，UTF-8，后面补 0
-    //   [64..67]  编码器 id（当前固定 H.264，暂不解析）
-    //   [68..71]  视频宽
-    //   [72..75]  视频高
+    // 设备信息固定 76 字节：名 64 + 编码器 id 4 + 宽 4 + 高 4
     QByteArray buffer;
     QElapsedTimer timer;
     timer.start();
@@ -362,8 +350,7 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
             return false;
         }
 
-        // 只读还缺的字节数。用 readAll 会把设备信息之后的流数据一起读进来丢掉，
-        // 那样第一个配置包（SPS/PPS）就没了，后面所有帧都解不出来。
+        // 只读还缺的字节：readAll 会把设备信息之后的流数据一起读进来丢掉
         const QByteArray chunk = socket->read(kInfoBytes - buffer.size());
         if (!chunk.isEmpty())
         {

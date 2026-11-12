@@ -58,9 +58,7 @@ bool YuvConvert::EnsureBuffers(const QSize &size)
         return false;
     }
 
-    // 目标帧的像素必须由 FFmpeg 自己分配（av_image_alloc 会按 SIMD 需要留出对齐余量）。
-    // 直接往 QImage 的缓冲里写会越界：sws_scale 按自己的粒度整块写，QImage 的缓冲
-    // 没有那点尾巴，堆就被写坏了（表现为 0xC0000374）。
+    // 目标帧像素必须 FFmpeg 自己分配：av_image_alloc 会按 SIMD 留对齐余量
     rgb_frame_ = av_frame_alloc();
     if (rgb_frame_ == nullptr)
     {

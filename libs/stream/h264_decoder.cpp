@@ -30,8 +30,7 @@ Frame WrapFrame(AVFrame *av_frame)
 {
     std::shared_ptr<const void> owner(av_frame, [](const void *ptr)
     {
-        // 必须走 FFmpeg 自己的释放函数：这块内存是它用 /MD 的 CRT 分配的，
-        // 我们 delete 就是在两套堆上来回穿越。
+        // 必须用 FFmpeg 自己的释放函数：内存是它用 /MD 的 CRT 分配的
         auto *frame = const_cast<AVFrame *>(static_cast<const AVFrame *>(ptr));
         av_frame_free(&frame);
     });
@@ -72,8 +71,7 @@ bool H264Decoder::Open(QString *error)
         return false;
     }
 
-    // 先单线程。帧级多线程在"只收到参数集、还没有完整帧"时会让 send_packet 返回
-    // INVALIDDATA，这里先把它排除掉，确认后再决定要不要开。
+    // 先单线程：帧级多线程在只收到参数集时会让 send_packet 返回 EAGAIN
     context_->thread_count = 1;
 
     const int ret = avcodec_open2(context_, codec, nullptr);

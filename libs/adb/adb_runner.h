@@ -23,8 +23,7 @@ struct AdbResult
 
     bool Ok() const { return started_ && !timed_out_ && exit_code_ == 0; }
 
-    // 出错时给界面看的文字：优先 stderr，但没有时退回 stdout。
-    // 某些 adb 版本把 "device not found" 之类打到 stdout，只看 stderr 会得到一句空错误。
+    // 出错时给界面看的文字：stderr 优先，没有就退回 stdout
     QString ErrorText() const;
 };
 

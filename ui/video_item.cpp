@@ -243,9 +243,7 @@ void YuvRenderer::DrawQuad(QOpenGLFunctions *gl, float width, float height)
         }
     }
 
-    // 顶点顺序（TRIANGLE_STRIP）：左上、右上、左下、右下。
-    // v 轴要反向：FBO 是 y 朝上的，帧的第 0 行在图片顶部，
-    // 直接按 v=0 放顶上会整幅上下颠倒。
+    // 顶点顺序（TRIANGLE_STRIP）：左上、右上、左下、右下
     const GLfloat coords[] = {
         left,  top,    0.0f, 1.0f,
         right, top,    1.0f, 1.0f,
@@ -279,8 +277,7 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 
-    // 重绘请求由 GUI 线程的定时器发起：视频线程只负责存帧，
-    // 一旦从视频线程投递事件，拖窗口时就会被 GUI 线程反过来堵死。
+    // 重绘由 GUI 线程定时器发起：视频线程只存帧，不投递事件
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(8);
     QObject::connect(refresh_timer_, &QTimer::timeout, this, &VideoItem::OnRefreshTimer);

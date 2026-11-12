@@ -97,10 +97,7 @@ void DeviceController::Connect(const QString &serial)
     params.bit_rate_ = 12000000;                                                                // 原生分辨率下 8 Mbps 也不够，给到 12 Mbps
     params.log_level_ = QStringLiteral("error");
 
-    // 这里同步阻塞 1~2 秒，界面会卡一下。
-    // 不丢到工作线程的原因：ServerSession 里的 QTcpServer / QProcess 属于创建它的线程，
-    // 在工作线程建、回主线程 Stop() 就会给别的线程的对象发事件，Qt 直接断言崩掉。
-    // P4 会把它改成"一个专门的连接线程，session 从头到尾属于那个线程"。
+    // 这里同步阻塞 1~2 秒，界面会卡一下（建链是阻塞的）
     SetStatus(QStringLiteral("正在连接 %1 …").arg(params.serial_));
     QCoreApplication::processEvents();                                                          // 让状态文字先画出来
 
@@ -143,13 +140,11 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     }
 
     reader_ = new qsc::stream::VideoReader(video, decoder_.get());
-    // socket 是在主线程建的，读却发生在视频线程：先摘 parent 再搬过去，
-    // 否则 Qt 会一直报 "Socket notifiers cannot be enabled or disabled from another thread"
+    // socket 在主线程建、却在视频线程读：先摘 parent 再搬过去
     video->setParent(nullptr);
     video->moveToThread(reader_);
 
-    // 直连：Present 直接跑在视频线程里，不吃 GUI 线程的事件循环
-    // （拖窗口时 GUI 线程会被系统模态循环卡住，排队连接会把帧堆起来，松手后一口气补帧）
+    // 直连：Present 跑在视频线程里，不吃 GUI 线程的事件循环
     QObject::connect(reader_, &qsc::stream::VideoReader::FrameReady, surface_, &VideoItem::Present,
                      Qt::DirectConnection);
     QObject::connect(reader_, &qsc::stream::VideoReader::Failed, this, [this](const QString &reason)

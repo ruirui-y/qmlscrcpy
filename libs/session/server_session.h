@@ -52,9 +52,7 @@ private:
     QString ResolveLocalServerPath() const;                                                     // 参数没给 jar 路径时用程序目录下的
     QString SocketName() const;                                                                 // 按 scid 算出设备端的 abstract socket 名
 
-    // 把服务端进程这段时间打印的东西抽出来。
-    // 这条流程里没有事件循环，readyRead 不会自己触发，只能靠主动读；
-    // 失败时把它的输出拼进错误信息，比只报"连接超时"有用得多。
+    // 把服务端进程这段时间打印的东西抽出来，只留尾部
     void DrainServerOutput();
     QString ServerOutputTail() const;
 

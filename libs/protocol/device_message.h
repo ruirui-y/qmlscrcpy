@@ -22,10 +22,7 @@ struct DeviceMessage
     QString text_ = QString();                                                                  // Clipboard 时有值，UTF-8 解出来的文本
     quint64 sequence_ = 0;                                                                      // AckClipboard 时有值，对应我们发出去的序号
 
-    // 从缓冲区头部尝试解一条消息。
-    // 返回 >0：解出一条，值是消耗掉的字节数（调用方据此从缓冲区里删掉这段）
-    // 返回  0：数据还没收全，等下一次 readyRead
-    // 返回 -1：协议错误（类型不认识、长度越界），连接应该断开
+    // 从缓冲区头部试解一条消息：返回消费字节数，0 表示不够，-1 表示流坏了
     static qint32 TryParse(const QByteArray &buffer, DeviceMessage &message);
 };
 
