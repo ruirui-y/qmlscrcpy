@@ -22,12 +22,14 @@ VideoReader::VideoReader(QTcpSocket *socket, H264Decoder *decoder, QObject *pare
 void VideoReader::Stop()
 {
     stop_.store(true);
+    // 线程可能正卡在 socket 上，1 秒是给它醒过来的余量；超时就不等了，免得界面卡死
     wait(1000);
 }
 
 // 把缓冲补到 want 字节；停机或断线返回 false 并给出原因
 bool VideoReader::FillBuffer(QByteArray &buffer, int want, QString *reason)
 {
+    // 一直补到够数为止。注意只往尾部追加，已经存在 buffer 里的字节不动
     while (buffer.size() < want)
     {
         if (stop_.load())
@@ -39,6 +41,7 @@ bool VideoReader::FillBuffer(QByteArray &buffer, int want, QString *reason)
         // 200ms 一跳：既能及时响应 Stop，也不会白占 CPU
         if (!socket_->waitForReadyRead(200))
         {
+            // 超时未必是断线，可能只是设备这会儿没画面
             if (socket_->state() != QAbstractSocket::ConnectedState)
             {
                 *reason = QStringLiteral("视频连接断开：%1").arg(socket_->errorString());
@@ -56,18 +59,22 @@ bool VideoReader::FillBuffer(QByteArray &buffer, int want, QString *reason)
 // 读包、解码、发帧，循环到停机或断线
 void VideoReader::run()
 {
-    QByteArray buffer;
-    QVector<Frame> frames;
-    QString error;
-    PerfStats &perf = PerfStats::Get();
-    QElapsedTimer stage_timer;
-    QElapsedTimer read_timer;
+    QByteArray buffer;                                                                          // 还没处理完的零碎字节，半帧就存在这儿，跨循环保留
+    QVector<Frame> frames;                                                                      // 一次 Push 可能吐出多帧，所以用容器接
+    QString error;                                                                              // 出错原因，往上传给界面
+    PerfStats &perf = PerfStats::Get();                                                         // 四段耗时累计，QS_PERF 打开才打印
+    QElapsedTimer stage_timer;                                                                  // 临时秒表：只量解码这一段
+    QElapsedTimer read_timer;                                                                   // 临时秒表：量等数据加切包这一段
 
+    // 死循环，只有出错或停机才靠 return 跳出
     for (;;)
     {
         read_timer.start();
+
+        // TCP 是字节流，帧边界得自己数：先凑够 12 字节包头，才知道这一帧有多长
         if (!FillBuffer(buffer, VideoPacketHeader::kSize, &error))
         {
+            // 用户主动断开不算错误，只有真出事才往界面上抛
             if (!stop_.load())
             {
                 emit Failed(error);
@@ -76,6 +83,7 @@ void VideoReader::run()
             return;
         }
 
+        // 解析只读不消费：buffer 里那 12 字节原地不动，等整帧到齐再一起删
         VideoPacketHeader header;
         if (!VideoPacketHeader::Parse(buffer, header))
         {
@@ -84,6 +92,7 @@ void VideoReader::run()
             return;
         }
 
+        // 第二次补的是整帧的长度：包头已经在 buffer 里，这里只是把负载等齐
         const int total = VideoPacketHeader::kSize + static_cast<int>(header.size_);
         if (!FillBuffer(buffer, total, &error))
         {
@@ -95,10 +104,14 @@ void VideoReader::run()
             return;
         }
 
+        // 切出负载，再把这一帧（头加负载）从缓冲区前头删掉
+        // 不删的话下一轮又从同一位置切，同一帧会被反复解码
         const QByteArray payload = buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
         buffer.remove(0, total);
         perf.read_us.fetchAndAddRelaxed(read_timer.nsecsElapsed() / 1000);
 
+        // 配置包（SPS/PPS）在 Push 里只存下来、不产生画面，所以这里不判断类型
+        // 容器复用：clear 只把大小归零，容量留着，省掉每帧的重新分配
         frames.clear();
         stage_timer.start();
         const bool pushed = decoder_->Push(payload, header.IsConfig(), header.PtsUs(), frames, &error);
@@ -110,6 +123,8 @@ void VideoReader::run()
             return;
         }
 
+        // 建链时用的是直连，所以这里等于就地调用 VideoItem::Present，
+        // 不进 GUI 线程的事件队列，拖窗口时也不会堆帧
         for (const Frame &frame : frames)
         {
             perf.frames.fetchAndAddRelaxed(1);
