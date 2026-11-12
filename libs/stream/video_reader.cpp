@@ -92,15 +92,13 @@ void VideoReader::run()
             return;
         }
 
-        const QByteArray payload =
-            buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
+        const QByteArray payload = buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
         buffer.remove(0, total);
         perf.read_us.fetchAndAddRelaxed(read_timer.nsecsElapsed() / 1000);
 
         frames.clear();
         stage_timer.start();
-        const bool pushed =
-            decoder_->Push(payload, header.IsConfig(), header.PtsUs(), frames, &error);
+        const bool pushed = decoder_->Push(payload, header.IsConfig(), header.PtsUs(), frames, &error);
         perf.decode_us.fetchAndAddRelaxed(stage_timer.nsecsElapsed() / 1000);
         if (!pushed)
         {

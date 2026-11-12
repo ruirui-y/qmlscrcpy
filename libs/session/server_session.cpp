@@ -109,8 +109,7 @@ bool ServerSession::PushServer(QString *error)
         return false;
     }
 
-    const QStringList args =
-        adb::AdbArgs::Push(params_.serial_, local_path, params_.server_remote_path_);
+    const QStringList args = adb::AdbArgs::Push(params_.serial_, local_path, params_.server_remote_path_);
     const adb::AdbResult pushed = adb::Run(args, kPushTimeoutMs);
     if (!pushed.Ok())
     {
@@ -127,8 +126,7 @@ bool ServerSession::SetUpTunnel(QString *error)
 {
     if (params_.use_reverse_)
     {
-        const QStringList reverse_args =
-            adb::AdbArgs::Reverse(params_.serial_, SocketName(), params_.local_port_);
+        const QStringList reverse_args = adb::AdbArgs::Reverse(params_.serial_, SocketName(), params_.local_port_);
         const adb::AdbResult reversed = adb::Run(reverse_args);
 
         // reverse 设好后是本机先 listen，设备连过来
@@ -153,8 +151,7 @@ bool ServerSession::SetUpTunnel(QString *error)
                    << reversed.ErrorText();
     }
 
-    const QStringList forward_args =
-        adb::AdbArgs::Forward(params_.serial_, params_.local_port_, SocketName());
+    const QStringList forward_args = adb::AdbArgs::Forward(params_.serial_, params_.local_port_, SocketName());
     const adb::AdbResult forwarded = adb::Run(forward_args);
     if (!forwarded.Ok())
     {
