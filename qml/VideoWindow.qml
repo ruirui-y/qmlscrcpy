@@ -208,7 +208,47 @@ Window {
                     keepAspect: false    // 窗口比例已经跟着帧走了，这里直接拉满
                 }
 
-                // 右下角拖拽改尺寸：底色 + 三条 2px 斜线，一眼能看见
+                // 文件拖放：把文件拖进画面就推到手机 Download/，拖动时给个高亮提示
+    DropArea {
+        id: fileDrop
+
+        anchors.fill: parent
+
+        // 拖动时只画边框 + 一行提示，不铺整块半透明底：整块混合会让拖拽过程明显掉帧
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            visible: fileDrop.containsDrag
+            border.width: 2
+            border.color: "#5aa9ff"
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: hintText.implicitWidth + 24
+                height: 34
+                radius: 6
+                color: "#0f2033"
+                border.width: 1
+                border.color: "#5aa9ff"
+
+                Text {
+                    id: hintText
+                    anchors.centerIn: parent
+                    text: qsTr("松手传到手机 Download/")
+                    color: "#dce9f8"
+                    font.pixelSize: 13
+                }
+            }
+        }
+
+        onDropped: {
+            if (drop.hasUrls) {
+                deviceController.PushFiles(drop.urls)
+            }
+        }
+    }
+
+    // 右下角拖拽改尺寸：底色 + 三条 2px 斜线，一眼能看见
                 Rectangle {
                     id: resizeGrip
 

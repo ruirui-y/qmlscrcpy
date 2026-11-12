@@ -190,6 +190,30 @@ bool AppSettings::ClipboardAutoSync() const
     return ConfigStore().value(QStringLiteral("input/clipboard_autosync"), false).toBool();
 }
 
+// 拖文件上传的目标目录：界面里改过的优先，其次 config.ini，默认 Download/QmlScrcpy
+QString AppSettings::UploadDir() const
+{
+    const QString override_value = WindowStore().value(QStringLiteral("transfer/upload_dir")).toString();
+    if (!override_value.isEmpty())
+    {
+        return override_value;
+    }
+
+    const QString configured = ConfigStore().value(QStringLiteral("transfer/upload_dir")).toString();
+    if (!configured.isEmpty())
+    {
+        return configured;
+    }
+    return QStringLiteral("/sdcard/Download/QmlScrcpy");
+}
+
+// 记下界面里改的上传目录
+void AppSettings::SetUploadDir(const QString &dir)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("transfer/upload_dir"), dir);
+    store.sync();
+}
 // 窗口快捷键：界面里改过的（window.ini）优先，其次 config.ini，最后用内置默认
 QString AppSettings::Shortcut(const QString &name) const
 {

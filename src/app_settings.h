@@ -30,6 +30,10 @@ public:
     // [input] 段：剪贴板
     bool ClipboardAutoSync() const;                                                             // 电脑剪贴板一变就推到设备
 
+    // [transfer] 段：拖文件上传到设备哪个目录
+    QString UploadDir() const;
+    void SetUploadDir(const QString &dir);
+
     // [keys] 段：窗口快捷键，name 取 back / home / screenshot / fullscreen
     QString Shortcut(const QString &name) const;
     void SetShortcut(const QString &name, const QString &sequence);

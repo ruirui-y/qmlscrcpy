@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QSize>
 #include <QPointer>
+#include <QList>
+#include <QUrl>
 #include <QString>
 #include <QStringList>
 
@@ -40,6 +42,7 @@ class DeviceController : public QObject
     Q_PROPERTY(QString shortcutHome READ ShortcutHome NOTIFY ShortcutsChanged)
     Q_PROPERTY(QString shortcutScreenshot READ ShortcutScreenshot NOTIFY ShortcutsChanged)
     Q_PROPERTY(QString shortcutFullscreen READ ShortcutFullscreen NOTIFY ShortcutsChanged)
+    Q_PROPERTY(QString uploadDir READ UploadDir NOTIFY UploadDirChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -61,7 +64,8 @@ public:
     QString ShortcutBack() const;                                                               // 返回键的快捷键
     QString ShortcutHome() const;                                                               // 回桌面的快捷键
     QString ShortcutScreenshot() const;                                                         // 截图的快捷键
-    QString ShortcutFullscreen() const;                                                         // 全屏的快捷键                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
+    QString ShortcutFullscreen() const;                                                         // 全屏的快捷键
+    QString UploadDir() const;                                                                  // 拖文件上传到设备的哪个目录                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -78,8 +82,10 @@ public:
     Q_INVOKABLE void PullClipboardFromDevice();                                                 // 设备剪贴板 → 电脑
     Q_INVOKABLE void SetBossKeyHost(QObject *host);                                             // main 把 BossKey 对象交进来
     Q_INVOKABLE bool SetBossKey(const QString &text);
-    Q_INVOKABLE bool SetShortcut(const QString &name, const QString &sequence);                 // name: back/home/screenshot/fullscreen                                           // 界面改老板键：解析 → 重注册 → 记住
+    Q_INVOKABLE bool SetShortcut(const QString &name, const QString &sequence);
+    Q_INVOKABLE bool SetUploadDir(const QString &dir);                                          // 改上传目录并记住                 // name: back/home/screenshot/fullscreen                                           // 界面改老板键：解析 → 重注册 → 记住
     Q_INVOKABLE void RegisterWindow(QObject *window);                                           // QML 把自己的窗口登记进来，老板键要藏它们
+    Q_INVOKABLE void PushFiles(const QList<QUrl> &urls);                                        // 拖进投屏窗的文件：推到手机 Download/
     Q_INVOKABLE void ToggleBossKey();                                                           // 一键隐藏/恢复所有窗口
 
     // 启动时挑一个串号自动连：优先上次连过的，其次环境变量给的，都要在在线列表里
@@ -109,6 +115,7 @@ signals:
     void ConnectedChanged();
     void BossKeyChanged();
     void ShortcutsChanged();
+    void UploadDirChanged();
 
 private:
     void OnControlData();    // 控制 socket 有数据：解析设备消息（剪贴板推送、Ack）

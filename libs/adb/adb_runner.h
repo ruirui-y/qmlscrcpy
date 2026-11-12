@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <QByteArray>
 #include <QList>
 #include <QString>
@@ -44,6 +46,12 @@ QString AdbPath();
 
 // 同步跑一条 adb 命令，适合跑完就结束的（push / reverse / devices）。超时会杀进程。
 AdbResult Run(const QStringList &args, int timeout_ms = 15000);
+
+// 推一个文件到设备，进度（0~100，未知时 -1）通过回调上报。失败写 error 并返回 false。
+// 用 QProcess 边跑边读，所以进度会持续回调——调用方自己在工作线程里用，别在 GUI 线程调。
+using ProgressCallback = std::function<void(int)>;
+bool PushFile(const QString &serial, const QString &local_path, const QString &remote_dir,
+              const ProgressCallback &on_progress, QString *error);
 
 // 起一个不会自己退出的进程：adb shell app_process ... 会一直挂着，它退出就等于服务端挂了。
 // 返回的 QProcess 由调用方负责 delete；起不来返回 nullptr 并写 error。

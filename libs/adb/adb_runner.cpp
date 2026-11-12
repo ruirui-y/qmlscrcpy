@@ -162,4 +162,152 @@ QProcess *StartLongRunning(const QStringList &args, QString *error)
     return process;
 }
 
+// 追加文件传输：把本地文件推到设备指定目录，边跑边上报进度
+// 插在 StartLongRunning 之后、namespace 收尾之前
+
+// 推一个文件到设备：先确保目录存在，再用 ASCII 临时名推，最后在设备上改回原名
+//
+// 为什么要绕：adb.exe 在 Windows 上处理不了非 ASCII 的本地文件名——
+// 中文名会被截成空串，远端路径变成 "/sdcard/Download/." 直接失败。
+// 解法是本地用 ASCII 临时名推上去，改名时把 UTF-8 文件名 base64 编码后交给设备解码。
+bool PushFile(const QString &serial, const QString &local_path, const QString &remote_dir,
+              const ProgressCallback &on_progress, QString *error)
+{
+    const QFileInfo info(local_path);
+    if (!info.isFile())
+    {
+        if (error != nullptr)
+        {
+            *error = QStringLiteral("不是文件：%1").arg(local_path);
+        }
+        return false;
+    }
+
+    // 目录不存在时 adb push 会失败，先 mkdir
+    const AdbResult mkdir_result = Run(
+        QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("mkdir")
+                      << QStringLiteral("-p") << remote_dir, 5000);
+    if (!mkdir_result.Ok())
+    {
+        if (error != nullptr)
+        {
+            *error = QStringLiteral("建目录失败：%1").arg(mkdir_result.ErrorText());
+        }
+        return false;
+    }
+
+    // 临时名只用 ASCII，扩展名保留（有些设备按扩展名决定怎么索引）
+    static QAtomicInteger<int> upload_sequence{0};
+    const QString suffix = info.suffix().isEmpty() ? QString()
+                                                   : QStringLiteral(".%1").arg(info.suffix().toLower());
+    const QString temp_name = QStringLiteral("qmlscrcpy_%1%2").arg(upload_sequence.fetchAndAddRelaxed(1)).arg(suffix);
+    const QString remote_temp = remote_dir + QLatin1Char('/') + temp_name;
+
+    QProcess process;
+    process.setProgram(AdbPath());
+    process.setArguments(QStringList() << QStringLiteral("-s") << serial << QStringLiteral("push") << local_path
+                                       << remote_temp);
+    process.setProcessChannelMode(QProcess::SeparateChannels);
+    process.start();
+
+    if (!process.waitForStarted(5000))
+    {
+        if (error != nullptr)
+        {
+            *error = process.errorString();
+        }
+        return false;
+    }
+
+    // adb push 把进度写在 stdout 里，形如 "[ 45%] ..."，边跑边解析
+    QRegularExpression percent_rule(QStringLiteral("\\[\\s*(\\d+)%\\]"));
+    QByteArray pending;                                                                         // 还没凑成整行的输出
+    const auto consume = [&](const QByteArray &chunk)
+    {
+        pending.append(chunk);
+        for (;;)
+        {
+            const int newline = pending.indexOf('\n');
+            if (newline < 0)
+            {
+                break;
+            }
+            const QByteArray line = pending.left(newline);
+            pending.remove(0, newline + 1);
+
+            const QString text = QString::fromLocal8Bit(line);
+            const QRegularExpressionMatch match = percent_rule.match(text);
+            if (match.hasMatch() && on_progress != nullptr)
+            {
+                on_progress(match.captured(1).toInt());
+            }
+        }
+    };
+
+    while (process.state() != QProcess::NotRunning)
+    {
+        if (process.waitForReadyRead(200))
+        {
+            consume(process.readAllStandardOutput());
+        }
+    }
+    consume(process.readAllStandardOutput());
+    const QByteArray stderr_text = process.readAllStandardError();
+
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    {
+        if (error != nullptr)
+        {
+            const QString message = QString::fromLocal8Bit(stderr_text).trimmed();
+            *error = message.isEmpty() ? QStringLiteral("adb push 退出码 %1").arg(process.exitCode()) : message;
+        }
+        return false;
+    }
+
+    if (on_progress != nullptr)
+    {
+        on_progress(100);
+    }
+
+    // 改回原名：文件名里的 UTF-8 字节用 base64 传，避免再被 Windows 代码页破坏
+    const QString base_name = info.fileName();
+    QString rename_command;
+    bool plain_ascii = true;
+    for (const QChar ch : base_name)
+    {
+        if (ch.unicode() > 0x7F)
+        {
+            plain_ascii = false;
+            break;
+        }
+    }
+
+    const QString target = remote_dir + QLatin1Char('/') + base_name;
+    if (plain_ascii)
+    {
+        rename_command = QStringLiteral("mv \"%1\" \"%2\"").arg(remote_temp, target);
+    }
+    else
+    {
+        // 解码出来只有文件名，必须把目录拼回去，否则 mv 会按相对路径落到只读的 /
+        const QString encoded = QString::fromLatin1(base_name.toUtf8().toBase64());
+        rename_command = QStringLiteral("mv \"%1\" \"%2/$(echo %3 | base64 -d)\"")
+                             .arg(remote_temp, remote_dir, encoded);
+    }
+
+    const AdbResult rename_result = Run(QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell")
+                                                      << rename_command, 8000);
+    if (!rename_result.Ok())
+    {
+        if (error != nullptr)
+        {
+            *error = QStringLiteral("文件推上去了但改名失败（设备上是 %1）：%2")
+                         .arg(temp_name, rename_result.ErrorText());
+        }
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace qsc::adb

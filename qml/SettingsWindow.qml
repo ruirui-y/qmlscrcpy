@@ -273,6 +273,56 @@ Window {
             Rectangle { Layout.fillWidth: true; height: 1; color: "#262c36" }
 
             // ── 其他 ──
+            SectionTitle { text: qsTr("文件上传目录（拖文件进投屏窗时用）") }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                TextField {
+                    id: uploadDirField
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
+                    text: deviceController.uploadDir
+                    color: "#d8dee9"
+                    font.pixelSize: 12
+                    leftPadding: 10
+                    selectByMouse: true
+                    placeholderText: "/sdcard/Download/QmlScrcpy"
+
+                    background: Rectangle {
+                        radius: 6
+                        color: "#151920"
+                        border.width: 1
+                        border.color: uploadDirField.activeFocus ? "#3f8fdd" : "#2c323c"
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 72
+                    Layout.preferredHeight: 28
+                    radius: 6
+                    color: saveDirArea.containsMouse ? "#5aa9ff" : "#3f8fdd"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("保存目录")
+                        color: "#ffffff"
+                        font.pixelSize: 12
+                    }
+
+                    MouseArea {
+                        id: saveDirArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: deviceController.SetUploadDir(uploadDirField.text)
+                    }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#262c36" }
+
             SectionTitle { text: qsTr("其他") }
 
             RowLayout {

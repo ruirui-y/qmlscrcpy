@@ -110,6 +110,27 @@ void DeviceController::PullClipboardFromDevice()
     SetStatus(QStringLiteral("正在读取手机剪贴板 …"));
 }
 
+// 拖文件上传的目标目录
+QString DeviceController::UploadDir() const
+{
+    return AppSettings().UploadDir();
+}
+
+// 改上传目录：空串或不是绝对路径就拒绝
+bool DeviceController::SetUploadDir(const QString &dir)
+{
+    const QString trimmed = dir.trimmed();
+    if (trimmed.isEmpty() || !trimmed.startsWith(QLatin1Char('/')))
+    {
+        SetStatus(QStringLiteral("上传目录要写成绝对路径，例如 /sdcard/Download/QmlScrcpy"));
+        return false;
+    }
+
+    AppSettings().SetUploadDir(trimmed);
+    emit UploadDirChanged();
+    SetStatus(QStringLiteral("上传目录已改为 %1").arg(trimmed));
+    return true;
+}
 // 四个窗口快捷键的当前值
 QString DeviceController::ShortcutBack() const
 {
@@ -214,6 +235,81 @@ void DeviceController::RegisterWindow(QObject *window)
     app_windows_.append(raw);
 }
 
+// 拖进投屏窗的文件：逐个 adb push 到 /sdcard/Download/，进度实时刷到状态栏
+void DeviceController::PushFiles(const QList<QUrl> &urls)
+{
+    qCInfo(qsc::base::lcInput) << "[drop] 收到" << urls.size() << "个 url";
+
+    // 先把路径抓出来并打日志：拖放传参有问题时能直接看出是哪一步空的
+    QStringList paths;
+    for (const QUrl &url : urls)
+    {
+        const QString path = url.toLocalFile();
+        const bool is_file = !path.isEmpty() && QFileInfo(path).isFile();
+        qCInfo(qsc::base::lcInput) << "[drop] url" << url.toString() << "本地路径" << path << "是文件" << is_file;
+        if (is_file)
+        {
+            paths.append(path);
+        }
+    }
+
+    if (paths.isEmpty())
+    {
+        SetStatus(urls.isEmpty() ? QStringLiteral("拖进来的不是文件")
+                                 : QStringLiteral("拖进来的都是文件夹，暂不支持"));
+        return;
+    }
+
+    if (session_ == nullptr)
+    {
+        SetStatus(QStringLiteral("还没连接设备"));
+        return;
+    }
+
+    const QString serial = device_name_;
+    const QString upload_dir = AppSettings().UploadDir();
+    SetStatus(QStringLiteral("正在传 %1 个文件到手机 %2 …").arg(paths.size()).arg(upload_dir));
+
+    // adb push 是阻塞的，整个循环丢到工作线程；进度用 Queued 调用回主线程改状态
+    QThread *worker = QThread::create([this, serial, paths, upload_dir]()
+    {
+        int done = 0;
+        for (const QString &path : paths)
+        {
+            const QString name = QFileInfo(path).fileName();
+            QString error;
+            qCInfo(qsc::base::lcInput) << "[drop] 开始 push" << path << "->" << upload_dir;
+            const bool ok = qsc::adb::PushFile(serial, path, upload_dir,
+                                               [this, name](int percent)
+                                               {
+                                                   QMetaObject::invokeMethod(this, [this, name, percent]()
+                                                   {
+                                                       SetStatus(QStringLiteral("传 %1：%2%").arg(name).arg(percent));
+                                                   }, Qt::QueuedConnection);
+                                               },
+                                               &error);
+            if (!ok)
+            {
+                qCInfo(qsc::base::lcInput) << "[drop] push 失败" << name << error;
+                QMetaObject::invokeMethod(this, [this, name, error]()
+                {
+                    SetStatus(QStringLiteral("传 %1 失败：%2").arg(name, error));
+                }, Qt::QueuedConnection);
+                return;
+            }
+            qCInfo(qsc::base::lcInput) << "[drop] push 完成" << name;
+            ++done;
+        }
+
+        QMetaObject::invokeMethod(this, [this, done]()
+        {
+            SetStatus(done == 1 ? QStringLiteral("文件已传到手机 Download/")
+                                : QStringLiteral("%1 个文件已传到手机 Download/").arg(done));
+        }, Qt::QueuedConnection);
+    });
+    QObject::connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+    worker->start();
+}
 // 老板键：第一次按藏起所有登记过的窗口，再按恢复
 void DeviceController::ToggleBossKey()
 {

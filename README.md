@@ -15,7 +15,7 @@
 最新安装包在 [Releases](https://github.com/ruirui-y/qmlscrcpy/releases/latest)：
 
 ```
-https://github.com/ruirui-y/qmlscrcpy/releases/download/v0.1.0/QmlScrcpy_Setup_0.1.0.exe
+https://github.com/ruirui-y/qmlscrcpy/releases/download/v0.1.1/QmlScrcpy_Setup_0.1.1.exe
 ```
 
 自带 Qt 运行库和 adb，装完即用。**装到 D 盘，别装 Program Files**（程序要往自己目录写 config/Log）。
@@ -144,6 +144,7 @@ https://github.com/ruirui-y/qmlscrcpy/releases/download/v0.1.0/QmlScrcpy_Setup_0
 | 回桌面 | 工具栏「桌面」或按 `Home` |
 | 多任务 | 工具栏「任务」 |
 | 锁屏 / 点亮 | 工具栏「电源」（按一下手机电源键） |
+| 传文件到手机 | 文件拖进投屏窗，松手即传到手机 `Download/QmlScrcpy/`（设置里可改） |
 | 截图 | 工具栏「截图」或 `Ctrl+Shift+S` → 存到 `screenshots\shot_日期_时间.png`，**同时复制到剪贴板** |
 | 关屏但不锁屏 | 工具栏「息屏」；再点一次「亮屏」 |
 | 窗口置顶 | 工具栏「置顶」 |
@@ -430,6 +431,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [自动连接](docs/自动连接.md) | 启动自动连上次设备、只做一次、存哪 |
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
+| [文件传输](docs/文件传输.md) | 拖拽入口、adb push 进度解析、为什么必须放工作线程 |
 | [剪贴板同步](docs/剪贴板同步.md) | 协议走向、为什么之前收不到设备消息、回环坑 |
 | [老板键](docs/老板键.md) | RegisterHotKey、隐藏/恢复窗口、和 Win+D 的区别 |
 | [发布到 GitHub](docs/发布到GitHub.md) | 发版流程、gh CLI 用法、cmd 与 PowerShell 的续行坑、检查清单 |
