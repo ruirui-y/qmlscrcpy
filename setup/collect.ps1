@@ -1,4 +1,4 @@
-# 收集发布文件：把 Release 构建产物收拾成 setup/stage/QmlScrcpy
+﻿# 收集发布文件：把 Release 构建产物收拾成 setup/stage/QmlScrcpy
 #
 # 用法（在仓库根目录跑）：
 #   powershell -ExecutionPolicy Bypass -File setup\collect.ps1

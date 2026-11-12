@@ -1,5 +1,5 @@
 @echo off
-rem ç”Ÿæˆå®‰è£…åŒ…ï¼šå…ˆè·‘ collect.ps1 æ”¶å¥½å‘å¸ƒæ–‡ä»¶ï¼Œå†è°ƒ Inno Setup ç¼–è¯‘
+rem Éú³É°²×°°ü£ºÏÈÅÜ collect.ps1 ÊÕºÃ·¢²¼ÎÄ¼ş£¬ÔÙµ÷ Inno Setup ±àÒë
 setlocal
 
 set "ROOT=%~dp0"
@@ -7,19 +7,19 @@ set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 
 if not exist "%ISCC%" (
-    echo [é”™è¯¯] æ²¡æ‰¾åˆ° Inno Setup 6ï¼š%ISCC%
-    echo        è£…ä¸€ä¸‹ï¼šhttps://jrsoftware.org/isdl.php
+    echo [´íÎó] Ã»ÕÒµ½ Inno Setup 6£º%ISCC%
+    echo        ×°Ò»ÏÂ£ºhttps://jrsoftware.org/isdl.php
     pause
     exit /b 1
 )
 
 "%ISCC%" "%ROOT%QmlScrcpy.iss"
 if errorlevel 1 (
-    echo [é”™è¯¯] ç¼–è¯‘å¤±è´¥ï¼Œçœ‹ä¸Šé¢çš„ Inno Setup è¾“å‡º
+    echo [´íÎó] ±àÒëÊ§°Ü£¬¿´ÉÏÃæµÄ Inno Setup Êä³ö
     pause
     exit /b 1
 )
 
 echo.
-echo å®Œæˆï¼š%ROOT%Output
+echo Íê³É£º%ROOT%Output
 pause
