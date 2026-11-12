@@ -16,6 +16,7 @@ Window {
     property alias frameSize: videoSurface.frameSize
     property bool applying: false
     property bool ready: false
+    property real lastAspect: 0    // 上一次的帧宽高比，用来判断是不是横竖屏翻转
 
     width: 380
     height: 808                                                                                 // 780 的画面 + 28 的标题栏
@@ -66,8 +67,9 @@ Window {
                 anchors.leftMargin: 22                                                          // 让开左上角那个缩放把手
                 anchors.verticalCenter: parent.verticalCenter
                 text: videoWindow.title
-                color: "#a8a8a8"
-                font.pixelSize: 12
+                color: "#d0d6de"
+                font.pixelSize: 14
+                font.bold: true
             }
 
             Row {
@@ -261,7 +263,37 @@ Window {
     // 第一帧到了、用户又没定过尺寸：把窗口调成和帧一样的物理像素（纹理 1:1 不插值）。
     // 原生分辨率常常比屏幕还大，所以宽和高都要按屏幕可用区域收缩，不能只夹宽度。
     onFrameSizeChanged: {
-        if (frameSize.width <= 0 || appSettings.VideoGeometry("video_window").width > 0) {
+        if (frameSize.width <= 0) {
+            return
+        }
+
+        // 已经定过尺寸时，只有"横竖屏翻转"才跟着调；普通帧尺寸抖动不动窗口
+        const aspect = frameSize.width / frameSize.height
+        if (ready) {
+            if (Math.abs(aspect - lastAspect) < 0.05) {
+                return
+            }
+            lastAspect = aspect
+            const contentHeight = Math.max(120, height - titleBar.height)
+            let newWidth = Math.round(contentHeight * aspect)
+            const widthLimit = Screen.desktopAvailableWidth * 0.85
+            if (newWidth > widthLimit) {
+                newWidth = Math.round(widthLimit)
+            }
+            applying = true
+            width = Math.max(minimumWidth, newWidth)
+            let newHeight = Math.round(width / aspect) + titleBar.height
+            const heightLimit = Screen.desktopAvailableHeight * 0.9
+            if (newHeight > heightLimit) {
+                newHeight = Math.round(heightLimit)
+                width = Math.max(minimumWidth, Math.round((newHeight - titleBar.height) * aspect))
+            }
+            height = newHeight
+            applying = false
+            return
+        }
+
+        if (appSettings.VideoGeometry("video_window").width > 0) {
             return
         }
         const ratio = Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
@@ -285,6 +317,7 @@ Window {
         height = Math.round(wantHeight) + titleBar.height
         applying = false
         ready = true
+        lastAspect = frameSize.width / frameSize.height
     }
 
     // 位置和尺寸都在"停手 400ms 之后"才写盘。

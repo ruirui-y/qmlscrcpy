@@ -117,6 +117,50 @@ quint32 AndroidKeycode(int qt_key)
     case Qt::Key_Escape:
         return kKeyEscape;
 
+    // 带 Shift 的符号：Windows 给的是符号本身的 Key，映射回基础键，Shift 由 metaState 带过去
+    case Qt::Key_Exclam:
+        return kKey0 + 1;
+    case Qt::Key_At:
+        return kKey0 + 2;
+    case Qt::Key_NumberSign:
+        return kKey0 + 3;
+    case Qt::Key_Dollar:
+        return kKey0 + 4;
+    case Qt::Key_Percent:
+        return kKey0 + 5;
+    case Qt::Key_AsciiCircum:
+        return kKey0 + 6;
+    case Qt::Key_Ampersand:
+        return kKey0 + 7;
+    case Qt::Key_Asterisk:
+        return kKey0 + 8;
+    case Qt::Key_ParenLeft:
+        return kKey0 + 9;
+    case Qt::Key_ParenRight:
+        return kKey0;
+    case Qt::Key_Underscore:
+        return kKeyMinus;
+    case Qt::Key_Plus:
+        return kKeyEquals;
+    case Qt::Key_BraceLeft:
+        return kKeyLeftBracket;
+    case Qt::Key_BraceRight:
+        return kKeyRightBracket;
+    case Qt::Key_Bar:
+        return kKeyBackslash;
+    case Qt::Key_Colon:
+        return kKeySemicolon;
+    case Qt::Key_QuoteDbl:
+        return kKeyApostrophe;
+    case Qt::Key_Less:
+        return kKeyComma;
+    case Qt::Key_Greater:
+        return kKeyPeriod;
+    case Qt::Key_Question:
+        return kKeySlash;
+    case Qt::Key_AsciiTilde:
+        return kKeyGrave;
+
     // 符号
     case Qt::Key_Comma:
         return kKeyComma;

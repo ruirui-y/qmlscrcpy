@@ -67,10 +67,16 @@ void DeviceController::SetSurface(QObject *surface)
     surface_->SetDragPixels(drag_pixels_);
 }
 
-// 在线设备列表，QML 里直接当下拉框的 model 用
+// 设备地址列表，和 deviceLabels 下标一一对应
 QStringList DeviceController::Devices() const
 {
     return devices_;
+}
+
+// 下拉框显示文字
+QStringList DeviceController::DeviceLabels() const
+{
+    return device_labels_;
 }
 
 // 从 "ip route" 的输出里抠出本机 wifi 地址，例如 "src 192.168.31.115"
@@ -283,8 +289,35 @@ void DeviceController::RefreshDevices()
         }
     }
 
+    // 再扫一遍无线调试广播的设备：已经连过的和刚发现的一起给用户选
+    const qsc::adb::AdbResult mdns = qsc::adb::Run(QStringList() << QStringLiteral("mdns") << QStringLiteral("services"), 4000);
+    const QStringList mdns_lines = QString::fromUtf8(mdns.std_out_).split(QLatin1Char('\n'));
+    for (const QString &line : mdns_lines)
+    {
+        if (!line.contains(QStringLiteral("_adb-tls-connect._tcp")))
+        {
+            continue;
+        }
+        const QStringList parts = line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+        if (parts.size() < 3)
+        {
+            continue;
+        }
+        const QString endpoint = parts.last();
+        if (!serials.contains(endpoint))
+        {
+            serials.append(endpoint);
+        }
+    }
+
     online_serials_ = serials;
     devices_ = serials;
+    device_labels_.clear();
+    for (const QString &serial : serials)
+    {
+        device_labels_.append(serial.contains(QLatin1Char(':')) ? QStringLiteral("无线  %1").arg(serial)
+                                                                : QStringLiteral("USB   %1").arg(serial));
+    }
     proposed_serial_ = serials.isEmpty() ? QString() : serials.first();
     emit DevicesChanged();
     emit ProposedSerialChanged();

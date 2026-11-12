@@ -77,6 +77,7 @@ private:
     bool dirty_ = false;                                                                        // 有没上传的新像素
 
     GLuint textures_[3] = {0, 0, 0};
+    QSize texture_sizes_[3];    // 每张纹理当前对应的平面尺寸，变了就重建
     QOpenGLShaderProgram program_;
     bool program_ready_ = false;
 };
@@ -177,8 +178,14 @@ void YuvRenderer::render()
     {
         for (int i = 0; i < 3; ++i)
         {
-            if (textures_[i] == 0)
+            // 尺寸变了（横竖屏切换）必须重建纹理，否则 glTexSubImage2D 会越界，画面直接卡住
+            const bool size_changed = texture_sizes_[i] != QSize(widths_[i], heights_[i]);
+            if (textures_[i] == 0 || size_changed)
             {
+                if (textures_[i] != 0)
+                {
+                    gl->glDeleteTextures(1, &textures_[i]);
+                }
                 gl->glGenTextures(1, &textures_[i]);
                 gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -188,6 +195,7 @@ void YuvRenderer::render()
                 // GL_LUMINANCE 是 GL 2.0 的原生格式，着色器里采样 .r 即可
                 gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, widths_[i], heights_[i], 0,
                                  GL_LUMINANCE, GL_UNSIGNED_BYTE, nullptr);
+                texture_sizes_[i] = QSize(widths_[i], heights_[i]);
             }
             gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
             gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);

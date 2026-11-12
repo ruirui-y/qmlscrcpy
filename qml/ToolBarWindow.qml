@@ -66,7 +66,7 @@ Window {
         signal clicked()
 
         width: parent.width
-        height: 30
+        height: 32
         radius: 3
         color: area.containsMouse ? "#2f2f2f" : (active ? "#2b4a6f" : "transparent")
 
@@ -74,7 +74,8 @@ Window {
             anchors.centerIn: parent
             text: button.label
             color: button.active ? "#ffffff" : "#c8c8c8"
-            font.pixelSize: 12
+            font.pixelSize: 13
+            font.bold: true
         }
 
         MouseArea {
@@ -96,8 +97,11 @@ Window {
                 if (!toolWindow.control) {
                     return
                 }
-                toolWindow.control.requestActivate()
+                // 最小化了要先 showNormal，否则 raise 只是把它从任务栏点一下，界面不出来
+                toolWindow.control.show()
+                toolWindow.control.showNormal()
                 toolWindow.control.raise()
+                toolWindow.control.requestActivate()
             }
         }
 

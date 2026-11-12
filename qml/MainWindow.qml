@@ -225,9 +225,12 @@ Window {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 150
                     Layout.preferredHeight: 34
-                    model: deviceController.devices
-                    // 选一台就把串号填进输入框，连接还是由上面的按钮触发
-                    onActivated: serialField.text = model[index]
+                    model: deviceController.deviceLabels
+                    // 选一台就直接连：不用再点一次"连接"
+                    onActivated: {
+                        serialField.text = deviceController.devices[index]
+                        deviceController.Connect(deviceController.devices[index])
+                    }
 
                     background: Rectangle {
                         radius: 6
@@ -238,7 +241,7 @@ Window {
 
                     contentItem: Text {
                         leftPadding: 10
-                        text: deviceBox.count > 0 ? deviceBox.currentText : qsTr("没有在线设备")
+                        text: deviceBox.count > 0 ? deviceBox.currentText : qsTr("没扫到设备，点「刷新」")
                         color: deviceBox.count > 0 ? "#d8dee9" : "#6b7280"
                         font.pixelSize: 13
                         verticalAlignment: Text.AlignVCenter

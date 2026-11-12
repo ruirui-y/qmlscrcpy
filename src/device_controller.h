@@ -28,6 +28,7 @@ class DeviceController : public QObject
     Q_PROPERTY(int dragPixels READ DragPixels NOTIFY DragPixelsChanged)
     Q_PROPERTY(QString deviceName READ DeviceName NOTIFY DeviceNameChanged)
     Q_PROPERTY(QStringList devices READ Devices NOTIFY DevicesChanged)
+    Q_PROPERTY(QStringList deviceLabels READ DeviceLabels NOTIFY DevicesChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -38,7 +39,8 @@ public:
     QString WheelMode() const;                                                                  // "scroll" 或 "drag"
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮拖多少像素
     QString DeviceName() const;                                                                 // 当前连着的设备串号，标题栏用它
-    QStringList Devices() const;                                                                // 上一次 adb devices 拿到的在线设备
+    QStringList Devices() const;                                                                // 扫到的设备地址，和 deviceLabels 下标对应
+    QStringList DeviceLabels() const;                                                           // 下拉框显示文字，带 USB / 无线 前缀
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 里把 VideoSurface 传进来
 
@@ -95,7 +97,8 @@ private:
     bool wifi_busy_ = false;                                                                    // 正在后台切无线，期间不接受第二次点击
     QString device_name_;                                                                       // 当前连着的设备串号
     QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
-    QStringList devices_;                                                                       // 给 QML 下拉框用的在线设备列表
+    QStringList devices_;                                                                       // 给 QML 下拉框用的设备地址
+    QStringList device_labels_;                                                                 // 下拉框显示文字，和 devices_ 下标对应
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
     std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应
