@@ -56,9 +56,7 @@ QStringList LatestJsonSources()
         QStringLiteral("?v=%1").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHH")));
 
     sources.append(QStringLiteral("https://gitee.com/bai-maxifeng/qmlscrcpy/raw/master/latest.json") + cache_buster);
-    sources.append(QStringLiteral("https://cdn.jsdelivr.net/gh/ruirui-y/qmlscrcpy@master/latest.json") + cache_buster);
-    sources.append(QStringLiteral("https://raw.githubusercontent.com/ruirui-y/qmlscrcpy/master/latest.json")
-                   + cache_buster);
+    sources.append(QStringLiteral("https://raw.githubusercontent.com/ruirui-y/qmlscrcpy/master/latest.json") + cache_buster);
     return sources;
 }
 
