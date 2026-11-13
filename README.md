@@ -430,6 +430,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [连接层](docs/连接层.md) | adb reverse/forward、server 参数、76 字节握手 |
 | [视频链路](docs/视频链路.md) | 切帧、解码、Frame 引用计数、耗时埋点 |
 | [渲染方案](docs/渲染方案.md) | 三种渲染路径对比、为什么用 FBO、换分辨率重建纹理 |
+| [渲染延迟](docs/渲染延迟.md) | 一帧 7ms 的完整排查：逐帧观测、三次结论修正、`QSG_RENDER_LOOP=windows` 把延迟砍到 3.8ms |
 | [输入层](docs/输入层.md) | 坐标换算公式、触摸/滚轮消息、键盘与符号键 |
 | [主窗口](docs/主窗口.md) | 控制窗布局、按键与光标、状态文字来源 |
 | [工具栏](docs/工具栏.md) | 为什么并进同一扇窗、按钮清单、滑动像素、提示条 |
