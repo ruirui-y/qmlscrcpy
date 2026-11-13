@@ -398,8 +398,6 @@ QString ParseWifiAddress(const QString &route_output)
     return QString();
 }
 
-
-
 namespace
 {
 

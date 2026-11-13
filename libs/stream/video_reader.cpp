@@ -5,7 +5,6 @@
 
 #include "protocol/video_packet.h"
 #include "stream/h264_decoder.h"
-#include "stream/perf_stats.h"
 
 namespace qsc::stream
 {
@@ -15,7 +14,6 @@ using protocol::VideoPacketHeader;
 VideoReader::VideoReader(QTcpSocket *socket, H264Decoder *decoder, QObject *parent)
     : QThread(parent), socket_(socket), decoder_(decoder)
 {
-    report_timer_.start();
 }
 
 // 置停止标志并等线程退出，最多等 1 秒
@@ -62,14 +60,10 @@ void VideoReader::run()
     QByteArray buffer;                                                                          // 还没处理完的零碎字节，半帧就存在这儿，跨循环保留
     QVector<Frame> frames;                                                                      // 一次 Push 可能吐出多帧，所以用容器接
     QString error;                                                                              // 出错原因，往上传给界面
-    PerfStats &perf = PerfStats::Get();                                                         // 四段耗时累计，QS_PERF 打开才打印
-    QElapsedTimer stage_timer;                                                                  // 临时秒表：只量解码这一段
-    QElapsedTimer read_timer;                                                                   // 临时秒表：量等数据加切包这一段
 
     // 死循环，只有出错或停机才靠 return 跳出
     for (;;)
     {
-        read_timer.start();
 
         // TCP 是字节流，帧边界得自己数：先凑够 12 字节包头，才知道这一帧有多长
         if (!FillBuffer(buffer, VideoPacketHeader::kSize, &error))
@@ -107,18 +101,10 @@ void VideoReader::run()
         // 切出负载并把整帧从缓冲区删掉，不删会反复解同一帧
         const QByteArray payload = buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
         buffer.remove(0, total);
-        perf.read_us.fetchAndAddRelaxed(read_timer.nsecsElapsed() / 1000);
-        perf.bytes.fetchAndAddRelaxed(total);
-        if (header.IsKeyFrame())
-        {
-            perf.keyframes.fetchAndAddRelaxed(1);
-        }
 
         // 配置包只存不放画面；容器复用，clear 只清大小不释放容量
         frames.clear();
-        stage_timer.start();
         const bool pushed = decoder_->Push(payload, header.IsConfig(), header.PtsUs(), frames, &error);
-        perf.decode_us.fetchAndAddRelaxed(stage_timer.nsecsElapsed() / 1000);
         if (!pushed)
         {
             emit SigFailed(error);
@@ -129,16 +115,9 @@ void VideoReader::run()
         // 直连：这里等于就地调 VideoItem::Present，不进 GUI 线程队列
         for (const Frame &frame : frames)
         {
-            perf.frames.fetchAndAddRelaxed(1);
             emit SigFrameReady(frame);
         }
 
-        // 每秒把各段耗时打一行，enabled 为 false 时这个函数立刻返回
-        if (report_timer_.elapsed() >= 1000)
-        {
-            perf.ReportAndReset();
-            report_timer_.restart();
-        }
     }
 }
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QByteArray>
-#include <QElapsedTimer>
 #include <QImage>
 #include <QString>
 #include <QThread>
@@ -45,7 +44,6 @@ private:
 
     QTcpSocket *socket_;                                                                            // 已建好连接的视频 socket，本对象只读
     H264Decoder *decoder_;                                                                          // 解码器，和本线程一一对应，别跨线程共用
-    QElapsedTimer report_timer_;                                                                    // 每秒结算一次耗时统计
     std::atomic<bool> stop_{false};
 };
 

@@ -1,24 +1,58 @@
 #include "ui/video_item.h"
 
 #include <QDebug>
+#include <QGuiApplication>
+#include <QThread>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
-#include <QElapsedTimer>
 #include <QMutexLocker>
 #include <QOpenGLContext>
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QTimer>
+#include <QQuickWindow>
 
 #include "base/log.h"
-#include "stream/perf_stats.h"
+
+// Release 里不定义这个宏，下面的每帧追踪代码整段不会被编进去
 
 using qsc::stream::Frame;
 
 namespace
 {
+
+// 一帧的完整事件记录：只在 Debug 编进来，发布版里连这段代码都不存在
+void PrintTrace(const FrameTracePtr& trace, bool swapped, qint64 alive_us)
+{
+    if (!trace)
+    {
+        return;
+    }
+
+    const auto ms = [](qint64 us)
+        {
+            return us / 1000.0;
+        };
+
+    if (!swapped)
+    {
+        // 还没画就被后面的帧顶掉：只报到达到被覆盖活了多久
+        qInfo().nospace() << "  帧 " << trace->id << " 丢掉：到达间隔 " << ms(trace->gap_us) << " ms，存活 "
+            << ms(alive_us) << " ms";
+        return;
+    }
+
+
+    qInfo().nospace() << "  帧 " << trace->id << " 上屏：到达间隔 " << ms(trace->gap_us) << "，GUI 排队 "
+        << ms(trace->queue_us.load()) << "，update到事件 " << ms(trace->dispatch_us.load())
+        << "，事件到渲染 " << ms(trace->wake_us.load()) << "，取帧 " << ms(trace->sync_us.load())
+        << "，画一帧 " << ms(trace->draw_us.load()) << "，交换阻塞 " << ms(trace->swap_us.load())
+        << "，从到达到上屏 "
+        << ms(trace->render_end_us.load() + trace->swap_us.load() - trace->arrive_us) << " ms";
+}
+
 
 // 顶点着色器：顶点是裁剪空间坐标，直接用
 const char *const kVertexShader = R"(
@@ -68,6 +102,8 @@ private:
     void DrawQuad(QOpenGLFunctions *gl, float width, float height);
 
     QSize item_size_;                                                                           // 画布（FBO）尺寸，每次 synchronize 更新
+    FrameTracePtr trace_;                                                                       // 当前这一帧的事件记录，render() 回报耗时用
+    VideoItem *item_ = nullptr;                                                                 // synchronize 时记住画布指针，render() 回报耗时要它
     bool keep_aspect_ = false;
 
     QByteArray planes_[3];                                                                      // 三个平面的紧凑像素副本
@@ -86,34 +122,38 @@ private:
 void YuvRenderer::synchronize(QQuickFramebufferObject *item)
 {
     auto *video_item = static_cast<VideoItem *>(item);
+    item_ = video_item;
     item_size_ = QSize(static_cast<int>(video_item->width()), static_cast<int>(video_item->height()));
     keep_aspect_ = video_item->KeepAspect();
 
-    qsc::stream::PerfStats &perf = qsc::stream::PerfStats::Get();
-    perf.renders.fetchAndAddRelaxed(1);
+    // 两轮 synchronize 之间隔了多久，渲染线程的节奏就靠这个看
+    video_item->AdvanceSyncPass();
+    const qint64 pass_start_us = video_item->SyncStartUs();
 
-    const qint64 enqueue_us = video_item->PendingEnqueueUs();
-    const Frame frame = video_item->TakePendingFrame();
-    if (frame.IsValid())
-    {
-        perf.renders_with_frame.fetchAndAddRelaxed(1);
-
-        // 帧从进进程到真正上屏花了多久：这个数和设备时钟无关，有线和无线可以直接比
-        if (enqueue_us > 0)
-        {
-            const qint64 pipeline_us = video_item->ClockUs() - enqueue_us;
-            perf.pipeline_us.storeRelaxed(pipeline_us);
-            perf.pipeline_sum_us.fetchAndAddRelaxed(pipeline_us);
-            if (pipeline_us > perf.pipeline_max_us.loadRelaxed())
-            {
-                perf.pipeline_max_us.storeRelaxed(pipeline_us);
-            }
-        }
-    }
+    FrameTracePtr trace;
+    const Frame frame = video_item->TakePendingFrame(&trace);
     if (!frame.IsValid())
     {
         return;
     }
+
+    // 这一帧等渲染线程等了多久：拆成 update() → GUI 处理 UpdateRequest → 渲染线程开跑
+    const qint64 update_done_us = trace ? trace->update_done_us.load() : 0;
+    const qint64 request_us = video_item->UpdateRequestUs();
+    if (trace && update_done_us > 0)
+    {
+        if (request_us > update_done_us && pass_start_us > request_us)
+        {
+            trace->dispatch_us.store(request_us - update_done_us);
+            trace->wake_us.store(pass_start_us - request_us);
+        }
+        else if (pass_start_us > update_done_us)
+        {
+            // 没抓到事件时退回整段计时，免得这条链断掉
+            trace->wake_us.store(pass_start_us - update_done_us);
+        }
+    }
+    trace_ = trace;
 
     // 拷进渲染器自己的缓冲：帧只活到这一次 synchronize 结束
     const QSize size = frame.Size();
@@ -139,6 +179,12 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
     }
     frame_size_ = size;
     dirty_ = true;
+
+    // 这一轮 synchronize 自己花了多久（取帧 + 拷三平面）
+    if (trace)
+    {
+        trace->sync_us.store(video_item->ClockUs() - pass_start_us);
+    }
 }
 
 // 首次渲染时编译链接 YUV 转 RGB 的着色器
@@ -151,7 +197,7 @@ void YuvRenderer::EnsureProgram()
 
     if (!program_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
         || !program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentShader))
-        {
+    {
         qWarning() << "[video] 着色器编译失败:" << program_.log();
         // 失败也标记成 ready：每帧重试编译只会刷屏
         program_ready_ = true;
@@ -170,6 +216,7 @@ void YuvRenderer::EnsureProgram()
 // 渲染线程里画一帧：上传三个平面，着色器合成后画进 FBO
 void YuvRenderer::render()
 {
+    const qint64 draw_start_us = item_ != nullptr ? item_->ClockUs() : 0;
     QOpenGLFunctions *gl = QOpenGLContext::currentContext() != nullptr
                                ? QOpenGLContext::currentContext()->functions()
                                : nullptr;
@@ -190,8 +237,6 @@ void YuvRenderer::render()
         return;
     }
 
-    QElapsedTimer upload_timer;
-    upload_timer.start();
 
     // 建纹理 + 上传：只在有像素时才做
     if (dirty_)
@@ -223,7 +268,6 @@ void YuvRenderer::render()
                                 GL_UNSIGNED_BYTE, planes_[i].constData());
         }
         dirty_ = false;
-        qsc::stream::PerfStats::Get().upload_us.fetchAndAddRelaxed(upload_timer.nsecsElapsed() / 1000);
     }
 
     if (!program_.isLinked())
@@ -245,6 +289,12 @@ void YuvRenderer::render()
 
     program_.release();
     ResetGlState(gl);
+
+    // 画完立刻记一笔：缓冲交换发生在 render() 之后，那段时间由 synchronize 侧的"交换+等待"统计
+    if (item_ != nullptr && draw_start_us > 0)
+    {
+        item_->MarkRenderEnd(draw_start_us, trace_);
+    }
 }
 
 // 画一个四边形铺满画布；keepAspect 打开时按帧的宽高比留黑边
@@ -311,12 +361,7 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
     setFlag(QQuickItem::ItemHasContents, true);
     setAcceptedMouseButtons(Qt::LeftButton);                                                    // 只认左键：右键留给后面做菜单
 
-    // 重绘由 Present 逐帧投递（到帧就画）；这个 8ms 定时器只负责尺寸通知和兜底统计
-    refresh_timer_ = new QTimer(this);
-    refresh_timer_->setInterval(8);
-    QObject::connect(refresh_timer_, &QTimer::timeout, this, &VideoItem::OnRefreshTimer);
-    refresh_timer_->start();
-
+    // 重绘由 Present 逐帧投递，尺寸变化也在 Present 里通知，GUI 线程不再有 8ms 轮询定时器
     fps_timer_ = new QTimer(this);
     fps_timer_->setInterval(1000);
     QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::UpdateFps);
@@ -378,38 +423,88 @@ void VideoItem::Present(const Frame &frame)
         return;
     }
 
-    bool replaced = false;
+    const qint64 enqueue_us = clock_.nsecsElapsed() / 1000;
+
+    // 每一帧带一份自己的事件记录，从到达到上屏（或到被顶掉）都由它自己记
+    auto trace = std::make_shared<FrameTrace>();
+    trace->id = ++next_frame_id_;
+    trace->arrive_us = enqueue_us;
+
+    const qint64 prev_present_us = last_present_us_.fetchAndStoreRelaxed(enqueue_us);
+    if (prev_present_us > 0)
+    {
+        trace->gap_us = enqueue_us - prev_present_us;
+    }
+
+    FrameTracePtr replaced_trace;
+    qint64 replaced_alive_us = 0;
+    bool size_changed = false;
     {
         QMutexLocker locker(&mutex_);
         // 只留最新一帧：视频线程比渲染快的时候，旧帧直接覆盖，不排队
-        replaced = has_pending_;
+        if (has_pending_)
+        {
+            replaced_trace = pending_trace_;
+            replaced_alive_us = enqueue_us - pending_trace_->arrive_us;
+        }
+        size_changed = frame_size_ != frame.Size();
         pending_ = frame;
+        pending_trace_ = trace;
         has_pending_ = true;
         frame_size_ = frame.Size();
-        pending_enqueue_us_ = clock_.nsecsElapsed() / 1000;
     }
     frames_arrived_.ref();
 
-    // 记一笔"没被渲染就被覆盖"的帧数，这是判断渲染跟不跟得上的关键指标
-    qsc::stream::PerfStats &perf = qsc::stream::PerfStats::Get();
-    perf.presented.fetchAndAddRelaxed(1);
-    if (replaced)
+    // 尺寸变了（设备旋转）才通知 QML；emit 只能在 GUI 线程做，投递一次
+    if (size_changed)
     {
-        perf.dropped.fetchAndAddRelaxed(1);
+        QMetaObject::invokeMethod(this, [this]() { NotifyFrameSize(); }, Qt::QueuedConnection);
     }
 
-    // 到帧就排队请求一次重绘：视频线程直接调 update() 不安全，投递到 GUI 线程执行。
-    // 以前靠 8ms 定时器轮询，120fps 时大量帧落在两个 tick 之间被覆盖。
-    QMetaObject::invokeMethod(this, [this]()
+    // 被顶掉的帧当场结算：它从到达到被覆盖活了多久
+    if (replaced_trace)
     {
-        update();
-    }, Qt::QueuedConnection);
+        PrintTrace(replaced_trace, false, replaced_alive_us);
+    }
 
-    // 这里故意什么都不投递：重绘交给 OnRefreshTimer 在 GUI 线程里发
+    // 到帧就排队请求一次重绘：视频线程直接调 update() 不安全，投递到 GUI 线程执行
+    QMetaObject::invokeMethod(this, [this, trace]()
+    {
+        const qint64 start_us = clock_.nsecsElapsed() / 1000;
+        trace->queue_us.store(start_us - trace->arrive_us);
+        update();
+        trace->update_done_us.store(clock_.nsecsElapsed() / 1000);
+
+        // 交换缓冲发生在我们看不见的地方，接 frameSwapped 才能量到它阻塞了多久
+        if (!swap_hooked_ && window() != nullptr)
+        {
+            QObject::connect(window(), &QQuickWindow::frameSwapped, this, [this]() { MarkSwapped(); },
+                             Qt::UniqueConnection);
+            swap_hooked_ = true;
+        }
+
+        // 抓 GUI 线程真正处理 UpdateRequest 的时刻：那 5ms 到底在 Qt 内部哪一段就看这个
+        if (!filter_hooked_ && window() != nullptr)
+        {
+            window()->installEventFilter(this);
+            filter_hooked_ = true;
+        }
+    }, Qt::QueuedConnection);
 }
 
-// 渲染线程调：取走最新一帧，没有就返回无效帧
-Frame VideoItem::TakePendingFrame()
+// GUI 线程处理窗口的 UpdateRequest 时记一笔，渲染线程用它算"事件到渲染"那一段
+bool VideoItem::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::UpdateRequest)
+    {
+        update_request_us_.storeRelaxed(clock_.nsecsElapsed() / 1000);
+
+    }
+    return QQuickFramebufferObject::eventFilter(watched, event);
+}
+
+// 渲染线程调：取走最新一帧和它的事件记录，没有就返回无效帧
+Frame VideoItem::TakePendingFrame(FrameTracePtr *trace_out)
 {
     QMutexLocker locker(&mutex_);
     if (!has_pending_)
@@ -417,7 +512,12 @@ Frame VideoItem::TakePendingFrame()
         return Frame();
     }
     const Frame frame = pending_;
+    if (trace_out != nullptr)
+    {
+        *trace_out = pending_trace_;
+    }
     pending_ = Frame();
+    pending_trace_.reset();
     has_pending_ = false;
     return frame;
 }
@@ -428,11 +528,62 @@ QSize VideoItem::NotifiedFrameSize() const
     return notified_size_;
 }
 
-// 待渲染帧是什么时候到进程的（微秒），渲染线程用它算管道延迟
-qint64 VideoItem::PendingEnqueueUs() const
+// 记下本轮 synchronize 的起点，返回上一轮起点：两者相减就是渲染线程的轮次间隔
+qint64 VideoItem::AdvanceSyncPass()
 {
+    const qint64 now_us = clock_.nsecsElapsed() / 1000;
+    return sync_start_us_.fetchAndStoreRelaxed(now_us);
+}
+
+// 本轮 synchronize 的起始时刻
+qint64 VideoItem::SyncStartUs() const
+{
+    return sync_start_us_.loadRelaxed();
+}
+
+// 这一帧真正提交给系统了：交换缓冲阻塞多久算在它自己头上，然后整条打出来
+void VideoItem::MarkSwapped()
+{
+    FrameTracePtr trace;
+    {
+        QMutexLocker locker(&mutex_);
+        trace = swapped_trace_;
+        swapped_trace_.reset();
+    }
+    if (!trace)
+    {
+        return;
+    }
+
+    const qint64 now_us = clock_.nsecsElapsed() / 1000;
+    const qint64 render_end_us = trace->render_end_us.load();
+    if (render_end_us > 0 && now_us > render_end_us)
+    {
+        trace->swap_us.store(now_us - render_end_us);
+    }
+
+    // 同一帧可能因为窗口重绘多跑一轮，只打第一次
+    if (!trace->printed.exchange(true))
+    {
+        PrintTrace(trace, true, 0);
+    }
+}
+
+// render() 画完时回报：整个函数跑了多久，记在这一帧自己的记录里
+void VideoItem::MarkRenderEnd(qint64 start_us, const FrameTracePtr &trace)
+{
+    if (!trace)
+    {
+        return;
+    }
+
+    const qint64 end_us = clock_.nsecsElapsed() / 1000;
+    trace->draw_us.store(end_us - start_us);
+    trace->render_end_us.store(end_us);
+
+    // 交给 GUI 线程的 frameSwapped：那时候才知道交换缓冲阻塞了多久
     QMutexLocker locker(&mutex_);
-    return pending_enqueue_us_;
+    swapped_trace_ = trace;
 }
 
 // 断开连接时把还没渲染的帧丢掉
@@ -446,12 +597,11 @@ void VideoItem::Clear()
     // 断开时把按键重复计数一起清掉，下次连接不会从第 3 次重复开始
     keys_.Reset();
     fps_last_arrived_ = 0;
-    frames_painted_ = 0;
     update();
 }
 
-// GUI 线程每 8ms 看一眼：有新帧就请重绘，尺寸变了就通知 QML
-void VideoItem::OnRefreshTimer()
+// GUI 线程：帧尺寸变了才通知 QML（由 Present 投递过来，不再轮询）
+void VideoItem::NotifyFrameSize()
 {
     QSize current_size;
     {
@@ -459,18 +609,10 @@ void VideoItem::OnRefreshTimer()
         current_size = frame_size_;
     }
 
-    // 尺寸变了（设备旋转）才通知 QML；在 GUI 线程 emit，跨线程的事一点都不做
     if (current_size != notified_size_)
     {
         notified_size_ = current_size;
         emit SigFrameSizeChanged();
-    }
-
-    // 重绘已经由 Present 逐帧投递，这里只兜一次"有帧但没触发"的极端情况
-    const int arrived = frames_arrived_.loadAcquire();
-    if (arrived != frames_painted_)
-    {
-        frames_painted_ = arrived;
     }
 }
 
