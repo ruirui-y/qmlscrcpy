@@ -72,3 +72,19 @@ Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; WorkingDi
 Type: filesandordirs; Name: "{app}\Log"
 Type: filesandordirs; Name: "{app}\screenshots"
 Type: filesandordirs; Name: "{app}\config"
+
+[Code]
+// 安装前让本目录的 adb server 收工。
+// 我们启动 adb 时它会拉起一个常驻 daemon，路径就在 {app} 下，锁住 adb.exe 让安装包覆盖不了；
+// 这里调一次 kill-server 让它自己退出，不去强杀进程（别的开发工具也在用 adb）。
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  if FileExists(ExpandConstant('{app}\adb.exe')) then
+  begin
+    Exec(ExpandConstant('{app}\adb.exe'), 'kill-server', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(800);
+  end;
+  Result := '';
+end;

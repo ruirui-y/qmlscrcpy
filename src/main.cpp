@@ -11,6 +11,7 @@
 #include <QUrl>
 #include <QWindow>
 
+#include "adb/adb_runner.h"
 #include "app_settings.h"
 #include "base/console_window.h"
 #include "base/hotkey.h"
@@ -193,6 +194,9 @@ int main(int argc, char *argv[])
     update_checker.Check();
 
     const int exit_code = app.exec();
+
+    // 退出前让 adb server 收工：它常驻在安装目录，会锁住 adb.exe 让下个版本的安装包覆盖不了
+    qsc::adb::Run(QStringList() << QStringLiteral("kill-server"), 3000);
 
     // 退出前把后台任务线程收掉，免得 QThread 在静态析构里被强杀
     qsc::base::ShutdownTaskRunner();
