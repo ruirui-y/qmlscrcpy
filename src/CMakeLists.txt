@@ -15,6 +15,9 @@ add_executable(QmlScrcpy ${qs_subsystem}
     boss_key.h
     device_controller.cpp
     device_controller.h
+    video_controller.cpp
+    video_controller.h
+    control_writer.h
     update_checker.cpp
     update_checker.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.cpp

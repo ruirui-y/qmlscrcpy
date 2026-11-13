@@ -459,7 +459,7 @@ Window
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: deviceController.OpenUploadDir()
+                        onClicked: videoController.OpenUploadDir()
                     }
                 }
             }

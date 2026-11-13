@@ -306,7 +306,8 @@ ui/video_item.cpp  mousePressEvent / keyPressEvent ...
   └─ libs/input/key_controller.cpp      Qt::Key → 安卓 keycode，按住计数
   └─ libs/input/keycode_table.cpp       键码表、metaState（含 Shift 符号键）
        └─ libs/protocol/control_message.cpp  拼消息
-            └─ DeviceController::SendControl  写控制 socket
+            └─ VideoController::OnSurfaceControlMessage  转发给 ControlWriter
+   └─ DeviceController::WriteControl  写控制 socket
 ```
 
 ### 目录结构
@@ -328,7 +329,7 @@ QmlScrcpy/
 │  └─ input/                    坐标换算、触摸/滚轮/键盘消息
 ├─ resources/                   图标（app.ico）和生成脚本（make_icon.ps1）、app.rc
 ├─ ui/video_item.*              QQuickFramebufferObject + 三平面着色器
-├─ src/                         设备控制器、窗口配置、main
+├─ src/                         会话控制器 + 视频控制器、窗口配置、main
 ├─ qml/                         控制窗（MainWindow）+ 投屏窗（VideoWindow）
 ├─ tests/                       QTest 单测，ctest 按名字跑
 ├─ docs/                        架构与各层文档
@@ -350,7 +351,7 @@ GUI 线程          Qt 事件循环、QML、窗口
 
 | 想做的事 | 从哪下手 |
 |---|---|
-| 加一个工具栏按钮 | `qml/VideoWindow.qml` 加 `ToolButton` → `DeviceController` 加方法 → `libs/protocol/control_message.cpp` 拼消息 |
+| 加一个工具栏按钮 | `qml/VideoWindow.qml` 加 `ToolButton` → `VideoController` 加方法 → `libs/protocol/control_message.cpp` 拼消息 |
 | 调整画质 / 分辨率 | `config.ini` 的 `[video]`，或 `libs/session/server_args.cpp` |
 | 换渲染方式 | `ui/video_item.cpp` 的 `YuvRenderer` |
 | 支持新控制消息 | `libs/protocol/control_message.h` 加构造 + `libs/protocol` 单测 |

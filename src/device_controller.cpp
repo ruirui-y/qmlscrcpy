@@ -31,16 +31,12 @@
 
 #include <QDebug>
 #include <QTcpSocket>
-
-#include "adb/adb_runner.h"
 #include "ui/video_item.h"
 
 DeviceController::DeviceController(QObject *parent) : QObject(parent)
 {
     // 滚轮发法跟配置走：界面里选过的优先，没选过就用 config.ini 的默认值
     AppSettings settings;
-    wheel_mode_ = settings.WheelMode();
-    drag_pixels_ = settings.DragPixels();
     show_console_ = settings.ShowConsole();
     status_ = QStringLiteral("未连接");
 }
@@ -58,57 +54,6 @@ QString DeviceController::Status() const
 QString DeviceController::ProposedSerial() const
 {
     return proposed_serial_;
-}
-
-// QML 把视频画布交进来，连上后的帧就送这里
-void DeviceController::SetSurface(QObject *surface)
-{
-    surface_ = qobject_cast<VideoItem *>(surface);
-    if (surface_ == nullptr)
-    {
-        qWarning() << "[controller] 传进来的不是 VideoSurface";
-        return;
-    }
-
-    // 画布把鼠标键盘翻成控制消息，这里负责写进控制 socket
-    QObject::connect(surface_, &VideoItem::SigControlMessageReady, this, &DeviceController::SendControl);
-    surface_->SetWheelMode(wheel_mode_);
-    surface_->SetDragPixels(drag_pixels_);
-}
-
-// 电脑剪贴板发给设备：写入 + 让设备直接粘贴
-void DeviceController::SendClipboardToDevice()
-{
-    if (session_ == nullptr)
-    {
-        SetStatus(QStringLiteral("还没连接设备"));
-        return;
-    }
-
-    const QString text = QGuiApplication::clipboard()->text();
-    if (text.isEmpty())
-    {
-        SetStatus(QStringLiteral("电脑剪贴板没有文字"));
-        return;
-    }
-
-    ++clipboard_sequence_;
-    SendControl(qsc::protocol::ControlMessage::SetClipboard(clipboard_sequence_, true, text));
-    SetStatus(QStringLiteral("剪贴板已发给手机（%1 字），已自动粘贴").arg(text.size()));
-}
-
-// 把设备的剪贴板取到电脑
-void DeviceController::PullClipboardFromDevice()
-{
-    if (session_ == nullptr)
-    {
-        SetStatus(QStringLiteral("还没连接设备"));
-        return;
-    }
-
-    ++clipboard_sequence_;
-    SendControl(qsc::protocol::ControlMessage::GetClipboard(qsc::protocol::ClipboardAction::Copy));
-    SetStatus(QStringLiteral("正在读取手机剪贴板 …"));
 }
 
 // 拖文件上传的目标目录
@@ -132,6 +77,7 @@ bool DeviceController::SetUploadDir(const QString &dir)
     SetStatus(QStringLiteral("上传目录已改为 %1").arg(trimmed));
     return true;
 }
+
 // 四个窗口快捷键的当前值
 QString DeviceController::ShortcutBack() const
 {
@@ -169,6 +115,7 @@ bool DeviceController::SetShortcut(const QString &name, const QString &sequence)
                                 : QStringLiteral("快捷键已改为 %1").arg(trimmed));
     return true;
 }
+
 // 当前老板键文本，界面显示用
 QString DeviceController::BossKey() const
 {
@@ -217,6 +164,7 @@ bool DeviceController::SetBossKey(const QString &text)
     SetStatus(QStringLiteral("老板键已改为 %1").arg(qsc::base::HotkeyText(spec)));
     return true;
 }
+
 // QML 把窗口登记进来：投屏窗在 QML 里声明在主窗内部，QWindow::parent 非空，
 // 不在 topLevelWindows() 里，只能让它们自己报到
 void DeviceController::RegisterWindow(QObject *window)
@@ -236,136 +184,6 @@ void DeviceController::RegisterWindow(QObject *window)
     app_windows_.append(raw);
 }
 
-// 在手机上打开上传目录：优先拉起厂商的文件管理，其次是 AOSP 的文档界面。
-// 厂商 App 基本都不支持深链到子目录（试过 file_path / path / 目录 URI，只会停在首页），
-// 所以这里只负责打开文件管理，路径靠状态栏提示。
-void DeviceController::OpenUploadDir()
-{
-    if (session_ == nullptr)
-    {
-        SetStatus(QStringLiteral("还没连接设备"));
-        return;
-    }
-
-    const QString upload_dir = AppSettings().UploadDir();
-    const QString serial = device_name_;
-
-    // 状态栏给人看，把路径换成手机上看到的叫法：/sdcard/Download/x → 下载/x
-    QString display_dir = upload_dir;
-    display_dir.remove(QStringLiteral("/sdcard/"));
-    display_dir.replace(QStringLiteral("Download"), QStringLiteral("下载"));
-
-    // 目录要先存在，否则打开后看不到东西
-    qsc::adb::Run(QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("mkdir")
-                                << QStringLiteral("-p") << upload_dir, 5000);
-
-    // 各家文件管理的主界面，按机型依次试；第一个能拉起来的就用它
-    static const QStringList kFileManagers{
-        QStringLiteral("com.coloros.filemanager/com.oplus.filemanager.main.ui.MainActivity"),   // OPPO / realme / OnePlus
-        QStringLiteral("com.android.fileexplorer/.FileExplorerTabActivity"),                    // 小米
-        QStringLiteral("com.huawei.hidisk/.filemanager.FileManager"),                           // 华为 / 荣耀
-        QStringLiteral("com.sec.android.app.myfiles/.common.MainActivity"),                     // 三星
-    };
-    for (const QString &component : kFileManagers)
-    {
-        const qsc::adb::AdbResult opened =
-            qsc::adb::Run(QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell")
-                                        << QStringLiteral("am") << QStringLiteral("start") << QStringLiteral("-n")
-                                        << component, 8000);
-        if (opened.Ok())
-        {
-            SetStatus(QStringLiteral("已打开文件管理首页，文件在「%1」").arg(display_dir));
-            return;
-        }
-    }
-
-    // 没有厂商文件管理就退到 AOSP 的「下载」界面
-    const qsc::adb::AdbResult fallback = qsc::adb::Run(
-        QStringList() << QStringLiteral("-s") << serial << QStringLiteral("shell") << QStringLiteral("am")
-                      << QStringLiteral("start") << QStringLiteral("-a") << QStringLiteral("android.intent.action.VIEW_DOWNLOADS"),
-        8000);
-    SetStatus(fallback.Ok() ? QStringLiteral("已打开「下载」界面，文件在「%1」").arg(display_dir)
-                            : QStringLiteral("打不开文件管理器：%1").arg(fallback.ErrorText()));
-}
-// 拖进投屏窗的文件：逐个 adb push 到 /sdcard/Download/，进度实时刷到状态栏
-void DeviceController::PushFiles(const QList<QUrl> &urls)
-{
-    qCInfo(qsc::base::lcInput) << "[drop] 收到" << urls.size() << "个 url";
-
-    // 先把路径抓出来并打日志：拖放传参有问题时能直接看出是哪一步空的
-    QStringList paths;
-    for (const QUrl &url : urls)
-    {
-        const QString path = url.toLocalFile();
-        const bool is_file = !path.isEmpty() && QFileInfo(path).isFile();
-        qCInfo(qsc::base::lcInput) << "[drop] url" << url.toString() << "本地路径" << path << "是文件" << is_file;
-        if (is_file)
-        {
-            paths.append(path);
-        }
-    }
-
-    if (paths.isEmpty())
-    {
-        SetStatus(urls.isEmpty() ? QStringLiteral("拖进来的不是文件")
-                                 : QStringLiteral("拖进来的都是文件夹，暂不支持"));
-        return;
-    }
-
-    if (session_ == nullptr)
-    {
-        SetStatus(QStringLiteral("还没连接设备"));
-        return;
-    }
-
-    const QString serial = device_name_;
-    const QString upload_dir = AppSettings().UploadDir();
-
-    // 同样换成手机上看到的叫法，状态栏里统一用中文目录名
-    QString display_dir = upload_dir;
-    display_dir.remove(QStringLiteral("/sdcard/"));
-    display_dir.replace(QStringLiteral("Download"), QStringLiteral("下载"));
-
-    SetStatus(QStringLiteral("正在传 %1 个文件到「%2」…").arg(paths.size()).arg(display_dir));
-
-    // adb push 是阻塞的，整个循环丢到工作线程；进度用 Queued 调用回主线程改状态
-    qsc::base::TaskRunner::Instance().Post([this, serial, paths, upload_dir, display_dir]()
-    {
-        int done = 0;
-        for (const QString &path : paths)
-        {
-            const QString name = QFileInfo(path).fileName();
-            QString error;
-            qCInfo(qsc::base::lcInput) << "[drop] 开始 push" << path << "->" << upload_dir;
-            const bool ok = qsc::adb::PushFile(serial, path, upload_dir,
-                                               [this, name](int percent)
-                                               {
-                                                   QMetaObject::invokeMethod(this, [this, name, percent]()
-                                                   {
-                                                       SetStatus(QStringLiteral("传 %1：%2%").arg(name).arg(percent));
-                                                   }, Qt::QueuedConnection);
-                                               },
-                                               &error);
-            if (!ok)
-            {
-                qCInfo(qsc::base::lcInput) << "[drop] push 失败" << name << error;
-                QMetaObject::invokeMethod(this, [this, name, error]()
-                {
-                    SetStatus(QStringLiteral("传 %1 失败：%2").arg(name, error));
-                }, Qt::QueuedConnection);
-                return;
-            }
-            qCInfo(qsc::base::lcInput) << "[drop] push 完成" << name;
-            ++done;
-        }
-
-        QMetaObject::invokeMethod(this, [this, done, display_dir]()
-        {
-            SetStatus(done == 1 ? QStringLiteral("文件已传到「%1」").arg(display_dir)
-                                : QStringLiteral("%1 个文件已传到「%2」").arg(done).arg(display_dir));
-        }, Qt::QueuedConnection);
-    });
-}
 // 老板键：第一次按藏起所有登记过的窗口，再按恢复
 void DeviceController::ToggleBossKey()
 {
@@ -469,7 +287,7 @@ void DeviceController::OnLocalClipboardChanged()
     }
 
     ++clipboard_sequence_;
-    SendControl(qsc::protocol::ControlMessage::SetClipboard(clipboard_sequence_, false, text));
+    WriteControl(qsc::protocol::ControlMessage::SetClipboard(clipboard_sequence_, false, text));
 }
 // 恢复默认配置：清掉 window.ini、删掉 config.ini，当前会话不重启不会变
 void DeviceController::ResetAllConfig()
@@ -479,11 +297,13 @@ void DeviceController::ResetAllConfig()
     SetStatus(removed ? QStringLiteral("已恢复默认配置，重启程序后生效")
                       : QStringLiteral("配置已重置，重启程序后生效"));
 }
+
 // 会话建起来没有
 bool DeviceController::IsConnected() const
 {
     return connected_;
 }
+
 // 当前生效的码率（bps），界面用来显示
 int DeviceController::VideoBitRate() const
 {
@@ -530,6 +350,7 @@ void DeviceController::ApplyVideoSettings(int bit_rate, int max_fps)
         Connect(serial);
     }
 }
+
 // 控制台窗口当前显示着没有
 bool DeviceController::ShowConsole() const
 {
@@ -550,6 +371,7 @@ void DeviceController::SetShowConsole(bool show)
     emit SigShowConsoleChanged();
     SetStatus(show_console_ ? QStringLiteral("命令行窗口已显示") : QStringLiteral("命令行窗口已隐藏"));
 }
+
 // 设备地址列表，和 deviceLabels 下标一一对应
 QStringList DeviceController::Devices() const
 {
@@ -665,6 +487,7 @@ DeviceController::WifiSwitchResult DeviceController::SwitchToWifiBlocking(const 
                           .arg(tried.trimmed());
     return result;
 }
+
 // 切无线：先把当前会话收干净，阻塞的 adb 调用丢给工作线程，界面不会假死
 void DeviceController::EnableWifi()
 {
@@ -717,6 +540,7 @@ void DeviceController::ApplyWifiResult(const WifiSwitchResult &result)
     emit SigProposedSerialChanged();
     SetStatus(QStringLiteral("无线已就绪：%1，可以拔线了，点「连接」").arg(result.endpoint_));
 }
+
 // 当前连着的设备串号，没连时是空
 QString DeviceController::DeviceName() const
 {
@@ -738,6 +562,7 @@ QString DeviceController::PickStartupSerial(const QString &fallback) const
     }
     return QString();
 }
+
 // 改状态文字，值没变就不发信号
 void DeviceController::SetStatus(const QString &status)
 {
@@ -807,155 +632,6 @@ void DeviceController::RefreshDevices()
                                 : QStringLiteral("找到 %1 台设备").arg(serials.size()));
 }
 
-// 滚轮模式：立即生效、写进 window.ini，下次启动还是它
-void DeviceController::SetWheelMode(const QString &mode)
-{
-    const QString normalized = mode == QStringLiteral("drag") ? QStringLiteral("drag") : QStringLiteral("scroll");
-    if (wheel_mode_ == normalized)
-    {
-        return;
-    }
-
-    wheel_mode_ = normalized;
-    if (surface_ != nullptr)
-    {
-        surface_->SetWheelMode(wheel_mode_);
-    surface_->SetDragPixels(drag_pixels_);
-    }
-    AppSettings settings;
-    settings.SetWheelMode(wheel_mode_);
-    emit SigWheelModeChanged();
-    SetStatus(QStringLiteral("滚轮模式：%1").arg(wheel_mode_ == QStringLiteral("drag") ? QStringLiteral("滑动") : QStringLiteral("滚动")));
-}
-
-QString DeviceController::WheelMode() const
-{
-    return wheel_mode_;
-}
-
-// 滑动像素加减：范围夹在 10 到 300，太小会被当点击，太大一下翻过头
-void DeviceController::AdjustDragPixels(int delta)
-{
-    const int adjusted = qBound(10, drag_pixels_ + delta, 300);
-    if (adjusted == drag_pixels_)
-    {
-        return;
-    }
-
-    drag_pixels_ = adjusted;
-    if (surface_ != nullptr)
-    {
-        surface_->SetDragPixels(drag_pixels_);
-    }
-    AppSettings settings;
-    settings.SetDragPixels(drag_pixels_);
-    emit SigDragPixelsChanged();
-    SetStatus(QStringLiteral("滑动像素：%1").arg(drag_pixels_));
-}
-
-int DeviceController::DragPixels() const
-{
-    return drag_pixels_;
-}
-// 发一次按键：按下和抬起各一条，安卓才会真正触发
-void DeviceController::SendKeycode(quint32 keycode)
-{
-    if (!session_)
-    {
-        return;
-    }
-
-    qsc::protocol::KeycodeEvent event;
-    event.keycode_ = keycode;
-    event.action_ = 0;
-    session_->SendControl(qsc::protocol::ControlMessage::InjectKeycode(event));
-    event.action_ = 1;
-    session_->SendControl(qsc::protocol::ControlMessage::InjectKeycode(event));
-}
-
-// 音量加：走安卓的 KEYCODE_VOLUME_UP（24）
-void DeviceController::SendVolumeUp()
-{
-    SendKeycode(24);
-}
-
-// 音量减：KEYCODE_VOLUME_DOWN（25）
-void DeviceController::SendVolumeDown()
-{
-    SendKeycode(25);
-}
-
-// 让设备转屏幕：一条无负载消息
-void DeviceController::RotateDevice()
-{
-    if (!session_)
-    {
-        return;
-    }
-    session_->SendControl(qsc::protocol::ControlMessage::RotateDevice());
-}
-
-// 截图：抓投屏窗当前内容，存到 exe 旁边的 screenshots 目录
-void DeviceController::SaveScreenshot()
-{
-    if (surface_ == nullptr || surface_->window() == nullptr)
-    {
-        SetStatus(QStringLiteral("没有画面，截不了图"));
-        return;
-    }
-
-    const QImage image = surface_->window()->grabWindow();
-    const QString name = QStringLiteral("shot_%1.png").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
-    const QString path = QCoreApplication::applicationDirPath() + QStringLiteral("/screenshots/") + name;
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    const bool saved = image.save(path);
-
-    // 顺手放进系统剪贴板，截图就是为了贴给别人看
-    QGuiApplication::clipboard()->setImage(image);
-
-    SetStatus(saved ? QStringLiteral("截图已保存并复制：%1").arg(name) : QStringLiteral("截图只复制到剪贴板，保存失败"));
-    qCInfo(qsc::base::lcRender) << "截图" << path << saved;
-}
-// 返回上一级：走专门的消息，它在设备息屏时还能顺手点亮屏幕
-void DeviceController::SendBack()
-{
-    if (!session_)
-    {
-        return;
-    }
-    session_->SendControl(qsc::protocol::ControlMessage::BackOrScreenOn(true));
-    session_->SendControl(qsc::protocol::ControlMessage::BackOrScreenOn(false));
-}
-
-// 回桌面：安卓 KEYCODE_HOME（3）
-void DeviceController::SendHome()
-{
-    SendKeycode(3);
-}
-
-// 按一下电源键：KEYCODE_POWER（26），锁屏或点亮屏幕
-void DeviceController::SendPower()
-{
-    SendKeycode(26);
-}
-// 多任务切换：安卓 KEYCODE_APP_SWITCH（187）
-// 不用 KEYCODE_MENU(82)——现代安卓应用基本不响应它，弹不出最近任务
-void DeviceController::SendRecents()
-{
-    SendKeycode(187);
-}
-// QML 把控制窗交进来：主窗按钮要靠它把窗口提到前台
-// 息屏或亮屏：只关显示，不动锁屏状态
-void DeviceController::SetDisplayPower(bool on)
-{
-    if (!session_)
-    {
-        return;
-    }
-    session_->SendControl(qsc::protocol::ControlMessage::SetDisplayPower(on));
-    SetStatus(on ? QStringLiteral("已亮屏") : QStringLiteral("已息屏"));
-}
-
 // 同步建链并接到画布上，会阻塞一两秒
 void DeviceController::Connect(const QString &serial)
 {
@@ -1002,7 +678,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
         TearDown();
         return;
     }
-    if (surface_ == nullptr)
+    if (video_ == nullptr || video_->Surface() == nullptr)
     {
         SetStatus(QStringLiteral("连上了，但界面里没有视频画布"));
         TearDown();
@@ -1032,7 +708,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     video->moveToThread(reader_);
 
     // 直连：Present 跑在视频线程里，不吃 GUI 线程的事件循环
-    QObject::connect(reader_, &qsc::stream::VideoReader::SigFrameReady, surface_, &VideoItem::Present,
+    QObject::connect(reader_, &qsc::stream::VideoReader::SigFrameReady, video_->Surface(), &VideoItem::Present,
                      Qt::DirectConnection);
     QObject::connect(reader_, &qsc::stream::VideoReader::SigFailed, this, [this](const QString &reason)
     {
@@ -1084,18 +760,37 @@ void DeviceController::Disconnect()
     SetStatus(QStringLiteral("已断开"));
 }
 
-// 停线程、清画布、关解码器、拆隧道
-// 把画布翻好的输入消息写进控制 socket；没连接时静默丢掉
-void DeviceController::SendControl(const QByteArray &message)
+// 视频模块把翻好的输入消息交过来：写进控制 socket，没连接就丢掉
+bool DeviceController::WriteControl(const QByteArray &message)
 {
     if (!session_ || message.isEmpty())
     {
         qCDebug(qsc::base::lcInput) << "没有会话，输入消息丢掉" << message.size();
-        return;
+        return false;
     }
     const bool sent = session_->SendControl(message);
     qCDebug(qsc::base::lcInput) << "写控制 socket" << message.size() << "字节 结果" << sent;
+    return sent;
 }
+
+// 视频模块报状态：统一走主窗那条状态栏
+void DeviceController::ReportStatus(const QString &text)
+{
+    SetStatus(text);
+}
+
+// 当前设备串号，adb 命令要用
+QString DeviceController::DeviceSerial() const
+{
+    return device_name_;
+}
+
+// main 把视频控制器交进来：接帧信号、取画布都要用它
+void DeviceController::AttachVideoController(VideoController *video)
+{
+    video_ = video;
+}
+
 // 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {

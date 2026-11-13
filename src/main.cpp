@@ -20,6 +20,7 @@
 #include "boss_key.h"
 #include "base/log.h"
 #include "device_controller.h"
+#include "video_controller.h"
 #include "update_checker.h"
 #include "stream/frame.h"
 #include "stream/perf_stats.h"
@@ -108,10 +109,11 @@ void InitLogging(const AppSettings &settings)
 }
 
 // 把 C++ 对象交给 QML：QML 里直接用 deviceController / appSettings / updateChecker
-void ExposeToQml(QQmlApplicationEngine &engine, DeviceController &controller, AppSettings &settings,
-                 qsc::UpdateChecker &update_checker)
+void ExposeToQml(QQmlApplicationEngine &engine, DeviceController &controller, VideoController &video,
+                 AppSettings &settings, qsc::UpdateChecker &update_checker)
 {
     engine.rootContext()->setContextProperty(QStringLiteral("deviceController"), &controller);
+    engine.rootContext()->setContextProperty(QStringLiteral("videoController"), &video);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &settings);
     engine.rootContext()->setContextProperty(QStringLiteral("updateChecker"), &update_checker);
 }
@@ -251,8 +253,12 @@ int main(int argc, char *argv[])
     // 否则窗口析构时 QML 绑定会读到 null 并刷一堆 TypeError
     qsc::UpdateChecker update_checker(QStringLiteral(QS_APP_VERSION));
 
+    // 视频窗那一侧的行为单独一个对象，主窗只管连接/设备/设置
+    VideoController video_controller(&controller);
+    controller.AttachVideoController(&video_controller);
+
     QQmlApplicationEngine engine;
-    ExposeToQml(engine, controller, app_settings, update_checker);
+    ExposeToQml(engine, controller, video_controller, app_settings, update_checker);
     GuardQmlLoading(engine, app);
 
     qsc::BossKey boss_key;

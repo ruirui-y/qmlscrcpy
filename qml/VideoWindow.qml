@@ -283,7 +283,7 @@ Window
                     {
                         if (drop.hasUrls)
                         {
-                            deviceController.PushFiles(drop.urls)
+                            videoController.PushFiles(drop.urls)
                         }
                     }
                 }
@@ -427,32 +427,32 @@ Window
                     {
                         label: qsTr("返回")
                         tip: qsTr("返回上一级（设备息屏时还会点亮屏幕）")
-                        onClicked: deviceController.SendBack()
+                        onClicked: videoController.SendBack()
                     }
 
                     ToolButton
                     {
                         label: qsTr("任务")
                         tip: qsTr("打开最近任务列表（相当于手机的方框键）")
-                        onClicked: deviceController.SendRecents()
+                        onClicked: videoController.SendRecents()
                     }
 
                     ToolButton
                     {
                         label: qsTr("桌面")
                         tip: qsTr("回到手机桌面（相当于手机的 Home 键）")
-                        onClicked: deviceController.SendHome()
+                        onClicked: videoController.SendHome()
                     }
 
                     ToolButton
                     {
-                        label: deviceController.wheelMode === "drag"
-                        ? qsTr("滑动 %1").arg(deviceController.dragPixels) : qsTr("滚动")
-                        active: deviceController.wheelMode === "drag"
-                        tip: deviceController.wheelMode === "drag"
+                        label: videoController.wheelMode === "drag"
+                        ? qsTr("滑动 %1").arg(videoController.dragPixels) : qsTr("滚动")
+                        active: videoController.wheelMode === "drag"
+                        tip: videoController.wheelMode === "drag"
                         ? qsTr("滚轮当前是滑动模式（模拟手指拖动），点一下切回滚动事件")
                         : qsTr("滚轮当前是滚动模式（原生滚动事件），点一下切到模拟滑动")
-                        onClicked: deviceController.SetWheelMode(deviceController.wheelMode === "drag" ? "scroll" : "drag")
+                        onClicked: videoController.SetWheelMode(videoController.wheelMode === "drag" ? "scroll" : "drag")
                     }
 
                     // 滑动手感：只在滑动模式下有用，上面一组粗调 ±5，下面一组微调 ±1
@@ -460,20 +460,20 @@ Window
                     {
                         width: parent.width
                         spacing: 4
-                        visible: deviceController.wheelMode === "drag"
+                        visible: videoController.wheelMode === "drag"
 
                         ToolButton
                         {
                             width: (parent.width - parent.spacing) / 2
                             label: qsTr("−5")
-                            onClicked: deviceController.AdjustDragPixels(-5)
+                            onClicked: videoController.AdjustDragPixels(-5)
                         }
 
                         ToolButton
                         {
                             width: (parent.width - parent.spacing) / 2
                             label: qsTr("+5")
-                            onClicked: deviceController.AdjustDragPixels(5)
+                            onClicked: videoController.AdjustDragPixels(5)
                         }
                     }
 
@@ -481,20 +481,20 @@ Window
                     {
                         width: parent.width
                         spacing: 4
-                        visible: deviceController.wheelMode === "drag"
+                        visible: videoController.wheelMode === "drag"
 
                         ToolButton
                         {
                             width: (parent.width - parent.spacing) / 2
                             label: qsTr("−1")
-                            onClicked: deviceController.AdjustDragPixels(-1)
+                            onClicked: videoController.AdjustDragPixels(-1)
                         }
 
                         ToolButton
                         {
                             width: (parent.width - parent.spacing) / 2
                             label: qsTr("+1")
-                            onClicked: deviceController.AdjustDragPixels(1)
+                            onClicked: videoController.AdjustDragPixels(1)
                         }
                     }
 
@@ -502,42 +502,42 @@ Window
                     {
                         label: qsTr("音量 +")
                         tip: qsTr("设备音量加一档")
-                        onClicked: deviceController.SendVolumeUp()
+                        onClicked: videoController.SendVolumeUp()
                     }
 
                     ToolButton
                     {
                         label: qsTr("音量 −")
                         tip: qsTr("设备音量减一档")
-                        onClicked: deviceController.SendVolumeDown()
+                        onClicked: videoController.SendVolumeDown()
                     }
 
                     ToolButton
                     {
                         label: qsTr("截图")
                         tip: qsTr("保存当前画面到 screenshots 目录，并复制到剪贴板")
-                        onClicked: deviceController.SaveScreenshot()
+                        onClicked: videoController.SaveScreenshot()
                     }
 
                     ToolButton
                     {
                         label: qsTr("发给手机")
                         tip: qsTr("把电脑剪贴板里的文字写进手机剪贴板，并自动粘贴到当前输入框")
-                        onClicked: deviceController.SendClipboardToDevice()
+                        onClicked: videoController.SendClipboardToDevice()
                     }
 
                     ToolButton
                     {
                         label: qsTr("取回电脑")
                         tip: qsTr("读取手机剪贴板，写进电脑剪贴板")
-                        onClicked: deviceController.PullClipboardFromDevice()
+                        onClicked: videoController.PullClipboardFromDevice()
                     }
 
                     ToolButton
                     {
                         label: qsTr("文件首页")
                         tip: qsTr("打开手机「文件管理」首页，传过去的文件在 Download/QmlScrcpy")
-                        onClicked: deviceController.OpenUploadDir()
+                        onClicked: videoController.OpenUploadDir()
                     }
 
                     ToolButton
@@ -548,7 +548,7 @@ Window
                         onClicked:
                         {
                             videoWindow.displayOff = !videoWindow.displayOff
-                            deviceController.SetDisplayPower(!videoWindow.displayOff)
+                            videoController.SetDisplayPower(!videoWindow.displayOff)
                         }
                     }
 
@@ -556,7 +556,7 @@ Window
                     {
                         label: qsTr("电源")
                         tip: qsTr("按一下手机电源键：锁屏或点亮屏幕（「息屏」只关显示，不锁屏）")
-                        onClicked: deviceController.SendPower()
+                        onClicked: videoController.SendPower()
                     }
 
                     ToolButton
@@ -687,7 +687,7 @@ Window
         // QML 加载时可能已经连上了（自启动连上次设备），按当前状态决定露不露脸
         visible = deviceController.connected
         deviceController.RegisterWindow(videoWindow)
-        deviceController.SetSurface(videoSurface)
+        videoController.SetSurface(videoSurface)
 
         applying = true
         const position = appSettings.VideoPosition("video_pos")
@@ -714,21 +714,21 @@ Window
     {
         sequence: deviceController.shortcutBack
         enabled: deviceController.shortcutBack.length > 0
-        onActivated: deviceController.SendBack()
+        onActivated: videoController.SendBack()
     }
 
     Shortcut
     {
         sequence: deviceController.shortcutHome
         enabled: deviceController.shortcutHome.length > 0
-        onActivated: deviceController.SendHome()
+        onActivated: videoController.SendHome()
     }
 
     Shortcut
     {
         sequence: deviceController.shortcutScreenshot
         enabled: deviceController.shortcutScreenshot.length > 0
-        onActivated: deviceController.SaveScreenshot()
+        onActivated: videoController.SaveScreenshot()
     }
 
     Shortcut
