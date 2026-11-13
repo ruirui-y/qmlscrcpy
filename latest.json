@@ -1,9 +1,9 @@
 {
-  "latest": "0.1.6",
-  "minimum": "0.1.0",
-  "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-  "notes": "这个版本只用来验证自动检查更新，exe 内容没有变化",
-  "published_at": "2026-11-12",
-  "size": 47979834,
-  "sha256": "9bf79e84d2edea7a3cf171b7ad07d249e947d9f2d883200601c162a796c8aac3"
+    "latest":  "0.1.7",
+    "minimum":  "0.1.0",
+    "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
+    "notes":  "一键更新：发现新版本后不用再自己开浏览器下载，程序自己下、自己校验、自己装。",
+    "published_at":  "2026-11-13",
+    "size":  47987460,
+    "sha256":  "48d81d60b4e77902ffef7390ad7c6b9b4e64547def4c82fd8dae48da9ff12307"
 }
