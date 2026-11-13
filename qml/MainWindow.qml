@@ -5,7 +5,8 @@ import QtQuick.Window 2.15
 
 // 控制窗：一行操作 + 一行状态。画面和工具栏都在 VideoWindow 里。
 // 按钮和输入框都用自绘背景：系统默认样式在不同 DPI 的屏幕上会变成白底方块。
-Window {
+Window
+{
     id: controlWindow
 
     width: 600
@@ -20,7 +21,8 @@ Window {
     onClosing: Qt.quit()
 
     // 换屏时 DPI 变了，Qt 会重算窗口尺寸；这里保证不缩到装不下内容
-    onScreenChanged: {
+    onScreenChanged:
+    {
         width = Math.max(width, minimumWidth)
         height = Math.max(height, minimumHeight)
     }
@@ -31,13 +33,15 @@ Window {
     property string hint: ""                                                                    // 鼠标停在头部按钮上时的说明
     property Item hintAnchor: null                                                              // 提示挂在哪个按钮下面
 
-    Component.onCompleted: {
+    Component.onCompleted:
+    {
         // 登记给老板键：主窗 + 投屏窗都要能被一键藏起来
         deviceController.RegisterWindow(controlWindow)
         deviceController.RegisterWindow(videoWindow)
         applying = true
         const saved = appSettings.VideoGeometry("control_window")
-        if (saved.width > 0) {
+        if (saved.width > 0)
+        {
             x = saved.x
             y = saved.y
             width = Math.max(minimumWidth, saved.width)
@@ -45,13 +49,15 @@ Window {
         }
         applying = false
         ready = true
-        if (saved.width <= 0) {
+        if (saved.width <= 0)
+        {
             // 第一次运行没有记录：把当前（Qt 给的）位置先存下来，下次就在这儿了
             saveTimer.restart()
         }
     }
 
-    Timer {
+    Timer
+    {
         id: saveTimer
         interval: 400
         repeat: false
@@ -64,26 +70,31 @@ Window {
     onWidthChanged: scheduleSave()
     onHeightChanged: scheduleSave()
 
-    function scheduleSave() {
-        if (applying || !ready) {
+    function scheduleSave()
+    {
+        if (applying || !ready)
+        {
             return
         }
         saveTimer.restart()
     }
 
     // 投屏窗口独立存在，这里只是把它拉起来
-    VideoWindow {
+    VideoWindow
+    {
         id: videoWindow
     }
 
     // 设置窗：独立小窗口（画质 / 快捷键 / 其他），主窗只留一个入口
-    SettingsWindow {
+    SettingsWindow
+    {
         id: settingsWindow
     }
 
 
     // 一个按钮：自绘背景 + 主次两种配色
-    component ActionButton: Rectangle {
+    component ActionButton: Rectangle
+    {
         id: button
 
         property string label: ""
@@ -94,11 +105,14 @@ Window {
         implicitHeight: 34
         radius: 6
         opacity: enabled ? 1.0 : 0.5
-        color: {
-            if (!enabled) {
+        color:
+        {
+            if (!enabled)
+            {
                 return "#23262d"
             }
-            if (area.containsMouse) {
+            if (area.containsMouse)
+            {
                 return primary ? "#5aa9ff" : "#2e343e"
             }
             return primary ? "#3f8fdd" : "#242932"
@@ -106,14 +120,16 @@ Window {
         border.width: 1
         border.color: primary ? "#4f9ae8" : "#333945"
 
-        Text {
+        Text
+        {
             anchors.centerIn: parent
             text: button.label
             color: button.primary ? "#ffffff" : "#cdd4de"
             font.pixelSize: 13
         }
 
-        MouseArea {
+        MouseArea
+        {
             id: area
             anchors.fill: parent
             hoverEnabled: true
@@ -124,7 +140,8 @@ Window {
     }
 
     // 设备菜单：列在线设备，点一个直接连；最下面一项是用 USB 设备开无线
-    Popup {
+    Popup
+    {
         id: devicePopup
 
         width: 300
@@ -134,26 +151,31 @@ Window {
         modal: false
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-        background: Rectangle {
+        background: Rectangle
+        {
             radius: 8
             color: "#1b1f26"
             border.width: 1
             border.color: "#2c323c"
         }
 
-        contentItem: Column {
+        contentItem: Column
+        {
             spacing: 2
 
-            Repeater {
+            Repeater
+            {
                 model: deviceController.deviceLabels
 
-                delegate: Rectangle {
+                delegate: Rectangle
+                {
                     width: parent.width
                     height: 30
                     radius: 4
                     color: itemArea.containsMouse ? "#2c313a" : "transparent"
 
-                    Text {
+                    Text
+                    {
                         anchors.left: parent.left
                         anchors.leftMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
@@ -162,12 +184,14 @@ Window {
                         font.pixelSize: 13
                     }
 
-                    MouseArea {
+                    MouseArea
+                    {
                         id: itemArea
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
+                        onClicked:
+                        {
                             // 只把地址填进输入框，连不连由用户点「连接」决定
                             devicePopup.close()
                             serialField.text = deviceController.devices[index]
@@ -176,20 +200,23 @@ Window {
                 }
             }
 
-            Rectangle {
+            Rectangle
+            {
                 width: parent.width
                 height: 1
                 color: "#2c323c"
                 visible: deviceController.deviceLabels.length > 0
             }
 
-            Rectangle {
+            Rectangle
+            {
                 width: parent.width
                 height: 30
                 radius: 4
                 color: wifiArea.containsMouse ? "#2c313a" : "transparent"
 
-                Text {
+                Text
+                {
                     anchors.left: parent.left
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
@@ -198,12 +225,14 @@ Window {
                     font.pixelSize: 13
                 }
 
-                MouseArea {
+                MouseArea
+                {
                     id: wifiArea
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
+                    onClicked:
+                    {
                         devicePopup.close()
                         deviceController.EnableWifi()
                     }
@@ -213,7 +242,8 @@ Window {
     }
 
     // 悬浮说明气泡：浮在操作行上方，没有 MouseArea，不挡点击
-    Rectangle {
+    Rectangle
+    {
         id: hintBubble
 
         width: hintText.implicitWidth + 20
@@ -222,8 +252,10 @@ Window {
         z: 30
         visible: controlWindow.hint.length > 0 && controlWindow.hintAnchor !== null
         // 跟着悬停的按钮走：正中下方 6px，再夹在窗口左右边界内
-        x: {
-            if (!controlWindow.hintAnchor) {
+        x:
+        {
+            if (!controlWindow.hintAnchor)
+            {
                 return 0
             }
             const center = controlWindow.hintAnchor.mapToItem(null, controlWindow.hintAnchor.width / 2, 0).x
@@ -236,7 +268,8 @@ Window {
         border.width: 1
         border.color: "#3a4150"
 
-        Text {
+        Text
+        {
             id: hintText
             anchors.centerIn: parent
             text: controlWindow.hint
@@ -245,25 +278,32 @@ Window {
         }
     }
 
-    ColumnLayout {
+    ColumnLayout
+    {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 12
 
-        RowLayout {
+        RowLayout
+        {
             Layout.fillWidth: true
 
-            Text {
+            Text
+            {
                 text: qsTr("QmlScrcpy")
                 color: "#e6ebf2"
                 font.pixelSize: 17
                 font.bold: true
             }
 
-            Item { Layout.fillWidth: true }
+            Item
+            {
+                Layout.fillWidth: true
+            }
 
             // 更新面板：红标点开就是这里
-            Popup {
+            Popup
+            {
                 id: updatePopup
 
                 width: 320
@@ -273,24 +313,28 @@ Window {
                 modal: true
                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-                background: Rectangle {
+                background: Rectangle
+                {
                     radius: 8
                     color: "#1b1f26"
                     border.width: 1
                     border.color: "#2c323c"
                 }
 
-                contentItem: Column {
+                contentItem: Column
+                {
                     spacing: 8
 
-                    Text {
+                    Text
+                    {
                         text: qsTr("发现新版本 %1").arg(updateChecker.latestVersion)
                         color: "#e6ebf2"
                         font.pixelSize: 14
                         font.bold: true
                     }
 
-                    Text {
+                    Text
+                    {
                         width: parent.width
                         text: updateChecker.notes
                         color: "#9aa4b2"
@@ -300,14 +344,16 @@ Window {
                     }
 
                     // 下载进度：只有在下载中或刚下载完才显示
-                    Rectangle {
+                    Rectangle
+                    {
                         width: parent.width
                         height: 6
                         radius: 3
                         visible: updateChecker.downloading || updateChecker.downloadStatus.length > 0
                         color: "#2c323c"
 
-                        Rectangle {
+                        Rectangle
+                        {
                             width: parent.width * updateChecker.downloadProgress
                             height: parent.height
                             radius: 3
@@ -315,7 +361,8 @@ Window {
                         }
                     }
 
-                    Text {
+                    Text
+                    {
                         width: parent.width
                         text: updateChecker.downloadStatus
                         color: "#8b93a3"
@@ -323,25 +370,31 @@ Window {
                         visible: updateChecker.downloadStatus.length > 0
                     }
 
-                    Row {
+                    Row
+                    {
                         width: parent.width
                         spacing: 8
                         layoutDirection: Qt.RightToLeft
 
                         // 主按钮：能自动更新就下载+安装，否则直接开浏览器
-                        Rectangle {
+                        Rectangle
+                        {
                             width: 92
                             height: 28
                             radius: 6
                             color: primaryArea.containsMouse ? "#5aa9ff" : "#3f8fdd"
 
-                            Text {
+                            Text
+                            {
                                 anchors.centerIn: parent
-                                text: {
-                                    if (updateChecker.downloading) {
+                                text:
+                                {
+                                    if (updateChecker.downloading)
+                                    {
                                         return qsTr("取消")
                                     }
-                                    if (updateChecker.downloadStatus.indexOf(qsTr("可以安装")) >= 0) {
+                                    if (updateChecker.downloadStatus.indexOf(qsTr("可以安装")) >= 0)
+                                    {
                                         return qsTr("立即安装")
                                     }
                                     return updateChecker.canAutoUpdate ? qsTr("立即更新") : qsTr("去下载")
@@ -350,21 +403,26 @@ Window {
                                 font.pixelSize: 12
                             }
 
-                            MouseArea {
+                            MouseArea
+                            {
                                 id: primaryArea
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (updateChecker.downloading) {
+                                onClicked:
+                                {
+                                    if (updateChecker.downloading)
+                                    {
                                         updateChecker.CancelDownload()
                                         return
                                     }
-                                    if (updateChecker.downloadStatus.indexOf(qsTr("可以安装")) >= 0) {
+                                    if (updateChecker.downloadStatus.indexOf(qsTr("可以安装")) >= 0)
+                                    {
                                         updateChecker.InstallAndRestart()
                                         return
                                     }
-                                    if (updateChecker.canAutoUpdate) {
+                                    if (updateChecker.canAutoUpdate)
+                                    {
                                         updateChecker.StartDownload()
                                         return
                                     }
@@ -374,7 +432,8 @@ Window {
                         }
 
                         // 次按钮：手动下载页（静默安装失败时的退路）
-                        Rectangle {
+                        Rectangle
+                        {
                             width: 92
                             height: 28
                             radius: 6
@@ -382,14 +441,16 @@ Window {
                             border.width: 1
                             border.color: "#333945"
 
-                            Text {
+                            Text
+                            {
                                 anchors.centerIn: parent
                                 text: qsTr("下载页")
                                 color: "#cdd4de"
                                 font.pixelSize: 12
                             }
 
-                            MouseArea {
+                            MouseArea
+                            {
                                 id: secondaryArea
                                 anchors.fill: parent
                                 hoverEnabled: true
@@ -401,7 +462,8 @@ Window {
                         }
 
                         // 关闭：本次先不更新
-                        Rectangle {
+                        Rectangle
+                        {
                             width: 60
                             height: 28
                             radius: 6
@@ -409,14 +471,16 @@ Window {
                             border.width: 1
                             border.color: "#333945"
 
-                            Text {
+                            Text
+                            {
                                 anchors.centerIn: parent
                                 text: qsTr("稍后")
                                 color: "#cdd4de"
                                 font.pixelSize: 12
                             }
 
-                            MouseArea {
+                            MouseArea
+                            {
                                 id: laterArea
                                 anchors.fill: parent
                                 hoverEnabled: true
@@ -430,7 +494,8 @@ Window {
 
             // 有新版本时的红标：点了直接开浏览器去下载（链接来自 latest.json）
 
-            Rectangle {
+            Rectangle
+            {
                 id: updateBadge
 
                 visible: updateChecker.updateAvailable || updateChecker.updateRequired
@@ -441,7 +506,8 @@ Window {
                        ? (updateBadgeArea.containsMouse ? "#d9534f" : "#b8403b")
                        : (updateBadgeArea.containsMouse ? "#c07a1a" : "#9a6314")
 
-                Text {
+                Text
+                {
                     id: updateBadgeText
                     anchors.centerIn: parent
                     text: updateChecker.updateRequired
@@ -451,18 +517,21 @@ Window {
                     font.pixelSize: 12
                 }
 
-                MouseArea {
+                MouseArea
+                {
                     id: updateBadgeArea
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onEntered: {
+                    onEntered:
+                    {
                         controlWindow.hintAnchor = updateBadge
                         controlWindow.hint = updateChecker.notes.length > 0
                                              ? qsTr("发现 %1：%2（点击去下载）").arg(updateChecker.latestVersion).arg(updateChecker.notes)
                                              : qsTr("发现新版本 %1，点击去下载").arg(updateChecker.latestVersion)
                     }
-                    onExited: {
+                    onExited:
+                    {
                         controlWindow.hint = ""
                         controlWindow.hintAnchor = null
                     }
@@ -471,7 +540,8 @@ Window {
             }
 
             // 设置入口：画质、快捷键、命令行、恢复默认都在里面
-            Rectangle {
+            Rectangle
+            {
                 id: settingsToggle
 
                 Layout.preferredWidth: 76
@@ -481,27 +551,32 @@ Window {
                 border.width: 1
                 border.color: "#333945"
 
-                Text {
+                Text
+                {
                     anchors.centerIn: parent
                     text: qsTr("设置")
                     color: "#cdd4de"
                     font.pixelSize: 12
                 }
 
-                MouseArea {
+                MouseArea
+                {
                     id: settingsArea
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onEntered: {
+                    onEntered:
+                    {
                         controlWindow.hintAnchor = settingsToggle
                         controlWindow.hint = qsTr("设置：画质、快捷键、命令行、恢复默认配置")
                     }
-                    onExited: {
+                    onExited:
+                    {
                         controlWindow.hint = ""
                         controlWindow.hintAnchor = null
                     }
-                    onClicked: {
+                    onClicked:
+                    {
                         // 设置窗居中对齐主窗
                         settingsWindow.x = Math.round(controlWindow.x + (controlWindow.width - settingsWindow.width) / 2)
                         settingsWindow.y = Math.round(controlWindow.y + (controlWindow.height - settingsWindow.height) / 2)
@@ -513,7 +588,8 @@ Window {
         }
 
         // 唯一的一行操作：输入 → 设备菜单 → 刷新 → 连接 → 断开
-        Rectangle {
+        Rectangle
+        {
             Layout.fillWidth: true
             implicitHeight: 58
             radius: 10
@@ -521,12 +597,14 @@ Window {
             border.width: 1
             border.color: "#262c36"
 
-            RowLayout {
+            RowLayout
+            {
                 anchors.fill: parent
                 anchors.margins: 12
                 spacing: 8
 
-                TextField {
+                TextField
+                {
                     id: serialField
 
                     Layout.fillWidth: true
@@ -540,7 +618,8 @@ Window {
                     leftPadding: 10
                     placeholderTextColor: "#6b7280"
 
-                    background: Rectangle {
+                    background: Rectangle
+                    {
                         radius: 6
                         color: "#151920"
                         border.width: 1
@@ -549,7 +628,8 @@ Window {
                 }
 
                 // 设备菜单开关
-                Rectangle {
+                Rectangle
+                {
                     Layout.preferredWidth: 28
                     Layout.preferredHeight: 34
                     radius: 6
@@ -557,19 +637,22 @@ Window {
                     border.width: 1
                     border.color: "#333945"
 
-                    Text {
+                    Text
+                    {
                         anchors.centerIn: parent
                         text: "▾"
                         color: "#cdd4de"
                         font.pixelSize: 14
                     }
 
-                    MouseArea {
+                    MouseArea
+                    {
                         id: menuArea
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
+                        onClicked:
+                        {
                             devicePopup.x = serialField.mapToItem(controlWindow.contentItem, 0, 0).x
                             devicePopup.y = serialField.mapToItem(controlWindow.contentItem, 0, 0).y + 40
                             devicePopup.open()
@@ -577,18 +660,21 @@ Window {
                     }
                 }
 
-                ActionButton {
+                ActionButton
+                {
                     label: qsTr("刷新")
                     onClicked: deviceController.RefreshDevices()
                 }
 
-                ActionButton {
+                ActionButton
+                {
                     label: qsTr("连接")
                     primary: true
                     onClicked: deviceController.Connect(serialField.text)
                 }
 
-                ActionButton {
+                ActionButton
+                {
                     label: qsTr("断开")
                     onClicked: deviceController.Disconnect()
                 }
@@ -597,18 +683,21 @@ Window {
 
 
         // 状态
-        RowLayout {
+        RowLayout
+        {
             Layout.fillWidth: true
             spacing: 8
 
-            Rectangle {
+            Rectangle
+            {
                 width: 8
                 height: 8
                 radius: 4
                 color: deviceController.deviceName.length > 0 ? "#3ecf8e" : "#5a6272"
             }
 
-            Text {
+            Text
+            {
                 Layout.fillWidth: true
                 text: deviceController.status
                 color: "#9aa4b2"
