@@ -101,12 +101,13 @@ int main(int argc, char *argv[])
     // 控制台窗口按上次的选择决定显示还是隐藏（GUI 子系统下这两个调用是空操作）
     qsc::base::SetConsoleWindowVisible(app_settings.ShowConsole());
 
+    // 版本检查：必须声明在 engine 之前——析构顺序是反的，这样它比 QML 引擎活得久，
+    // 否则窗口析构时 QML 绑定会读到 null 并刷一堆 TypeError
+    qsc::UpdateChecker update_checker(QStringLiteral(QS_APP_VERSION));
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("deviceController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &app_settings);
-
-    // 版本检查：启动后异步拉一次 latest.json，失败静默
-    qsc::UpdateChecker update_checker(QStringLiteral(QS_APP_VERSION));
     engine.rootContext()->setContextProperty(QStringLiteral("updateChecker"), &update_checker);
 
     // 加载失败必须立刻报错退出，否则会静默变成一个看不见的空窗口

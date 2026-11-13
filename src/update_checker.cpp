@@ -226,9 +226,26 @@ void UpdateChecker::OpenDownloadPage()
 {
     if (download_url_.isEmpty())
     {
+        qCInfo(base::lcApp) << "[update] 没有下载页地址，忽略";
         return;
     }
-    QDesktopServices::openUrl(QUrl(download_url_));
+
+    // QDesktopServices 在部分环境（默认浏览器没注册、程序以管理员权限运行）会静默失败，
+    // 所以失败时要退到系统命令，不然用户点了就是"没反应"
+    if (QDesktopServices::openUrl(QUrl(download_url_)))
+    {
+        return;
+    }
+
+    qCInfo(base::lcApp) << "[update] openUrl 失败，改用系统命令打开";
+    const bool opened = QProcess::startDetached(QStringLiteral("cmd.exe"),
+                                                QStringList() << QStringLiteral("/c") << QStringLiteral("start")
+                                                              << QString() << download_url_);
+    if (!opened)
+    {
+        download_status_ = QStringLiteral("打不开浏览器，请手动访问 %1").arg(download_url_);
+        emit DownloadChanged();
+    }
 }
 
 
