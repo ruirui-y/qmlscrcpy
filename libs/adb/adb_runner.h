@@ -40,8 +40,7 @@ struct AdbDevice
 // adb 在 Windows 上输出的是 \r\n，所以每行都要 trim，不然 state 会带上 \r 比不过。
 QList<AdbDevice> ParseDevices(const QByteArray &std_out);
 
-// adb.exe 的路径查找顺序：显式设置 → 环境变量 QS_ADB_PATH → 程序目录 → PATH 里的 adb
-void SetAdbPath(const QString &path);
+// adb.exe 只认程序目录下的 Tools\adb.exe，没有就交给 PATH
 QString AdbPath();
 
 // 同步跑一条 adb 命令，适合跑完就结束的（push / reverse / devices）。超时会杀进程。

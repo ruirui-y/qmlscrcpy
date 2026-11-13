@@ -193,7 +193,7 @@ bool ServerSession::StartServerProcess(QString *error)
         return false;
     }
 
-    qInfo() << "[session] server 进程已启动（%1）" << (forward_mode_ ? "forward" : "reverse");
+    qInfo() << "[session] server 进程已启动，" << (forward_mode_ ? "forward" : "reverse");
     return true;
 }
 

@@ -11,11 +11,6 @@ namespace
 {
 
 // 显式设置过的 adb 路径。只在启动时写一次，不做线程保护。
-QString &ExplicitAdbPath()
-{
-    static QString path;
-    return path;
-}
 
 } // namespace
 
@@ -70,39 +65,16 @@ QList<AdbDevice> ParseDevices(const QByteArray &std_out)
     return devices;
 }
 
-// 指定 adb 路径，测试和自定义安装用
-void SetAdbPath(const QString &path)
-{
-    ExplicitAdbPath() = path;
-}
-
-// 取 adb 路径：显式设置 > 环境变量 > 同目录 > Tools 子目录 > PATH
+// 取 adb 路径：只认程序目录下的 Tools\adb.exe；没有就交给 PATH
 QString AdbPath()
 {
-    if (!ExplicitAdbPath().isEmpty())
-    {
-        return ExplicitAdbPath();
-    }
-
-    const QByteArray from_env = qgetenv("QS_ADB_PATH");
-    if (!from_env.isEmpty())
-    {
-        return QString::fromLocal8Bit(from_env);
-    }
-
-    const QString beside_exe = QCoreApplication::applicationDirPath() + QStringLiteral("/adb.exe");
-    if (QFileInfo::exists(beside_exe))
-    {
-        return beside_exe;
-    }
-
-    // 安装包把 adb 放在 Tools\ 下（见 setup/collect.ps1），这里也认一下
     const QString in_tools = QCoreApplication::applicationDirPath() + QStringLiteral("/Tools/adb.exe");
     if (QFileInfo::exists(in_tools))
     {
         return in_tools;
     }
 
+    // 安装包一定带 Tools\adb.exe；走到这里说明是开发环境或用户手动删了
     return QStringLiteral("adb");
 }
 

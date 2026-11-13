@@ -15,7 +15,7 @@ using namespace qsc::session;
 //
 // 默认跳过——单测不该依赖"这台机器上正好插着设备"。
 // 要跑就设两个环境变量：
-//   QS_ADB_PATH       adb.exe 路径
+//   QS_DEVICE_SERIAL  设备串号；adb 用 Tools\adb.exe 或 PATH 里的
 //   QS_DEVICE_SERIAL  设备序列号（adb devices 里那一列）
 // server 文件默认用仓库里的 third_party/scrcpy-server，也可用 QS_SCRCPY_SERVER 覆盖。
 class ServerSessionTest : public QObject
@@ -29,10 +29,9 @@ private slots:
 // 真机建链并读到第一个视频包
 void ServerSessionTest::ConnectAndReadFirstPacket()
 {
-    if (!qEnvironmentVariableIsSet("QS_ADB_PATH")
-        || !qEnvironmentVariableIsSet("QS_DEVICE_SERIAL"))
-        {
-        QSKIP("未设置 QS_ADB_PATH / QS_DEVICE_SERIAL，跳过真机用例");
+    if (!qEnvironmentVariableIsSet("QS_DEVICE_SERIAL"))
+    {
+        QSKIP("未设置 QS_DEVICE_SERIAL，跳过真机用例");
     }
 
     const QString serial = QString::fromLocal8Bit(qgetenv("QS_DEVICE_SERIAL"));

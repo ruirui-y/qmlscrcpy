@@ -17,7 +17,7 @@
 #define MyAppName "QmlScrcpy"
 #define MyAppPublisher "QmlScrcpy"
 #define MyAppExeName "QmlScrcpy.exe"
-#define MyAppVersion "0.1.8"
+#define MyAppVersion "0.1.7"
 #define MyAppId "6f1e2c40-5b0a-4a71-9c2e-3d8a51b7c9f4"
 #define StageDir "stage\QmlScrcpy"
 #define OutputDir "Output"
@@ -80,10 +80,15 @@ Type: filesandordirs; Name: "{app}\config"
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
+  AdbPath: String;
 begin
-  if FileExists(ExpandConstant('{app}\adb.exe')) then
+  AdbPath := ExpandConstant('{app}\Tools\adb.exe');
+  if not FileExists(AdbPath) then
+    AdbPath := ExpandConstant('{app}\adb.exe');
+
+  if FileExists(AdbPath) then
   begin
-    Exec(ExpandConstant('{app}\adb.exe'), 'kill-server', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(AdbPath, 'kill-server', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Sleep(800);
   end;
   Result := '';

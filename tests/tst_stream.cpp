@@ -16,7 +16,7 @@ using namespace qsc::stream;
 // 真机用例：连上设备，从视频 socket 读真实包喂给 H264Decoder，确认能解出 YUV420P 的帧。
 // 这是 P3 的命门——解码器能开不代表能解，得拿真流喂。
 //
-// 没设 QS_ADB_PATH / QS_DEVICE_SERIAL 时自动跳过。
+// 没设 QS_DEVICE_SERIAL 时自动跳过（adb 用程序目录 Tools\ 或 PATH 里的）。
 class StreamTest : public QObject
 {
     Q_OBJECT
@@ -28,10 +28,9 @@ private slots:
 // 真机码流喂解码器，确认能解出 YUV420P
 void StreamTest::DecodeLiveStream()
 {
-    if (!qEnvironmentVariableIsSet("QS_ADB_PATH")
-        || !qEnvironmentVariableIsSet("QS_DEVICE_SERIAL"))
-        {
-        QSKIP("未设置 QS_ADB_PATH / QS_DEVICE_SERIAL，跳过真机用例");
+    if (!qEnvironmentVariableIsSet("QS_DEVICE_SERIAL"))
+    {
+        QSKIP("未设置 QS_DEVICE_SERIAL，跳过真机用例");
     }
 
     QString server_path = QString::fromLocal8Bit(qgetenv("QS_SCRCPY_SERVER"));

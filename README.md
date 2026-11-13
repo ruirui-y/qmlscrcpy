@@ -255,7 +255,7 @@ QmlScrcpy\
 
 | 变量 | 作用 |
 |---|---|
-| `QS_ADB_PATH` | 指定 adb.exe（不用安装包自带的） |
+| `QS_ADB_PATH` | 已废弃：adb 固定用 `Tools\adb.exe`，找不到才走 PATH |
 | `QS_DEVICE_SERIAL` | 启动时自动连这台（优先级低于"上次连的设备"） |
 | `QS_LOG_LEVEL` | 临时改日志级别（`debug` / `info` / `warn` / `error`） |
 | `QS_PERF` | 设成 `0` 可关掉每秒一行 `[perf]` 统计 |
@@ -382,11 +382,11 @@ Qt 装在别处就改 `CMakePresets.json` 里 `CMAKE_PREFIX_PATH` 那一行。
 
 ```powershell
 Get-Process QmlScrcpy -ErrorAction SilentlyContinue | Stop-Process -Force   # 重新编译前先杀，否则 LNK1168
-$env:QS_ADB_PATH="C:\path\to\adb.exe"
+# adb 固定用 程序目录\Tools\adb.exe，找不到才走 PATH
 build\windows-debug\bin\Debug\QmlScrcpy.exe
 ```
 
-真机用例默认跳过，要跑就补 `QS_ADB_PATH` 和 `QS_DEVICE_SERIAL`。
+真机用例默认跳过，要跑就装好 adb（`Tools\adb.exe` 或 PATH）并设 `QS_DEVICE_SERIAL`。
 当前 9 个测试全绿：`protocol` / `adb` / `server_args` / `server_session` / `ffmpeg` / `stream` / `input` / `key` / `net_address`。
 
 ---

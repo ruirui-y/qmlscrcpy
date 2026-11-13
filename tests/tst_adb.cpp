@@ -1,3 +1,5 @@
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <QtTest>
 
 #include <QByteArray>
@@ -198,12 +200,12 @@ void AdbArgsTest::ParseDevicesIgnoresAdbNoise()
 void AdbArgsTest::RunRealAdbVersion()
 {
     // 真跑一次 adb，验证 QProcess 这条路通不通。
-    if (!qEnvironmentVariableIsSet("QS_ADB_PATH"))
+    // adb 只从程序目录的 Tools\ 或 PATH 取，两者都没有就跳过
+    if (!QFileInfo::exists(qsc::adb::AdbPath()) && !QStandardPaths::findExecutable(QStringLiteral("adb")).size())
     {
-        QSKIP("未设置 QS_ADB_PATH，跳过真实 adb 调用");
+        QSKIP("找不到 adb，跳过真实调用");
     }
 
-    SetAdbPath(QString::fromLocal8Bit(qgetenv("QS_ADB_PATH")));
     const AdbResult result = Run(QStringList{QStringLiteral("version")});
 
     QVERIFY2(result.started_, result.std_err_.constData());

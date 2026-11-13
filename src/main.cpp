@@ -97,6 +97,7 @@ int main(int argc, char *argv[])
         log_config.level = qsc::base::ParseLevel(QString::fromLocal8Bit(env_level));
     }
     qsc::base::Init(log_config);
+    qInfo() << "[adb] 使用" << qsc::adb::AdbPath();
     qInfo() << "[app] 配置" << app_settings.ConfigPath() << "窗口状态" << app_settings.WindowPath() << "日志目录" << log_config.dir_path;
 
     // 控制台窗口按上次的选择决定显示还是隐藏（GUI 子系统下这两个调用是空操作）
@@ -195,10 +196,21 @@ int main(int argc, char *argv[])
 
     const int exit_code = app.exec();
 
-    // 退出前让 adb server 收工：它常驻在安装目录，会锁住 adb.exe 让下个版本的安装包覆盖不了
-    qsc::adb::Run(QStringList() << QStringLiteral("kill-server"), 3000);
+    // 顺序很重要：先断开，TearDown 里还要跑 adb 收尾命令（forward --remove 之类），
+    // 那些 adb 客户端发现 server 没了会自动再拉起一个；所以必须最后才 kill-server
+    controller.Disconnect();
 
-    // 退出前把后台任务线程收掉，免得 QThread 在静态析构里被强杀
+    // 后台线程里可能还有 adb push 之类在跑，先收掉
     qsc::base::ShutdownTaskRunner();
+
+    // 最后让 server 收工：它常驻在安装目录，会锁住 adb.exe 让下个版本的安装包覆盖不了
+    const qsc::adb::AdbResult kill_result = qsc::adb::Run(QStringList() << QStringLiteral("kill-server"), 3000);
+    qInfo() << "[adb] 退出时 kill-server 完成，退出码" << kill_result.exit_code_;
+
+    // 客户端在收尾阶段可能又把 server 拉起来，隔一会儿补一刀
+    QThread::msleep(300);
+    const qsc::adb::AdbResult final_check = qsc::adb::Run(QStringList() << QStringLiteral("kill-server"), 3000);
+    qInfo() << "[adb] 二次确认完成，退出码" << final_check.exit_code_;
+
     return exit_code;
 }
