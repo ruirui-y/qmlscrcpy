@@ -141,6 +141,7 @@ $latest = Get-Content -Raw -Encoding UTF8 $latest_path | ConvertFrom-Json
 $latest.latest = $Version
 
 # 客户端靠这两个字段做"下载后校验并自动安装"，缺了就只能开浏览器
+$latest.exe = "https://gitee.com/$Owner/$Repo/releases/download/$tag/QmlScrcpy_Setup_$Version.exe"
 $latest.size = (Get-Item $exe).Length
 $latest.sha256 = (Get-FileHash -Algorithm SHA256 -Path $exe).Hash.ToLower()
 Write-Host "      sha256=$($latest.sha256.Substring(0,16))…  size=$($latest.size)"

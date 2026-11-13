@@ -64,7 +64,8 @@ private:
 
     QString current_version_;                                                                   // 编译期写入的版本，例如 0.1.5
     QString latest_version_;
-    QString download_url_;
+    QString download_url_;                                                                      // 下载页（浏览器用）
+    QString installer_url_;                                                                     // exe 直链（curl 用），缺了就不能自动更新
     QString notes_;
     QString download_sha256_;                                                                   // latest.json 里给的安装包指纹，空表示不支持自动更新
     qint64 download_size_ = 0;                                                                   // 安装包字节数，用于进度和校验

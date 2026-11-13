@@ -203,6 +203,7 @@ bool UpdateChecker::ApplyPayload(const QByteArray &body)
     latest_version_ = latest_version;
     download_url_ = object.value(QStringLiteral("url")).toString();
     notes_ = object.value(QStringLiteral("notes")).toString();
+    installer_url_ = object.value(QStringLiteral("exe")).toString();
     download_sha256_ = object.value(QStringLiteral("sha256")).toString().toLower();
     download_size_ = static_cast<qint64>(object.value(QStringLiteral("size")).toDouble());
 
@@ -254,7 +255,8 @@ QString UpdateChecker::DownloadStatus() const
 // 只有远端给了 sha256 才允许"下载后自动安装"，否则只能开浏览器
 bool UpdateChecker::CanAutoUpdate() const
 {
-    return !download_sha256_.isEmpty() && download_sha256_.size() == 64 && update_available_;
+    return !installer_url_.isEmpty() && !download_sha256_.isEmpty() && download_sha256_.size() == 64
+        && update_available_;
 }
 
 // 后台拉安装包：用系统 curl，进度靠轮询文件大小算
