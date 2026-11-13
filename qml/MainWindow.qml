@@ -394,7 +394,9 @@ Window {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: updatePopup.open()
+                                // 这里必须调 OpenDownloadPage：之前全局改红标时被误改成 updatePopup.open()，
+                                // 表现就是"点下载页没反应"
+                                onClicked: updateChecker.OpenDownloadPage()
                             }
                         }
 

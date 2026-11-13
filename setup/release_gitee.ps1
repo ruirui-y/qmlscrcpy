@@ -12,6 +12,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,                                             # 例如 0.1.5，不带 v
     [string]$Token = $env:GITEE_TOKEN,
     [string]$Owner = 'bai-maxifeng',
+    [string]$Note = '',                                                                            # 悬停提示里的一句话，留空则从发布说明首段取
     [string]$Repo = 'qmlscrcpy'
 )
 
@@ -161,10 +162,12 @@ foreach ($line in (Get-Content -Encoding UTF8 $notes_path)) {
     $note_line = $trimmed
     break
 }
-if ($note_line) {
-    # 悬停提示是纯文本，去掉 ** 和 ` 这类 markdown 记号
-    $clean = $note_line -replace '\*\*', '' -replace '`', ''
-    $latest.notes = $clean
+# 优先用 -Note 传进来的文案；没传才从发布说明首段取，并去掉 markdown 记号
+if (-not [string]::IsNullOrWhiteSpace($Note)) {
+    $latest.notes = $Note.Trim()
+}
+elseif ($note_line) {
+    $latest.notes = $note_line -replace '\*\*', '' -replace '`', ''
 }
 
 # 必须不带 BOM：Qt 的 QJsonDocument 不跳过 BOM，带 BOM 会直接解析失败

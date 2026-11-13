@@ -3,6 +3,8 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
@@ -18,6 +20,11 @@
 #include <QUrl>
 
 #include <QCoreApplication>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 #include "app_settings.h"
 #include "base/log.h"
@@ -227,23 +234,39 @@ void UpdateChecker::OpenDownloadPage()
     if (download_url_.isEmpty())
     {
         qCInfo(base::lcApp) << "[update] 没有下载页地址，忽略";
+        download_status_ = QStringLiteral("没有下载页地址");
+        emit DownloadChanged();
         return;
     }
 
-    // QDesktopServices 在部分环境（默认浏览器没注册、程序以管理员权限运行）会静默失败，
-    // 所以失败时要退到系统命令，不然用户点了就是"没反应"
-    if (QDesktopServices::openUrl(QUrl(download_url_)))
+    qCInfo(base::lcApp) << "[update] 打开下载页" << download_url_;
+
+    // 先复制到剪贴板：不管浏览器能不能起来，用户至少能直接粘贴
+    QGuiApplication::clipboard()->setText(download_url_);
+
+    // 用 Win32 的 ShellExecuteW 而不是 QDesktopServices：后者在提权进程、
+    // 默认浏览器关联异常时会静默返回 false，调用方完全看不出发生了什么
+    const std::wstring wide_url = download_url_.toStdWString();
+    const HINSTANCE opened = ShellExecuteW(nullptr, L"open", wide_url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    const qintptr code = reinterpret_cast<qintptr>(opened);
+    qCInfo(base::lcApp) << "[update] ShellExecuteW 返回" << code;
+
+    // ShellExecuteW 约定：返回值 > 32 才算成功
+    if (code > 32)
     {
+        download_status_ = QStringLiteral("已用系统默认浏览器打开（链接也复制到剪贴板了）");
+        emit DownloadChanged();
         return;
     }
 
-    qCInfo(base::lcApp) << "[update] openUrl 失败，改用系统命令打开";
-    const bool opened = QProcess::startDetached(QStringLiteral("cmd.exe"),
+    qCInfo(base::lcApp) << "[update] ShellExecuteW 失败，改用 cmd start";
+    const bool started = QProcess::startDetached(QStringLiteral("cmd.exe"),
                                                 QStringList() << QStringLiteral("/c") << QStringLiteral("start")
                                                               << QString() << download_url_);
-    if (!opened)
+    if (!started)
     {
-        download_status_ = QStringLiteral("打不开浏览器，请手动访问 %1").arg(download_url_);
+        download_status_ = QStringLiteral("打不开浏览器，链接已复制：%1").arg(download_url_);
+        qCInfo(base::lcApp) << "[update] 系统命令也失败";
         emit DownloadChanged();
     }
 }
@@ -303,7 +326,7 @@ void UpdateChecker::StartDownload()
                                                   << QStringLiteral("--silent")
                                                   << QStringLiteral("--show-error")
                                                   << QStringLiteral("-o") << local_setup_path_
-                                                  << download_url_);
+                                                  << installer_url_);                           // exe 直链，不是下载页面
     QObject::connect(download_process_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                      this, [this](int exit_code, QProcess::ExitStatus status)
     {
