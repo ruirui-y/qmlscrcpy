@@ -29,12 +29,12 @@ class VideoReader : public QThread
 public:
     VideoReader(QTcpSocket *socket, H264Decoder *decoder, QObject *parent = nullptr);
 
-    void Stop();                                                                                // 置停止标志，最多等 1 秒
+    void Stop();                                                                                    // 置停止标志，最多等 1 秒
 
 signals:
-    void FrameReady(qsc::stream::Frame frame);                                                   // 每解出一帧发一次；接收方用直连，跑在本线程
-    void Failed(QString reason);                                                                // 读或解码出错，连接实质上不可用了
-    void Ended();                                                                               // 线程正常退出（收到 Stop 或者对端断开）
+    void SigFrameReady(qsc::stream::Frame frame);                                                   // 每解出一帧发一次；接收方用直连，跑在本线程
+    void SigFailed(QString reason);                                                                 // 读或解码出错，连接实质上不可用了
+    void SigEnded();                                                                                // 线程正常退出（收到 Stop 或者对端断开）
 
 protected:
     void run() override;
@@ -43,9 +43,9 @@ private:
     // 把 buffer 补到 want 字节；返回 false 表示已停止或连接断开，reason 里有原因
     bool FillBuffer(QByteArray &buffer, int want, QString *reason);
 
-    QTcpSocket *socket_;                                                                        // 已建好连接的视频 socket，本对象只读
-    H264Decoder *decoder_;                                                                      // 解码器，和本线程一一对应，别跨线程共用
-    QElapsedTimer report_timer_;                                                                // 每秒结算一次耗时统计
+    QTcpSocket *socket_;                                                                            // 已建好连接的视频 socket，本对象只读
+    H264Decoder *decoder_;                                                                          // 解码器，和本线程一一对应，别跨线程共用
+    QElapsedTimer report_timer_;                                                                    // 每秒结算一次耗时统计
     std::atomic<bool> stop_{false};
 };
 

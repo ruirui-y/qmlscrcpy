@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
     qsc::base::HotkeySpec hotkey;
     if (qsc::base::ParseHotkey(app_settings.BossKeyText(), &hotkey) && boss_key.Bind(hotkey))
     {
-        QObject::connect(&boss_key, &qsc::BossKey::Triggered, &controller, &DeviceController::ToggleBossKey);
+        QObject::connect(&boss_key, &qsc::BossKey::SigTriggered, &controller, &DeviceController::ToggleBossKey);
         app.installNativeEventFilter(&boss_key);
         qInfo() << "[app] 老板键已注册" << qsc::base::HotkeyText(hotkey);
     }

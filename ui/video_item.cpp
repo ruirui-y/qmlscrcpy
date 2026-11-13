@@ -77,7 +77,7 @@ private:
     bool dirty_ = false;                                                                        // 有没上传的新像素
 
     GLuint textures_[3] = {0, 0, 0};
-    QSize texture_sizes_[3];    // 每张纹理当前对应的平面尺寸，变了就重建
+    QSize texture_sizes_[3];                                                                    // 每张纹理当前对应的平面尺寸，变了就重建
     QOpenGLShaderProgram program_;
     bool program_ready_ = false;
 };
@@ -351,7 +351,7 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
     {
         return;
     }
-    emit KeepAspectChanged();
+    emit SigKeepAspectChanged();
     update();
 }
 
@@ -463,7 +463,7 @@ void VideoItem::OnRefreshTimer()
     if (current_size != notified_size_)
     {
         notified_size_ = current_size;
-        emit FrameSizeChanged();
+        emit SigFrameSizeChanged();
     }
 
     // 重绘已经由 Present 逐帧投递，这里只兜一次"有帧但没触发"的极端情况
@@ -486,7 +486,7 @@ void VideoItem::UpdateFps()
         return;
     }
     fps_ = frames;
-    emit FpsChanged();
+    emit SigFpsChanged();
 }
 
 // 画布尺寸变了，重绘一次让 FBO 跟上
@@ -514,7 +514,7 @@ void VideoItem::EmitControlMessage(const QByteArray &message)
         return;
     }
     qCDebug(qsc::base::lcInput) << "发出消息" << message.size() << "字节" << message.left(2).toHex();
-    emit ControlMessageReady(message);
+    emit SigControlMessageReady(message);
 }
 
 // 鼠标按下：先拿焦点，再换算坐标发触摸按下

@@ -140,7 +140,7 @@ void UpdateChecker::AttemptNextSource()
 
     QNetworkRequest request{QUrl(url)};
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    request.setTransferTimeout(5000);                                                            // 5 秒没回来就当这个源失败
+    request.setTransferTimeout(5000);                                                           // 5 秒没回来就当这个源失败
 
     QNetworkReply *reply = network_->get(request);
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]()
@@ -224,7 +224,7 @@ bool UpdateChecker::ApplyPayload(const QByteArray &body)
     qCInfo(base::lcApp) << "[update] 本地" << current_version_ << "远端" << latest_version_
                         << "提示更新" << update_available_ << "强制" << update_required_;
 
-    emit StateChanged();
+    emit SigStateChanged();
     return true;
 }
 
@@ -235,7 +235,7 @@ void UpdateChecker::OpenDownloadPage()
     {
         qCInfo(base::lcApp) << "[update] 没有下载页地址，忽略";
         download_status_ = QStringLiteral("没有下载页地址");
-        emit DownloadChanged();
+        emit SigDownloadChanged();
         return;
     }
 
@@ -255,7 +255,7 @@ void UpdateChecker::OpenDownloadPage()
     if (code > 32)
     {
         download_status_ = QStringLiteral("已用系统默认浏览器打开（链接也复制到剪贴板了）");
-        emit DownloadChanged();
+        emit SigDownloadChanged();
         return;
     }
 
@@ -267,7 +267,7 @@ void UpdateChecker::OpenDownloadPage()
     {
         download_status_ = QStringLiteral("打不开浏览器，链接已复制：%1").arg(download_url_);
         qCInfo(base::lcApp) << "[update] 系统命令也失败";
-        emit DownloadChanged();
+        emit SigDownloadChanged();
     }
 }
 
@@ -317,11 +317,11 @@ void UpdateChecker::StartDownload()
     downloading_ = true;
     installable_ = false;
     download_status_ = QStringLiteral("正在下载 %1…").arg(latest_version_);
-    emit DownloadChanged();
+    emit SigDownloadChanged();
 
     download_process_ = new QProcess(this);
     download_process_->setProgram(QStringLiteral("curl.exe"));
-    download_process_->setArguments(QStringList() << QStringLiteral("-L")                      // 跟随跳转
+    download_process_->setArguments(QStringList() << QStringLiteral("-L")                       // 跟随跳转
                                                   << QStringLiteral("--fail")                   // 4xx/5xx 当失败
                                                   << QStringLiteral("--silent")
                                                   << QStringLiteral("--show-error")
@@ -338,16 +338,24 @@ void UpdateChecker::StartDownload()
     });
     download_process_->start();
 
-    // curl 的 --progress-bar 写 stderr 且带 \r，解析麻烦；直接轮询文件大小更稳
+    // curl 的 --progress-bar 写 stderr 且带 \r，解析麻烦；直接轮询文件大小更稳。
+    // 100ms 采一次，进度看起来够顺；只有字节数真的变了才通知界面，避免空转刷新
     if (progress_timer_ == nullptr)
     {
         progress_timer_ = new QTimer(this);
-        progress_timer_->setInterval(300);
+        progress_timer_->setInterval(100);
         QObject::connect(progress_timer_, &QTimer::timeout, this, [this]()
         {
-            emit DownloadChanged();
+            const qint64 now = QFileInfo(local_setup_path_).size();
+            if (now == reported_bytes_)
+            {
+                return;
+            }
+            reported_bytes_ = now;
+            emit SigDownloadChanged();
         });
     }
+    reported_bytes_ = 0;
     progress_timer_->start();
 }
 
@@ -373,7 +381,7 @@ void UpdateChecker::CancelDownload()
     downloading_ = false;
     installable_ = false;
     download_status_ = QStringLiteral("已取消下载");
-    emit DownloadChanged();
+    emit SigDownloadChanged();
 }
 
 // curl 结束后核对大小并算 sha256（45MB 算一遍约 200ms，丢后台线程免得卡界面）
@@ -389,7 +397,7 @@ void UpdateChecker::OnDownloadFinished(int exit_code)
     {
         QFile::remove(local_setup_path_);
         download_status_ = QStringLiteral("下载失败（curl 退出码 %1）").arg(exit_code);
-        emit DownloadChanged();
+        emit SigDownloadChanged();
         return;
     }
 
@@ -398,12 +406,12 @@ void UpdateChecker::OnDownloadFinished(int exit_code)
     {
         QFile::remove(local_setup_path_);
         download_status_ = QStringLiteral("下载不完整（%1 / %2 字节）").arg(actual_size).arg(download_size_);
-        emit DownloadChanged();
+        emit SigDownloadChanged();
         return;
     }
 
     download_status_ = QStringLiteral("校验安装包…");
-    emit DownloadChanged();
+    emit SigDownloadChanged();
 
     const QString path = local_setup_path_;
     const QString expect = download_sha256_;
@@ -428,20 +436,20 @@ void UpdateChecker::OnDownloadFinished(int exit_code)
             {
                 QFile::remove(path);
                 download_status_ = QStringLiteral("读不到下载的安装包");
-                emit DownloadChanged();
+                emit SigDownloadChanged();
                 return;
             }
             if (actual.compare(expect, Qt::CaseInsensitive) != 0)
             {
                 QFile::remove(path);
                 download_status_ = QStringLiteral("校验失败，已删除安装包");
-                emit DownloadChanged();
+                emit SigDownloadChanged();
                 return;
             }
 
             installable_ = true;
             download_status_ = QStringLiteral("下载完成，可以安装");
-            emit DownloadChanged();
+            emit SigDownloadChanged();
         }, Qt::QueuedConnection);
     });
 }
@@ -460,7 +468,7 @@ void UpdateChecker::InstallAndRestart()
     if (!QProcess::startDetached(local_setup_path_, args))
     {
         download_status_ = QStringLiteral("启动安装程序失败，去下载页手动安装");
-        emit DownloadChanged();
+        emit SigDownloadChanged();
         return;
     }
 

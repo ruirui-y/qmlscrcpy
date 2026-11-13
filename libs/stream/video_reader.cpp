@@ -77,9 +77,9 @@ void VideoReader::run()
             // 用户主动断开不算错误，只有真出事才往界面上抛
             if (!stop_.load())
             {
-                emit Failed(error);
+                emit SigFailed(error);
             }
-            emit Ended();
+            emit SigEnded();
             return;
         }
 
@@ -87,8 +87,8 @@ void VideoReader::run()
         VideoPacketHeader header;
         if (!VideoPacketHeader::Parse(buffer, header))
         {
-            emit Failed(QStringLiteral("包头解析失败"));
-            emit Ended();
+            emit SigFailed(QStringLiteral("包头解析失败"));
+            emit SigEnded();
             return;
         }
 
@@ -98,9 +98,9 @@ void VideoReader::run()
         {
             if (!stop_.load())
             {
-                emit Failed(error);
+                emit SigFailed(error);
             }
-            emit Ended();
+            emit SigEnded();
             return;
         }
 
@@ -121,8 +121,8 @@ void VideoReader::run()
         perf.decode_us.fetchAndAddRelaxed(stage_timer.nsecsElapsed() / 1000);
         if (!pushed)
         {
-            emit Failed(error);
-            emit Ended();
+            emit SigFailed(error);
+            emit SigEnded();
             return;
         }
 
@@ -130,7 +130,7 @@ void VideoReader::run()
         for (const Frame &frame : frames)
         {
             perf.frames.fetchAndAddRelaxed(1);
-            emit FrameReady(frame);
+            emit SigFrameReady(frame);
         }
 
         // 每秒把各段耗时打一行，enabled 为 false 时这个函数立刻返回

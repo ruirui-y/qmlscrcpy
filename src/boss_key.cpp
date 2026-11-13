@@ -77,7 +77,7 @@ bool BossKey::nativeEventFilter(const QByteArray &event_type, void *message, lon
         MSG *msg = static_cast<MSG *>(message);
         if (msg != nullptr && msg->message == WM_HOTKEY && static_cast<int>(msg->wParam) == kHotkeyId)
         {
-            emit Triggered();
+            emit SigTriggered();
             return true;                                                                        // 吃掉，别再往窗口发
         }
     }

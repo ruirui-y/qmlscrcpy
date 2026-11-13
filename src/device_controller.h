@@ -25,24 +25,24 @@ class VideoItem;
 class DeviceController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString status READ Status NOTIFY StatusChanged)
-    Q_PROPERTY(QString proposedSerial READ ProposedSerial NOTIFY ProposedSerialChanged)
-    Q_PROPERTY(QString wheelMode READ WheelMode NOTIFY WheelModeChanged)
-    Q_PROPERTY(int dragPixels READ DragPixels NOTIFY DragPixelsChanged)
-    Q_PROPERTY(QString deviceName READ DeviceName NOTIFY DeviceNameChanged)
-    Q_PROPERTY(QStringList devices READ Devices NOTIFY DevicesChanged)
-    Q_PROPERTY(QStringList deviceLabels READ DeviceLabels NOTIFY DevicesChanged)
-    Q_PROPERTY(bool showConsole READ ShowConsole NOTIFY ShowConsoleChanged)
-    Q_PROPERTY(int videoBitRate READ VideoBitRate NOTIFY VideoSettingsChanged)
-    Q_PROPERTY(int videoMaxFps READ VideoMaxFps NOTIFY VideoSettingsChanged)
-    Q_PROPERTY(QString videoProfile READ VideoProfile NOTIFY VideoSettingsChanged)
-    Q_PROPERTY(bool connected READ IsConnected NOTIFY ConnectedChanged)
-    Q_PROPERTY(QString bossKey READ BossKey NOTIFY BossKeyChanged)
-    Q_PROPERTY(QString shortcutBack READ ShortcutBack NOTIFY ShortcutsChanged)
-    Q_PROPERTY(QString shortcutHome READ ShortcutHome NOTIFY ShortcutsChanged)
-    Q_PROPERTY(QString shortcutScreenshot READ ShortcutScreenshot NOTIFY ShortcutsChanged)
-    Q_PROPERTY(QString shortcutFullscreen READ ShortcutFullscreen NOTIFY ShortcutsChanged)
-    Q_PROPERTY(QString uploadDir READ UploadDir NOTIFY UploadDirChanged)
+    Q_PROPERTY(QString status READ Status NOTIFY SigStatusChanged)
+    Q_PROPERTY(QString proposedSerial READ ProposedSerial NOTIFY SigProposedSerialChanged)
+    Q_PROPERTY(QString wheelMode READ WheelMode NOTIFY SigWheelModeChanged)
+    Q_PROPERTY(int dragPixels READ DragPixels NOTIFY SigDragPixelsChanged)
+    Q_PROPERTY(QString deviceName READ DeviceName NOTIFY SigDeviceNameChanged)
+    Q_PROPERTY(QStringList devices READ Devices NOTIFY SigDevicesChanged)
+    Q_PROPERTY(QStringList deviceLabels READ DeviceLabels NOTIFY SigDevicesChanged)
+    Q_PROPERTY(bool showConsole READ ShowConsole NOTIFY SigShowConsoleChanged)
+    Q_PROPERTY(int videoBitRate READ VideoBitRate NOTIFY SigVideoSettingsChanged)
+    Q_PROPERTY(int videoMaxFps READ VideoMaxFps NOTIFY SigVideoSettingsChanged)
+    Q_PROPERTY(QString videoProfile READ VideoProfile NOTIFY SigVideoSettingsChanged)
+    Q_PROPERTY(bool connected READ IsConnected NOTIFY SigConnectedChanged)
+    Q_PROPERTY(QString bossKey READ BossKey NOTIFY SigBossKeyChanged)
+    Q_PROPERTY(QString shortcutBack READ ShortcutBack NOTIFY SigShortcutsChanged)
+    Q_PROPERTY(QString shortcutHome READ ShortcutHome NOTIFY SigShortcutsChanged)
+    Q_PROPERTY(QString shortcutScreenshot READ ShortcutScreenshot NOTIFY SigShortcutsChanged)
+    Q_PROPERTY(QString shortcutFullscreen READ ShortcutFullscreen NOTIFY SigShortcutsChanged)
+    Q_PROPERTY(QString uploadDir READ UploadDir NOTIFY SigUploadDirChanged)
 
 public:
     explicit DeviceController(QObject *parent = nullptr);
@@ -105,22 +105,22 @@ public:
     Q_INVOKABLE void SendRecents();                                                             // 多任务切换（最近任务）
 
 signals:
-    void StatusChanged();
-    void ProposedSerialChanged();
-    void WheelModeChanged();
-    void DragPixelsChanged();
-    void DeviceNameChanged();
-    void DevicesChanged();
-    void ShowConsoleChanged();
-    void VideoSettingsChanged();
-    void ConnectedChanged();
-    void BossKeyChanged();
-    void ShortcutsChanged();
-    void UploadDirChanged();
+    void SigStatusChanged();
+    void SigProposedSerialChanged();
+    void SigWheelModeChanged();
+    void SigDragPixelsChanged();
+    void SigDeviceNameChanged();
+    void SigDevicesChanged();
+    void SigShowConsoleChanged();
+    void SigVideoSettingsChanged();
+    void SigConnectedChanged();
+    void SigBossKeyChanged();
+    void SigShortcutsChanged();
+    void SigUploadDirChanged();
 
 private:
-    void OnControlData();    // 控制 socket 有数据：解析设备消息（剪贴板推送、Ack）
-    void OnLocalClipboardChanged();    // 电脑剪贴板变了（开了自动同步才接）
+    void OnControlData();                                                                       // 控制 socket 有数据：解析设备消息（剪贴板推送、Ack）
+    void OnLocalClipboardChanged();                                                             // 电脑剪贴板变了（开了自动同步才接）
 
     // 切无线三步的结果，工作线程算完交回给主线程
     struct WifiSwitchResult

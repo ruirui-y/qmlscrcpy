@@ -28,9 +28,9 @@ class QTimer;
 class VideoItem : public QQuickFramebufferObject
 {
     Q_OBJECT
-    Q_PROPERTY(QSize frameSize READ FrameSize NOTIFY FrameSizeChanged)
-    Q_PROPERTY(bool keepAspect READ KeepAspect WRITE SetKeepAspect NOTIFY KeepAspectChanged)
-    Q_PROPERTY(int fps READ Fps NOTIFY FpsChanged)
+    Q_PROPERTY(QSize frameSize READ FrameSize NOTIFY SigFrameSizeChanged)
+    Q_PROPERTY(bool keepAspect READ KeepAspect WRITE SetKeepAspect NOTIFY SigKeepAspectChanged)
+    Q_PROPERTY(int fps READ Fps NOTIFY SigFpsChanged)
 
 public:
     explicit VideoItem(QQuickItem *parent = nullptr);
@@ -57,10 +57,10 @@ public:
     qint64 ClockUs() const { return clock_.nsecsElapsed() / 1000; }                             // 当前单调时刻（微秒），渲染线程算延迟用
 
 signals:
-    void FrameSizeChanged();
-    void KeepAspectChanged();
-    void FpsChanged();
-    void ControlMessageReady(const QByteArray &message);                                        // 鼠标键盘翻好的控制消息，交给控制器发出去
+    void SigFrameSizeChanged();
+    void SigKeepAspectChanged();
+    void SigFpsChanged();
+    void SigControlMessageReady(const QByteArray &message);                                     // 鼠标键盘翻好的控制消息，交给控制器发出去
 
 protected:
     void geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry) override;
@@ -76,7 +76,7 @@ private:
     void OnRefreshTimer();                                                                      // GUI 线程：有新帧就请重绘，尺寸变了就通知 QML
     void UpdateFps();                                                                           // GUI 线程：每秒结算一次帧率
     void SyncMapper();                                                                          // 把画布尺寸、帧尺寸、缩放模式同步给坐标换算器
-    void EmitControlMessage(const QByteArray &message);                                                 // 空消息直接丢，非空才发信号
+    void EmitControlMessage(const QByteArray &message);                                         // 空消息直接丢，非空才发信号
 
     qsc::input::CoordinateMapper mapper_;                                                       // 窗口坐标 → 视频帧坐标
     qsc::input::TouchController touch_{&mapper_};                                               // 鼠标 → 触摸/滚轮消息

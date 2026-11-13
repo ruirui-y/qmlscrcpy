@@ -15,14 +15,14 @@ Window {
 
     property alias fps: videoSurface.fps
     property alias frameSize: videoSurface.frameSize
-    property bool applying: false    // 正在由代码改窗口，此时的 onXxxChanged 不记录
-    property bool ready: false    // 首帧处理完之前不记尺寸
-    property bool landscape: false    // 当前帧是不是横向
-    property bool pinned: false    // 置顶
-    property bool displayOff: false    // 只用来切按钮文字，真实状态在设备那边
-    property string hint: ""    // 工具栏按钮悬停时的说明，显示在标题栏
+    property bool applying: false                                                               // 正在由代码改窗口，此时的 onXxxChanged 不记录
+    property bool ready: false                                                                  // 首帧处理完之前不记尺寸
+    property bool landscape: false                                                              // 当前帧是不是横向
+    property bool pinned: false                                                                 // 置顶
+    property bool displayOff: false                                                             // 只用来切按钮文字，真实状态在设备那边
+    property string hint: ""                                                                    // 工具栏按钮悬停时的说明，显示在标题栏
 
-    readonly property int toolBarWidth: 64    // 右侧工具栏列宽
+    readonly property int toolBarWidth: 64                                                      // 右侧工具栏列宽
 
     width: 460
     height: 900
@@ -50,7 +50,7 @@ Window {
         id: button
 
         property string label: ""
-        property string tip: ""    // 悬停时显示在标题栏的说明
+        property string tip: ""                                                                 // 悬停时显示在标题栏的说明
         property bool active: false
         signal clicked()
 
@@ -121,7 +121,7 @@ Window {
                 // 默认显示设备名 + 帧率 + 分辨率；有悬停提示时临时顶替
                 Label {
                     anchors.left: parent.left
-                    anchors.leftMargin: 22    // 让开左上角那个缩放把手
+                    anchors.leftMargin: 22                                                      // 让开左上角那个缩放把手
                     anchors.right: windowButtons.left
                     anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
@@ -211,7 +211,7 @@ Window {
                     id: videoSurface
                     objectName: "videoSurface"
                     anchors.fill: parent
-                    keepAspect: false    // 窗口比例已经跟着帧走了，这里直接拉满
+                    keepAspect: false                                                           // 窗口比例已经跟着帧走了，这里直接拉满
                 }
 
                 // 文件拖放：把文件拖进画面就推到手机 Download/，拖动时给个高亮提示

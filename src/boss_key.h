@@ -26,7 +26,7 @@ public:
 
 signals:
     // 用户按下了热键（不管哪个线程装的，都在 GUI 线程发出来）
-    void Triggered();
+    void SigTriggered();
 
 protected:
     bool nativeEventFilter(const QByteArray &event_type, void *message, long *result) override;

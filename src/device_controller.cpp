@@ -71,7 +71,7 @@ void DeviceController::SetSurface(QObject *surface)
     }
 
     // 画布把鼠标键盘翻成控制消息，这里负责写进控制 socket
-    QObject::connect(surface_, &VideoItem::ControlMessageReady, this, &DeviceController::SendControl);
+    QObject::connect(surface_, &VideoItem::SigControlMessageReady, this, &DeviceController::SendControl);
     surface_->SetWheelMode(wheel_mode_);
     surface_->SetDragPixels(drag_pixels_);
 }
@@ -128,7 +128,7 @@ bool DeviceController::SetUploadDir(const QString &dir)
     }
 
     AppSettings().SetUploadDir(trimmed);
-    emit UploadDirChanged();
+    emit SigUploadDirChanged();
     SetStatus(QStringLiteral("上传目录已改为 %1").arg(trimmed));
     return true;
 }
@@ -164,7 +164,7 @@ bool DeviceController::SetShortcut(const QString &name, const QString &sequence)
     }
 
     AppSettings().SetShortcut(name, trimmed);
-    emit ShortcutsChanged();
+    emit SigShortcutsChanged();
     SetStatus(trimmed.isEmpty() ? QStringLiteral("已禁用该快捷键")
                                 : QStringLiteral("快捷键已改为 %1").arg(trimmed));
     return true;
@@ -213,7 +213,7 @@ bool DeviceController::SetBossKey(const QString &text)
     }
 
     AppSettings().SetBossKeyText(qsc::base::HotkeyText(spec));
-    emit BossKeyChanged();
+    emit SigBossKeyChanged();
     SetStatus(QStringLiteral("老板键已改为 %1").arg(qsc::base::HotkeyText(spec)));
     return true;
 }
@@ -508,7 +508,7 @@ void DeviceController::ApplyVideoSettings(int bit_rate, int max_fps)
     AppSettings settings;
     settings.SetVideoBitRate(bit_rate, video_profile_);
     settings.SetVideoMaxFps(max_fps, video_profile_);
-    emit VideoSettingsChanged();
+    emit SigVideoSettingsChanged();
 
     // 没连设备就只存配置，下次连接自然生效
     if (session_ == nullptr || reader_ == nullptr)
@@ -547,7 +547,7 @@ void DeviceController::SetShowConsole(bool show)
     show_console_ = show;
     qsc::base::SetConsoleWindowVisible(show_console_);
     AppSettings().SetShowConsole(show_console_);
-    emit ShowConsoleChanged();
+    emit SigShowConsoleChanged();
     SetStatus(show_console_ ? QStringLiteral("命令行窗口已显示") : QStringLiteral("命令行窗口已隐藏"));
 }
 // 设备地址列表，和 deviceLabels 下标一一对应
@@ -714,7 +714,7 @@ void DeviceController::ApplyWifiResult(const WifiSwitchResult &result)
     }
 
     proposed_serial_ = result.endpoint_;
-    emit ProposedSerialChanged();
+    emit SigProposedSerialChanged();
     SetStatus(QStringLiteral("无线已就绪：%1，可以拔线了，点「连接」").arg(result.endpoint_));
 }
 // 当前连着的设备串号，没连时是空
@@ -746,7 +746,7 @@ void DeviceController::SetStatus(const QString &status)
         return;
     }
     status_ = status;
-    emit StatusChanged();
+    emit SigStatusChanged();
 }
 
 // 跑 adb devices，把第一台在线设备填进建议值
@@ -800,8 +800,8 @@ void DeviceController::RefreshDevices()
                                                                 : QStringLiteral("USB   %1").arg(serial));
     }
     proposed_serial_ = serials.isEmpty() ? QString() : serials.first();
-    emit DevicesChanged();
-    emit ProposedSerialChanged();
+    emit SigDevicesChanged();
+    emit SigProposedSerialChanged();
 
     SetStatus(serials.isEmpty() ? QStringLiteral("没找到在线设备")
                                 : QStringLiteral("找到 %1 台设备").arg(serials.size()));
@@ -824,7 +824,7 @@ void DeviceController::SetWheelMode(const QString &mode)
     }
     AppSettings settings;
     settings.SetWheelMode(wheel_mode_);
-    emit WheelModeChanged();
+    emit SigWheelModeChanged();
     SetStatus(QStringLiteral("滚轮模式：%1").arg(wheel_mode_ == QStringLiteral("drag") ? QStringLiteral("滑动") : QStringLiteral("滚动")));
 }
 
@@ -849,7 +849,7 @@ void DeviceController::AdjustDragPixels(int delta)
     }
     AppSettings settings;
     settings.SetDragPixels(drag_pixels_);
-    emit DragPixelsChanged();
+    emit SigDragPixelsChanged();
     SetStatus(QStringLiteral("滑动像素：%1").arg(drag_pixels_));
 }
 
@@ -973,12 +973,12 @@ void DeviceController::Connect(const QString &serial)
     qsc::session::ServerParams params;
     params.serial_ = serial.trimmed();
     params.server_local_path_ = QCoreApplication::applicationDirPath() + "/scrcpy-server";
-    AppSettings settings;                                                                        // 采集参数走配置，改 config.ini 就能调
-    video_profile_ = AppSettings::VideoProfile(serial.trimmed());                                // 有线 / 无线各一套画质参数
+    AppSettings settings;                                                                       // 采集参数走配置，改 config.ini 就能调
+    video_profile_ = AppSettings::VideoProfile(serial.trimmed());                               // 有线 / 无线各一套画质参数
     params.max_size_ = settings.VideoMaxSize();                                                 // 0 = 不缩放，用设备原生分辨率
     params.bit_rate_ = settings.VideoBitRate(video_profile_);
     params.max_fps_ = settings.VideoMaxFps(video_profile_);                                     // 0 = 不限，无线嫌卡就填 60
-    emit VideoSettingsChanged();
+    emit SigVideoSettingsChanged();
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下（建链是阻塞的）
@@ -986,7 +986,7 @@ void DeviceController::Connect(const QString &serial)
     QCoreApplication::processEvents();                                                          // 让状态文字先画出来
 
     device_name_ = params.serial_;
-    emit DeviceNameChanged();
+    emit SigDeviceNameChanged();
 
     session_ = std::make_unique<qsc::session::ServerSession>(params);
     const qsc::session::ConnectResult result = session_->Start();
@@ -1032,9 +1032,9 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     video->moveToThread(reader_);
 
     // 直连：Present 跑在视频线程里，不吃 GUI 线程的事件循环
-    QObject::connect(reader_, &qsc::stream::VideoReader::FrameReady, surface_, &VideoItem::Present,
+    QObject::connect(reader_, &qsc::stream::VideoReader::SigFrameReady, surface_, &VideoItem::Present,
                      Qt::DirectConnection);
-    QObject::connect(reader_, &qsc::stream::VideoReader::Failed, this, [this](const QString &reason)
+    QObject::connect(reader_, &qsc::stream::VideoReader::SigFailed, this, [this](const QString &reason)
     {
         SetStatus(QStringLiteral("视频出错：%1").arg(reason));
     });
@@ -1062,7 +1062,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     if (!connected_)
     {
         connected_ = true;
-        emit ConnectedChanged();
+        emit SigConnectedChanged();
     }
 
     SetStatus(QStringLiteral("已连接 %1  %2x%3%4")
@@ -1125,13 +1125,13 @@ void DeviceController::TearDown()
     if (connected_)
     {
         connected_ = false;
-        emit ConnectedChanged();
+        emit SigConnectedChanged();
     }
 
     if (!device_name_.isEmpty())
     {
         device_name_.clear();
-        emit DeviceNameChanged();
+        emit SigDeviceNameChanged();
     }
 
     // 顺序不能反：读线程里存着解码器的裸指针，先停线程再销毁解码器

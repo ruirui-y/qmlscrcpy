@@ -28,8 +28,8 @@ Window {
     // 位置和尺寸记在 window.ini，下次启动回到原处；拖动/缩放时防抖写盘
     property bool applying: false
     property bool ready: false
-    property string hint: ""    // 鼠标停在头部按钮上时的说明
-    property Item hintAnchor: null    // 提示挂在哪个按钮下面
+    property string hint: ""                                                                    // 鼠标停在头部按钮上时的说明
+    property Item hintAnchor: null                                                              // 提示挂在哪个按钮下面
 
     Component.onCompleted: {
         // 登记给老板键：主窗 + 投屏窗都要能被一键藏起来
