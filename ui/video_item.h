@@ -27,8 +27,9 @@ struct FrameTrace
     qint64 gap_us = 0;                                                                          // 距上一帧到达的间隔
     std::atomic<qint64> queue_us{-1};                                                           // 事件在 GUI 队列里等多久
     std::atomic<qint64> update_done_us{0};                                                      // update() 执行完的时刻
-    std::atomic<qint64> dispatch_us{-1};                                                        // update() 完到 GUI 处理 UpdateRequest
-    std::atomic<qint64> wake_us{-1};                                                            // UpdateRequest 处理完到渲染线程开跑
+    std::atomic<qint64> schedule_us{-1};                                                        // update 完到渲染线程被唤醒（beforeSynchronizing）
+    std::atomic<qint64> preprocess_us{-1};                                                      // Qt 同步前的准备工作耗时
+    std::atomic<qint64> wake_us{-1};                                                            // 唤醒到 synchronize 真正开跑
     std::atomic<bool> printed{false};                                                            // 已经打印过就不再重复
     std::atomic<qint64> sync_us{-1};                                                            // synchronize 全程
     std::atomic<qint64> draw_us{-1};                                                            // render 全程
@@ -80,6 +81,7 @@ public:
     void MarkSwapped();                                                                          // 这一帧真正提交给系统了
     qint64 ClockUs() const { return clock_.nsecsElapsed() / 1000; }                             // 当前单调时刻（微秒），渲染线程算延迟用
     qint64 UpdateRequestUs() const { return update_request_us_.loadRelaxed(); }                  // GUI 处理 UpdateRequest 的时刻
+    qint64 BeforeSyncUs() const { return before_sync_us_.loadRelaxed(); }                        // Qt 发出 beforeSynchronizing 的时刻
 
 signals:
     void SigFrameSizeChanged();
@@ -127,5 +129,6 @@ private:
     bool swap_hooked_ = false;                                                                  // frameSwapped 只接一次
     bool filter_hooked_ = false;                                                                // 事件过滤器只装一次
     QAtomicInteger<qint64> update_request_us_{0};                                               // GUI 线程处理 UpdateRequest 的时刻
+    QAtomicInteger<qint64> before_sync_us_{0};                                                  // Qt 发出 beforeSynchronizing 的时刻（渲染线程）
     QTimer *fps_timer_ = nullptr;                                                               // 每秒触发一次，负责结算帧率
 };

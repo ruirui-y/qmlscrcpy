@@ -46,8 +46,8 @@ void PrintTrace(const FrameTracePtr& trace, bool swapped, qint64 alive_us)
 
 
     qInfo().nospace() << "  帧 " << trace->id << " 上屏：到达间隔 " << ms(trace->gap_us) << "，GUI 排队 "
-        << ms(trace->queue_us.load()) << "，update到事件 " << ms(trace->dispatch_us.load())
-        << "，事件到渲染 " << ms(trace->wake_us.load()) << "，取帧 " << ms(trace->sync_us.load())
+        << ms(trace->queue_us.load()) << "，GUI 到渲染线程 " << ms(trace->schedule_us.load())
+        << "，唤醒 " << ms(trace->schedule_us.load()) << "，预处理 " << ms(trace->preprocess_us.load()) << "，取帧 " << ms(trace->sync_us.load())
         << "，画一帧 " << ms(trace->draw_us.load()) << "，交换阻塞 " << ms(trace->swap_us.load())
         << "，从到达到上屏 "
         << ms(trace->render_end_us.load() + trace->swap_us.load() - trace->arrive_us) << " ms";
@@ -137,19 +137,22 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
         return;
     }
 
-    // 这一帧等渲染线程等了多久：拆成 update() → GUI 处理 UpdateRequest → 渲染线程开跑
+    // 这一帧等渲染线程等了多久：拆成 update() → 渲染线程被唤醒 → Qt 同步前准备 → synchronize
     const qint64 update_done_us = trace ? trace->update_done_us.load() : 0;
-    const qint64 request_us = video_item->UpdateRequestUs();
+    const qint64 before_sync_us = video_item->BeforeSyncUs();
     if (trace && update_done_us > 0)
     {
-        if (request_us > update_done_us && pass_start_us > request_us)
+        if (before_sync_us > update_done_us)
         {
-            trace->dispatch_us.store(request_us - update_done_us);
-            trace->wake_us.store(pass_start_us - request_us);
+            trace->schedule_us.store(before_sync_us - update_done_us);
+            if (pass_start_us > before_sync_us)
+            {
+                trace->preprocess_us.store(pass_start_us - before_sync_us);
+            }
         }
         else if (pass_start_us > update_done_us)
         {
-            // 没抓到事件时退回整段计时，免得这条链断掉
+            // 没抓到信号时退回整段计时，免得这条链断掉
             trace->wake_us.store(pass_start_us - update_done_us);
         }
     }
@@ -480,6 +483,13 @@ void VideoItem::Present(const Frame &frame)
         {
             QObject::connect(window(), &QQuickWindow::frameSwapped, this, [this]() { MarkSwapped(); },
                              Qt::UniqueConnection);
+
+            // 渲染线程刚开始这一轮的时刻：它到 synchronize 之间的差就是 Qt 自己的准备工作
+            QObject::connect(window(), &QQuickWindow::beforeSynchronizing, this, [this]()
+            {
+                before_sync_us_.storeRelaxed(clock_.nsecsElapsed() / 1000);
+            }, Qt::DirectConnection);
+
             swap_hooked_ = true;
         }
 
