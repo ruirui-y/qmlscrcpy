@@ -262,7 +262,172 @@ Window {
 
             Item { Layout.fillWidth: true }
 
+            // 更新面板：红标点开就是这里
+            Popup {
+                id: updatePopup
+
+                width: 320
+                padding: 10
+                x: Math.round((controlWindow.width - width) / 2) - 16
+                y: 18
+                modal: true
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                background: Rectangle {
+                    radius: 8
+                    color: "#1b1f26"
+                    border.width: 1
+                    border.color: "#2c323c"
+                }
+
+                contentItem: Column {
+                    spacing: 8
+
+                    Text {
+                        text: qsTr("发现新版本 %1").arg(updateChecker.latestVersion)
+                        color: "#e6ebf2"
+                        font.pixelSize: 14
+                        font.bold: true
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: updateChecker.notes
+                        color: "#9aa4b2"
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        visible: updateChecker.notes.length > 0
+                    }
+
+                    // 下载进度：只有在下载中或刚下载完才显示
+                    Rectangle {
+                        width: parent.width
+                        height: 6
+                        radius: 3
+                        visible: updateChecker.downloading || updateChecker.downloadStatus.length > 0
+                        color: "#2c323c"
+
+                        Rectangle {
+                            width: parent.width * updateChecker.downloadProgress
+                            height: parent.height
+                            radius: 3
+                            color: "#3f8fdd"
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: updateChecker.downloadStatus
+                        color: "#8b93a3"
+                        font.pixelSize: 10
+                        visible: updateChecker.downloadStatus.length > 0
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: 8
+                        layoutDirection: Qt.RightToLeft
+
+                        // 主按钮：能自动更新就下载+安装，否则直接开浏览器
+                        Rectangle {
+                            width: 92
+                            height: 28
+                            radius: 6
+                            color: primaryArea.containsMouse ? "#5aa9ff" : "#3f8fdd"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: {
+                                    if (updateChecker.downloading) {
+                                        return qsTr("取消")
+                                    }
+                                    if (updateChecker.downloadStatus.indexOf(qsTr("可以安装")) >= 0) {
+                                        return qsTr("立即安装")
+                                    }
+                                    return updateChecker.canAutoUpdate ? qsTr("立即更新") : qsTr("去下载")
+                                }
+                                color: "#ffffff"
+                                font.pixelSize: 12
+                            }
+
+                            MouseArea {
+                                id: primaryArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (updateChecker.downloading) {
+                                        updateChecker.CancelDownload()
+                                        return
+                                    }
+                                    if (updateChecker.downloadStatus.indexOf(qsTr("可以安装")) >= 0) {
+                                        updateChecker.InstallAndRestart()
+                                        return
+                                    }
+                                    if (updateChecker.canAutoUpdate) {
+                                        updateChecker.StartDownload()
+                                        return
+                                    }
+                                    updateChecker.OpenDownloadPage()
+                                }
+                            }
+                        }
+
+                        // 次按钮：手动下载页（静默安装失败时的退路）
+                        Rectangle {
+                            width: 92
+                            height: 28
+                            radius: 6
+                            color: secondaryArea.containsMouse ? "#2e343e" : "#242932"
+                            border.width: 1
+                            border.color: "#333945"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("下载页")
+                                color: "#cdd4de"
+                                font.pixelSize: 12
+                            }
+
+                            MouseArea {
+                                id: secondaryArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: updatePopup.open()
+                            }
+                        }
+
+                        // 关闭：本次先不更新
+                        Rectangle {
+                            width: 60
+                            height: 28
+                            radius: 6
+                            color: laterArea.containsMouse ? "#2e343e" : "#242932"
+                            border.width: 1
+                            border.color: "#333945"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("稍后")
+                                color: "#cdd4de"
+                                font.pixelSize: 12
+                            }
+
+                            MouseArea {
+                                id: laterArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: updatePopup.close()
+                            }
+                        }
+                    }
+                }
+            }
+
             // 有新版本时的红标：点了直接开浏览器去下载（链接来自 latest.json）
+
             Rectangle {
                 id: updateBadge
 
@@ -299,7 +464,7 @@ Window {
                         controlWindow.hint = ""
                         controlWindow.hintAnchor = null
                     }
-                    onClicked: updateChecker.OpenDownloadPage()
+                    onClicked: updatePopup.open()
                 }
             }
 

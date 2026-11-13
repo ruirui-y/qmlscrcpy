@@ -1,6 +1,12 @@
 #include "update_checker.h"
 
+#include <QCryptographicHash>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QTimer>
 #include <QDesktopServices>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -11,8 +17,11 @@
 #include <QSslSocket>
 #include <QUrl>
 
+#include <QCoreApplication>
+
 #include "app_settings.h"
 #include "base/log.h"
+#include "base/task_runner.h"
 #include "update/version_compare.h"
 
 namespace qsc
@@ -194,6 +203,8 @@ bool UpdateChecker::ApplyPayload(const QByteArray &body)
     latest_version_ = latest_version;
     download_url_ = object.value(QStringLiteral("url")).toString();
     notes_ = object.value(QStringLiteral("notes")).toString();
+    download_sha256_ = object.value(QStringLiteral("sha256")).toString().toLower();
+    download_size_ = static_cast<qint64>(object.value(QStringLiteral("size")).toDouble());
 
     // 本地版本 < minimum：必须更新；< latest：提示更新
     const QString minimum_version = object.value(QStringLiteral("minimum")).toString();
@@ -217,6 +228,201 @@ void UpdateChecker::OpenDownloadPage()
         return;
     }
     QDesktopServices::openUrl(QUrl(download_url_));
+}
+
+
+bool UpdateChecker::Downloading() const
+{
+    return downloading_;
+}
+
+qreal UpdateChecker::DownloadProgress() const
+{
+    if (download_size_ <= 0)
+    {
+        return 0.0;
+    }
+    const qint64 received = local_setup_path_.isEmpty() ? 0 : QFileInfo(local_setup_path_).size();
+    return qBound(0.0, static_cast<qreal>(received) / static_cast<qreal>(download_size_), 1.0);
+}
+
+QString UpdateChecker::DownloadStatus() const
+{
+    return download_status_;
+}
+
+// 只有远端给了 sha256 才允许"下载后自动安装"，否则只能开浏览器
+bool UpdateChecker::CanAutoUpdate() const
+{
+    return !download_sha256_.isEmpty() && download_sha256_.size() == 64 && update_available_;
+}
+
+// 后台拉安装包：用系统 curl，进度靠轮询文件大小算
+void UpdateChecker::StartDownload()
+{
+    if (downloading_ || !CanAutoUpdate())
+    {
+        return;
+    }
+
+    // 安装包放临时目录，避免污染程序目录（程序目录可能没有写权限）
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+        + QStringLiteral("/QmlScrcpy");
+    QDir().mkpath(dir);
+    local_setup_path_ = dir + QStringLiteral("/QmlScrcpy_Setup_%1.exe").arg(latest_version_);
+    QFile::remove(local_setup_path_);                                                           // 上次的半截文件先删掉
+
+    downloading_ = true;
+    installable_ = false;
+    download_status_ = QStringLiteral("正在下载 %1…").arg(latest_version_);
+    emit DownloadChanged();
+
+    download_process_ = new QProcess(this);
+    download_process_->setProgram(QStringLiteral("curl.exe"));
+    download_process_->setArguments(QStringList() << QStringLiteral("-L")                      // 跟随跳转
+                                                  << QStringLiteral("--fail")                   // 4xx/5xx 当失败
+                                                  << QStringLiteral("--silent")
+                                                  << QStringLiteral("--show-error")
+                                                  << QStringLiteral("-o") << local_setup_path_
+                                                  << download_url_);
+    QObject::connect(download_process_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                     this, [this](int exit_code, QProcess::ExitStatus status)
+    {
+        if (status != QProcess::NormalExit)
+        {
+            exit_code = -1;
+        }
+        OnDownloadFinished(exit_code);
+    });
+    download_process_->start();
+
+    // curl 的 --progress-bar 写 stderr 且带 \r，解析麻烦；直接轮询文件大小更稳
+    if (progress_timer_ == nullptr)
+    {
+        progress_timer_ = new QTimer(this);
+        progress_timer_->setInterval(300);
+        QObject::connect(progress_timer_, &QTimer::timeout, this, [this]()
+        {
+            emit DownloadChanged();
+        });
+    }
+    progress_timer_->start();
+}
+
+// 取消下载：杀掉 curl 并把半截文件删掉
+void UpdateChecker::CancelDownload()
+{
+    if (!downloading_)
+    {
+        return;
+    }
+
+    if (download_process_ != nullptr)
+    {
+        download_process_->kill();
+        download_process_->waitForFinished(1000);
+    }
+    if (progress_timer_ != nullptr)
+    {
+        progress_timer_->stop();
+    }
+
+    QFile::remove(local_setup_path_);
+    downloading_ = false;
+    installable_ = false;
+    download_status_ = QStringLiteral("已取消下载");
+    emit DownloadChanged();
+}
+
+// curl 结束后核对大小并算 sha256（45MB 算一遍约 200ms，丢后台线程免得卡界面）
+void UpdateChecker::OnDownloadFinished(int exit_code)
+{
+    if (progress_timer_ != nullptr)
+    {
+        progress_timer_->stop();
+    }
+    downloading_ = false;
+
+    if (exit_code != 0)
+    {
+        QFile::remove(local_setup_path_);
+        download_status_ = QStringLiteral("下载失败（curl 退出码 %1）").arg(exit_code);
+        emit DownloadChanged();
+        return;
+    }
+
+    const qint64 actual_size = QFileInfo(local_setup_path_).size();
+    if (download_size_ > 0 && actual_size != download_size_)
+    {
+        QFile::remove(local_setup_path_);
+        download_status_ = QStringLiteral("下载不完整（%1 / %2 字节）").arg(actual_size).arg(download_size_);
+        emit DownloadChanged();
+        return;
+    }
+
+    download_status_ = QStringLiteral("校验安装包…");
+    emit DownloadChanged();
+
+    const QString path = local_setup_path_;
+    const QString expect = download_sha256_;
+
+    // 校验放后台线程：大文件算哈希不能让界面卡住
+    qsc::base::TaskRunner::Instance().Post([this, path, expect]()
+    {
+        QFile file(path);
+        QString actual;
+        if (file.open(QIODevice::ReadOnly))
+        {
+            QCryptographicHash hash(QCryptographicHash::Sha256);
+            if (hash.addData(&file))
+            {
+                actual = QString::fromLatin1(hash.result().toHex());
+            }
+        }
+
+        QMetaObject::invokeMethod(this, [this, path, expect, actual]()
+        {
+            if (actual.isEmpty())
+            {
+                QFile::remove(path);
+                download_status_ = QStringLiteral("读不到下载的安装包");
+                emit DownloadChanged();
+                return;
+            }
+            if (actual.compare(expect, Qt::CaseInsensitive) != 0)
+            {
+                QFile::remove(path);
+                download_status_ = QStringLiteral("校验失败，已删除安装包");
+                emit DownloadChanged();
+                return;
+            }
+
+            installable_ = true;
+            download_status_ = QStringLiteral("下载完成，可以安装");
+            emit DownloadChanged();
+        }, Qt::QueuedConnection);
+    });
+}
+
+// 启动安装包（静默）然后退出自己，让安装程序能覆盖正在运行的文件
+void UpdateChecker::InstallAndRestart()
+{
+    if (!installable_ || local_setup_path_.isEmpty())
+    {
+        return;
+    }
+
+    // /SILENT 有进度界面但不问问题；/CLOSEAPPLICATIONS 让安装包主动关掉我们
+    const QStringList args{QStringLiteral("/SILENT"), QStringLiteral("/CLOSEAPPLICATIONS"),
+                           QStringLiteral("/NORESTART")};
+    if (!QProcess::startDetached(local_setup_path_, args))
+    {
+        download_status_ = QStringLiteral("启动安装程序失败，去下载页手动安装");
+        emit DownloadChanged();
+        return;
+    }
+
+    QCoreApplication::quit();
 }
 
 } // namespace qsc
