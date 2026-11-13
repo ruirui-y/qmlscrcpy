@@ -1,10 +1,10 @@
 {
-  "latest": "0.1.8",
-  "minimum": "0.1.0",
-  "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-  "notes": "自动更新已可用，发现新版本可一键下载安装",
-  "published_at": "2026-11-13",
-  "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.1.8/QmlScrcpy_Setup_0.1.8.exe",
-  "size": 47989196,
-  "sha256": "9e168a5e49d9792fe81062d36045bfd67990eee895c0c4ebb3ab74985c0c1d5e"
+    "latest":  "0.1.8",
+    "minimum":  "0.1.0",
+    "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
+    "notes":  "自动更新已可用，发现新版本可一键下载安装",
+    "published_at":  "2026-11-13",
+    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.1.8/QmlScrcpy_Setup_0.1.8.exe",
+    "size":  47985832,
+    "sha256":  "35fe12e56eaf89166555eb5a369d7b5f4d5db4f41f07511685f460ab1771d3ff"
 }
