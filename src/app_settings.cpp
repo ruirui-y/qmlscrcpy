@@ -3,7 +3,6 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QHash>
 #include "base/task_runner.h"
 
 #include <QSettings>
@@ -24,19 +23,6 @@ QString FilePathInConfigDir(const char *file_name)
     return ConfigDirPath() + QLatin1Char('/') + QString::fromLatin1(file_name);
 }
 
-// 把旧版本散落在 exe 根目录的 ini 搬到 config 下，搬过的不再重复搬
-void MigrateLegacyIni(const char *file_name)
-{
-    const QString legacy_path = QCoreApplication::applicationDirPath() + QLatin1Char('/')
-                                + QString::fromLatin1(file_name);
-    const QString target_path = FilePathInConfigDir(file_name);
-    if (QFile::exists(legacy_path) && !QFile::exists(target_path))
-    {
-        QDir().mkpath(ConfigDirPath());
-        QFile::rename(legacy_path, target_path);
-    }
-}
-
 // 用户配置：只读，绝不让 QSettings 改写，否则注释会被转义成 %23 之类
 QSettings &ConfigStore()
 {
@@ -50,6 +36,63 @@ QSettings &WindowStore()
     static QSettings settings(FilePathInConfigDir("window.ini"), QSettings::IniFormat);
     return settings;
 }
+
+// window.ini 的模板：所有键先摆好，-1 表示"还没记录过"
+// QSettings 只认分号注释，而且每次 sync 都会重写整个文件，所以这里不放注释
+const char *const kDefaultWindow = R"([ui]
+show_console=false
+boss_key=Ctrl+Alt+B
+
+[keys]
+back=Esc
+home=Home
+screenshot=Ctrl+Shift+S
+fullscreen=F11
+
+[transfer]
+upload_dir=/sdcard/Download/QmlScrcpy
+
+[video_wired]
+bitrate=8000000
+max_fps=0
+
+[video_wireless]
+bitrate=6000000
+max_fps=0
+
+[input]
+wheel_mode=scroll
+drag_pixels=60
+
+[device]
+last_serial=
+
+[control_window]
+x=-1
+y=-1
+w=-1
+h=-1
+
+[video_window]
+x=-1
+y=-1
+w=-1
+h=-1
+
+[video_pos]
+x=-1
+y=-1
+
+[video_window_landscape]
+x=-1
+y=-1
+w=-1
+h=-1
+
+[video_pos_landscape]
+x=-1
+y=-1
+)";
 
 // 默认配置模板，带注释；只在文件不存在时写一次
 const char *const kDefaultConfig = R"(# QmlScrcpy 配置，改完重启生效
@@ -87,30 +130,10 @@ max_fps=0)";
 
 AppSettings::AppSettings(QObject *parent) : QObject(parent)
 {
-    // 目录和迁移要在读写配置之前完成，否则 QSettings 会在根目录又建一份
+    // 两个 ini 都要在读写之前就位：config.ini 是用户配置，window.ini 是程序状态
     QDir().mkpath(ConfigDirPath());
-    MigrateLegacyIni("config.ini");
-    MigrateLegacyIni("window.ini");
-
     EnsureDefaultConfig();
-
-    // 老版本把画质覆盖值存在 [video] 里（不分有线无线），现在分档了，清掉免得和 [video_wired] 混着看
-    QSettings &window_store = WindowStore();
-
-    // 一次性迁移：横屏默认尺寸从"按帧比例"改成了 900x400。
-    // 老用户的 window.ini 里存着按旧算法算出来的大尺寸，光改代码看不到效果，所以这里清一次。
-    if (!window_store.contains(QStringLiteral("ui/landscape_default_v2")))
-    {
-        window_store.remove(QStringLiteral("video_window_landscape"));
-        window_store.remove(QStringLiteral("video_pos_landscape"));
-        window_store.setValue(QStringLiteral("ui/landscape_default_v2"), true);
-        window_store.sync();
-    }
-    if (window_store.contains(QStringLiteral("video/bit_rate")))
-    {
-        window_store.remove(QStringLiteral("video"));
-        window_store.sync();
-    }
+    EnsureDefaultWindow();
 }
 
 // config.ini 不存在时写一份带注释的模板
@@ -129,6 +152,24 @@ void AppSettings::EnsureDefaultConfig()
         return;
     }
     file.write(kDefaultConfig);
+    file.close();
+}
+
+// window.ini 不存在时写一份带注释的模板，和 config.ini 一样
+void AppSettings::EnsureDefaultWindow()
+{
+    if (QFile::exists(WindowPath()))
+    {
+        return;
+    }
+
+    QDir().mkpath(ConfigDirPath());
+    QFile file(WindowPath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        return;
+    }
+    file.write(kDefaultWindow);
     file.close();
 }
 
@@ -217,12 +258,7 @@ QString AppSettings::UploadDir() const
         return override_value;
     }
 
-    const QString configured = ConfigStore().value(QStringLiteral("transfer/upload_dir")).toString();
-    if (!configured.isEmpty())
-    {
-        return configured;
-    }
-    return QStringLiteral("/sdcard/Download/QmlScrcpy");
+    return ConfigStore().value(QStringLiteral("transfer/upload_dir")).toString();
 }
 
 // 记下界面里改的上传目录
@@ -232,29 +268,16 @@ void AppSettings::SetUploadDir(const QString &dir)
     store.setValue(QStringLiteral("transfer/upload_dir"), dir);
     store.sync();
 }
-// 窗口快捷键：界面里改过的（window.ini）优先，其次 config.ini，最后用内置默认
+// 窗口快捷键：window.ini 里为界面改过的值，config.ini 里可手改默认值；两处都空表示禁用
 QString AppSettings::Shortcut(const QString &name) const
 {
-    const QString override_value = WindowStore().value(QStringLiteral("keys/%1").arg(name)).toString();
-    if (!override_value.isEmpty())
+    const QString from_window = WindowStore().value(QStringLiteral("keys/%1").arg(name)).toString();
+    if (!from_window.isEmpty())
     {
-        return override_value;
+        return from_window;
     }
 
-    const QString configured = ConfigStore().value(QStringLiteral("keys/%1").arg(name)).toString();
-    if (!configured.isEmpty())
-    {
-        return configured;
-    }
-
-    // 内置默认：返回 Esc、回桌面 Home、截图 Ctrl+Shift+S、全屏 F11
-    static const QHash<QString, QString> kDefaults{
-        {QStringLiteral("back"), QStringLiteral("Esc")},
-        {QStringLiteral("home"), QStringLiteral("Home")},
-        {QStringLiteral("screenshot"), QStringLiteral("Ctrl+Shift+S")},
-        {QStringLiteral("fullscreen"), QStringLiteral("F11")},
-    };
-    return kDefaults.value(name);
+    return ConfigStore().value(QStringLiteral("keys/%1").arg(name)).toString();
 }
 
 // 记下界面里改的快捷键（空字符串表示禁用）
@@ -279,7 +302,7 @@ QString AppSettings::BossKeyText() const
     {
         return override_value;
     }
-    return ConfigStore().value(QStringLiteral("ui/boss_key"), QStringLiteral("Ctrl+Alt+B")).toString();
+    return ConfigStore().value(QStringLiteral("ui/boss_key")).toString();
 }
 
 // 记下界面里改的老板键
@@ -289,10 +312,11 @@ void AppSettings::SetBossKeyText(const QString &text)
     store.setValue(QStringLiteral("ui/boss_key"), text);
     store.sync();
 }
+
 // 控制台窗口要不要显示：默认不显示，只有用户在界面上打开过才显示
 bool AppSettings::ShowConsole() const
 {
-    return WindowStore().value(QStringLiteral("ui/show_console"), false).toBool();
+    return WindowStore().value(QStringLiteral("ui/show_console")).toBool();
 }
 
 // 记下用户的选择，下次启动照这个来
@@ -375,6 +399,7 @@ void AppSettings::SetVideoMaxFps(int max_fps, const QString &profile)
     store.setValue(QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), max_fps);
     store.sync();
 }
+
 // 删掉某个姿势的窗口尺寸记录：下次定尺寸时就回到默认值（横屏 900x400、竖屏按帧比例）
 void AppSettings::ResetVideoGeometry(const QString &key)
 {
@@ -382,6 +407,7 @@ void AppSettings::ResetVideoGeometry(const QString &key)
     store.remove(key);
     store.sync();
 }
+
 // 恢复默认配置：window.ini 清空、config.ini 删掉（下次启动会重新生成带注释的模板）
 bool AppSettings::ResetAllConfig()
 {
@@ -394,6 +420,7 @@ bool AppSettings::ResetAllConfig()
     EnsureDefaultConfig();
     return removed;
 }
+
 // 读窗口尺寸；没记录过返回空矩形
 QRect AppSettings::VideoGeometry(const QString &key) const
 {
@@ -464,6 +491,7 @@ void AppSettings::SaveVideoStateAsync(const QString &pos_key, int x, int y,
         store.sync();
     });
 }
+
 // 读窗口位置；没记录过返回 (-1,-1)
 QPoint AppSettings::VideoPosition(const QString &key) const
 {
