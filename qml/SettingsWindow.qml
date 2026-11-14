@@ -9,9 +9,9 @@ Window
 {
     id: settingsWindow
 
-    width: 520
+    width: 620
     height: 560
-    minimumWidth: 520
+    minimumWidth: 620
     minimumHeight: 520
     visible: false
     color: "#14161a"
@@ -23,35 +23,68 @@ Window
     // 登记给老板键：设置窗开着时按老板键也要一起藏起来
     Component.onCompleted: deviceController.RegisterWindow(settingsWindow)
 
+    // 首帧预热：窗口第一次真正显示时，DWM 会先给一帧白底，等 GL 出第一帧才变深色，
+    // 看起来像"标题栏白闪一下"。启动后先用透明窗口渲染一次，把这一帧提前消化掉。
+    property bool warmingUp: false
+
+    function warmUp()
+    {
+        if (visible)
+        {
+            return
+        }
+        warmingUp = true
+        flags = Qt.Window | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+        opacity = 0
+        visible = true
+        warmTimer.start()
+    }
+
+    Timer
+    {
+        interval: 700
+        running: true
+        repeat: false
+        onTriggered: settingsWindow.warmUp()
+    }
+
+    Timer
+    {
+        id: warmTimer
+        interval: 150
+        repeat: false
+        onTriggered:
+        {
+            settingsWindow.visible = false
+            settingsWindow.opacity = 1
+            settingsWindow.flags = Qt.Window | Qt.FramelessWindowHint
+            settingsWindow.warmingUp = false
+        }
+    }
+
     // 码率下拉：预设档位对应"流畅 / 标准 / 清晰 / 高清 / 超清 / 至臻"
     property int currentBitrateMbps: Math.round(deviceController.videoBitRate / 1000000)
+    property var bitrateValues: {
+        const presets = [4, 8, 12, 16, 20, 24]
+        // 配置文件里写的是非预设值（比如 6M）时，把它放到第一项
+        return presets.indexOf(currentBitrateMbps) < 0 ? [currentBitrateMbps].concat(presets) : presets
+    }
     property var bitrateOptions: {
-        const values = [4, 8, 12, 16, 20, 24]
         const names = [qsTr("流畅"), qsTr("标准"), qsTr("清晰"), qsTr("高清"), qsTr("超清"), qsTr("至臻")]
-        const items = []
-        for (let i = 0; i < values.length; ++i)
+        const presetLabels = [4, 8, 12, 16, 20, 24].map(function (mbps, i)
         {
-            items.push({ label: names[i] + "（" + values[i] + " Mbps）", mbps: values[i] })
-        }
-        // 配置文件里写的是非预设值（比如 6M）时，把它放到第一项显示
-        if (values.indexOf(currentBitrateMbps) < 0)
-        {
-            items.unshift({ label: qsTr("当前（%1 Mbps）").arg(currentBitrateMbps), mbps: currentBitrateMbps })
-        }
-        return items
+            return names[i] + "（" + mbps + " Mbps）"
+        })
+        return bitrateValues.length > presetLabels.length
+            ? [qsTr("当前（%1 Mbps）").arg(currentBitrateMbps)].concat(presetLabels)
+            : presetLabels
     }
 
     // 按 Mbps 找下拉里的位置
     function bitrateIndex(mbps)
     {
-        for (let i = 0; i < bitrateOptions.length; ++i)
-        {
-            if (bitrateOptions[i].mbps === mbps)
-            {
-                return i
-            }
-        }
-        return 0
+        const index = bitrateValues.indexOf(mbps)
+        return index >= 0 ? index : 0
     }
 
     // 每次打开设置窗，按当前实际码率重新选一次（应用并重连之后值会变）
@@ -264,14 +297,85 @@ Window
                 ComboBox
                 {
                     id: bitrateBox
-                    Layout.preferredWidth: 168
+                    Layout.preferredWidth: 190
                     Layout.preferredHeight: 28
                     font.pixelSize: 12
                     model: bitrateOptions
-                    textRole: "label"
 
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("码率越高越清晰；无线下太高会受带宽限制")
+
+                    // 自绘：默认样式是系统原生白底，和整套深色主题不搭
+                    background: Rectangle
+                    {
+                        radius: 6
+                        color: "#151920"
+                        border.width: 1
+                        border.color: bitrateBox.activeFocus ? "#3f8fdd" : "#2c323c"
+                    }
+
+                    contentItem: Text
+                    {
+                        leftPadding: 8
+                        text: bitrateBox.displayText
+                        color: "#d8dee9"
+                        font: bitrateBox.font
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+
+                    indicator: Text
+                    {
+                        x: bitrateBox.width - width - 8
+                        y: (bitrateBox.height - height) / 2
+                        text: "▾"
+                        color: "#7c8698"
+                        font.pixelSize: 12
+                    }
+
+                    delegate: ItemDelegate
+                    {
+                        width: bitrateBox.width
+                        height: 28
+                        highlighted: bitrateBox.highlightedIndex === index
+
+                        contentItem: Text
+                        {
+                            leftPadding: 8
+                            text: modelData
+                            color: highlighted ? "#ffffff" : "#cdd4de"
+                            font: bitrateBox.font
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle
+                        {
+                            color: highlighted ? "#2a3442" : "transparent"
+                        }
+                    }
+
+                    popup: Popup
+                    {
+                        width: bitrateBox.width
+                        implicitHeight: contentItem.implicitHeight + 2
+                        padding: 1
+
+                        background: Rectangle
+                        {
+                            radius: 6
+                            color: "#1a1f27"
+                            border.width: 1
+                            border.color: "#2c323c"
+                        }
+
+                        contentItem: ListView
+                        {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: bitrateBox.popup.visible ? bitrateBox.delegateModel : null
+                            currentIndex: bitrateBox.highlightedIndex
+                        }
+                    }
 
                     Component.onCompleted:
                     {
@@ -280,7 +384,7 @@ Window
 
                     onActivated:
                     {
-                        settingsWindow.currentBitrateMbps = bitrateOptions[index].mbps
+                        settingsWindow.currentBitrateMbps = settingsWindow.bitrateValues[index]
                     }
                 }
 
