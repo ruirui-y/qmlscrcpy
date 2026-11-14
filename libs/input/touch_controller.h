@@ -27,6 +27,8 @@ public:
     WheelMode Mode() const { return wheel_mode_; }
 
     void SetDragPixels(int pixels) { drag_pixels_ = pixels > 0 ? pixels : 60; }                 // 拖动模式一格滚轮拖多远
+    void SetDragScale(double scale) { drag_scale_ = scale > 0.0 ? scale : 1.0; }                // 左键拖拽倍率：鼠标拖 1 像素手指走多少像素
+    double DragScale() const { return drag_scale_; }
     int DragPixels() const { return drag_pixels_; }
 
     QByteArray Press(const QPointF &pos);                                                       // 左键按下
@@ -36,8 +38,15 @@ public:
     // 滚轮：正数表示往上滚；拖动模式会返回三条消息，所以用容器
     QVector<QByteArray> Scroll(const QPointF &pos, int notches);
 
+    // 双指捏合：begin 两指按下，step 只移动，end 抬起；radius 单位是帧坐标像素
+    QVector<QByteArray> PinchBegin(const QPointF &center, int radius);
+    QVector<QByteArray> PinchStep(const QPointF &center, int radius);
+    QVector<QByteArray> PinchEnd(const QPointF &center, int radius);
+    QPoint ClampFrame(int x, int y) const;                                                      // 把帧坐标夹进画面
+
 private:
     QByteArray MakeTouch(quint8 action, const QPointF &pos);                                    // 三种动作共用的一套字段填充
+    QByteArray MakeTouchAt(quint64 pointer_id, quint8 action, const QPoint &frame_pos);         // 坐标已换算好，倍率位移和捏合都用它
     QVector<QByteArray> ScrollByDrag(const QPointF &pos, int notches);                          // 模拟一次短距离滑动
     QByteArray MakeScroll(const QPointF &pos, int notches);                                     // 发原生滚动事件
 
@@ -45,6 +54,8 @@ private:
     bool pressed_ = false;                                                                      // 当前是否按着左键，决定 buttons_ 报什么
     WheelMode wheel_mode_ = WheelMode::Scroll;                                                  // 默认发滚动事件，和 scrcpy 客户端一致
     int drag_pixels_ = 60;                                                                      // 拖动模式下一格滚轮手指移动多少像素
+    double drag_scale_ = 1.0;                                                                   // 左键拖拽倍率
+    QPoint press_frame_pos_;                                                                    // 按下时手指的帧坐标，位移按它算，避免误差累积
 };
 
 } // namespace qsc::input

@@ -26,6 +26,8 @@ VideoController::VideoController(ControlWriter *writer, QObject *parent)
     AppSettings settings;
     wheel_mode_ = settings.WheelMode();
     drag_pixels_ = settings.DragPixels();
+    drag_scale_ = settings.DragScale();
+    pinch_modifier_ = settings.PinchModifier();
 }
 
 QString VideoController::WheelMode() const
@@ -58,6 +60,9 @@ void VideoController::SetSurface(QObject *surface)
                      &VideoController::OnSurfaceControlMessage);
     surface_->SetWheelMode(wheel_mode_);
     surface_->SetDragPixels(drag_pixels_);
+    surface_->SetDragScale(drag_scale_);
+    surface_->SetPinchModifier(pinch_modifier_);
+    QObject::connect(surface_, &VideoItem::SigPinchingChanged, this, &VideoController::SigPinchingChanged);
 }
 
 // 画布翻好的输入消息，转手交给会话层写出去
@@ -191,6 +196,64 @@ void VideoController::AdjustDragPixels(int delta)
     if (writer_ != nullptr)
     {
         writer_->ReportStatus(QStringLiteral("滑动像素：%1").arg(drag_pixels_));
+    }
+}
+// 左键拖拽倍率：1.0 = 原样，2.0 = 鼠标走 1 像素手指走 2 像素
+double VideoController::DragScale() const
+{
+    return drag_scale_;
+}
+
+// 拖拽倍率加减：delta 以 0.1 为单位，范围夹在 1.0 到 3.0
+void VideoController::AdjustDragScale(int delta)
+{
+    const double adjusted = qBound(1.0, drag_scale_ + delta / 10.0, 3.0);
+    if (qFuzzyCompare(adjusted, drag_scale_))
+    {
+        return;
+    }
+
+    drag_scale_ = adjusted;
+    if (surface_ != nullptr)
+    {
+        surface_->SetDragScale(drag_scale_);
+    }
+    AppSettings().SetDragScale(drag_scale_);
+    emit SigDragScaleChanged();
+    if (writer_ != nullptr)
+    {
+        writer_->ReportStatus(QStringLiteral("拖拽倍率：%1x").arg(drag_scale_, 0, 'f', 1));
+    }
+}
+
+// 捏合修饰键：Ctrl / Alt / Shift / Ctrl+Alt / 关，循环切换
+QString VideoController::PinchModifier() const
+{
+    return pinch_modifier_;
+}
+// 两指是否按着：界面用它显示当前捏合状态
+bool VideoController::Pinching() const
+{
+    return surface_ != nullptr && surface_->IsPinching();
+}
+
+// 点一下换下一个修饰键，立即生效并记住
+void VideoController::CyclePinchModifier()
+{
+    static const QStringList kOrder = { QStringLiteral("ctrl"), QStringLiteral("alt"), QStringLiteral("shift"),
+                                        QStringLiteral("ctrl_alt"), QStringLiteral("none") };
+    const int index = kOrder.indexOf(pinch_modifier_);
+    pinch_modifier_ = kOrder.at((index + 1) % kOrder.size());
+
+    if (surface_ != nullptr)
+    {
+        surface_->SetPinchModifier(pinch_modifier_);
+    }
+    AppSettings().SetPinchModifier(pinch_modifier_);
+    emit SigPinchModifierChanged();
+    if (writer_ != nullptr)
+    {
+        writer_->ReportStatus(QStringLiteral("捏合缩放：%1").arg(pinch_modifier_));
     }
 }
 

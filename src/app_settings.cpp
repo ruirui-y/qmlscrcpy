@@ -63,6 +63,8 @@ max_fps=0
 [input]
 wheel_mode=scroll
 drag_pixels=60
+drag_scale=1.0
+pinch_modifier=ctrl
 
 [device]
 last_serial=
@@ -107,6 +109,8 @@ keep_days=15
 wheel_mode=scroll
 # 滑动模式下一格滚轮手指移动多少像素（太小会被当点击，太大一下翻过头）
 drag_pixels=60
+drag_scale=1.0
+pinch_modifier=ctrl
 # 电脑剪贴板一变就自动推到设备（会同步敏感内容，默认关）
 clipboard_autosync=false
 
@@ -237,6 +241,31 @@ void AppSettings::SetDragPixels(int pixels)
 {
     QSettings &store = WindowStore();
     store.setValue(QStringLiteral("input/drag_pixels"), pixels);
+    store.sync();
+}
+// 左键拖拽倍率：窗口里调过的优先，没有就用 1.0（保持 1:1 手感）
+double AppSettings::DragScale() const
+{
+    return WindowStore().value(QStringLiteral("input/drag_scale"), 1.0).toDouble();
+}
+
+// 记下拖拽倍率，改完立即生效
+void AppSettings::SetDragScale(double scale)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("input/drag_scale"), scale);
+    store.sync();
+}
+// 捏合修饰键：Ctrl 默认；填 none 关掉这个功能
+QString AppSettings::PinchModifier() const
+{
+    return WindowStore().value(QStringLiteral("input/pinch_modifier"), QStringLiteral("ctrl")).toString();
+}
+// 记下捏合修饰键，立即生效
+void AppSettings::SetPinchModifier(const QString &modifier)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("input/pinch_modifier"), modifier);
     store.sync();
 }
 

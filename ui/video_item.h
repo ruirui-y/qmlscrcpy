@@ -67,6 +67,9 @@ public:
     void SetKeepAspect(bool keep_aspect);
     void SetWheelMode(const QString &mode);                                                     // "scroll" 发滚动事件，"drag" 模拟滑动
     void SetDragPixels(int pixels);                                                             // 滑动模式下一格滚轮拖多少像素
+    void SetDragScale(double scale);                                                            // 左键拖拽倍率，1.0 = 原样
+    void SetPinchModifier(const QString &modifier);                                             // 捏合缩放的修饰键：ctrl / alt / shift / ctrl_alt / none
+    bool IsPinching() const { return pinch_active_; }                                           // 现在是不是两指按着
 
     // 视频线程调：把最新一帧放进来（引用计数，不拷像素），旧的直接丢掉
     void Present(const qsc::stream::Frame &frame);
@@ -79,18 +82,18 @@ public:
     qint64 AdvanceSyncPass();                                                                   // 记下本轮起点，返回上一轮起点（算两轮间隔用）
     qint64 SyncStartUs() const;                                                                 // 本轮 synchronize 的起始时刻
     void MarkRenderEnd(qint64 start_us, const FrameTracePtr &trace);                            // render() 画完时回报，算绘制耗时
-    void MarkSwapped();                                                                          // 这一帧真正提交给系统了
+    void MarkSwapped();                                                                         // 这一帧真正提交给系统了
     qint64 ClockUs() const { return clock_.nsecsElapsed() / 1000; }                             // 当前单调时刻（微秒），渲染线程算延迟用
-    void SetPassArriveUs(qint64 arrive_us) { pass_arrive_us_.storeRelaxed(arrive_us); }            // 渲染线程：记下本轮取走那一帧的到达时刻
-    void SetPassSyncUs(qint64 sync_us) { pass_sync_us_.storeRelaxed(sync_us); }                    // 渲染线程：记下本轮 synchronize 的开始时刻
-    qint64 UpdateRequestUs() const { return update_request_us_.loadRelaxed(); }                  // GUI 处理 UpdateRequest 的时刻
-    qint64 BeforeSyncUs() const { return before_sync_us_.loadRelaxed(); }                        // Qt 发出 beforeSynchronizing 的时刻
+    void SetPassArriveUs(qint64 arrive_us) { pass_arrive_us_.storeRelaxed(arrive_us); }         // 渲染线程：记下本轮取走那一帧的到达时刻
+    void SetPassSyncUs(qint64 sync_us) { pass_sync_us_.storeRelaxed(sync_us); }                 // 渲染线程：记下本轮 synchronize 的开始时刻
+    qint64 BeforeSyncUs() const { return before_sync_us_.loadRelaxed(); }                       // Qt 发出 beforeSynchronizing 的时刻
 
 signals:
     void SigFrameSizeChanged();
     void SigKeepAspectChanged();
     void SigFpsChanged();
     void SigControlMessageReady(const QByteArray &message);                                     // 鼠标键盘翻好的控制消息，交给控制器发出去
+    void SigPinchingChanged();                                                                  // 捏合开始或结束，界面用它显示双手状态
 
 protected:
     void geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry) override;
@@ -101,10 +104,12 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
-    bool eventFilter(QObject *watched, QEvent *event) override;                                 // 抓 GUI 线程处理 UpdateRequest 的时刻
 
 private:
-    void ReportSecond();                                                                        // GUI 线程：每秒打一行统计
+    void ReportSecond();
+    bool PinchModifierHeld(Qt::KeyboardModifiers modifiers) const;                              // 当前修饰键是不是捏合键
+    void PinchBy(int notches, const QPointF &pos);                                              // 按一格滚轮做一次捏合
+    void EndPinch();                                                                             // 抬起两指，结束捏合
     void NotifyFrameSize();                                                                     // GUI 线程：帧尺寸变了才发信号
     void SyncMapper();                                                                          // 把画布尺寸、帧尺寸、缩放模式同步给坐标换算器
     void EmitControlMessage(const QByteArray &message);                                         // 空消息直接丢，非空才发信号
@@ -115,7 +120,7 @@ private:
 
     mutable QMutex mutex_;                                                                      // 视频线程写 pending_，渲染线程取走
     qsc::stream::Frame pending_;                                                                // 最新一帧，等渲染线程取走
-    qint64 pending_arrive_us_ = 0;                                                             // 待渲染帧的到达时刻
+    qint64 pending_arrive_us_ = 0;                                                              // 待渲染帧的到达时刻
     bool has_pending_ = false;
     FrameTracePtr pending_trace_;                                                               // 待渲染帧的事件记录
     FrameTracePtr swapped_trace_;                                                               // 刚提交完、等着打印的那一帧
@@ -127,18 +132,18 @@ private:
     QAtomicInt frames_arrived_;                                                                 // 视频线程每收一帧 +1
     QAtomicInt frames_swapped_{0};                                                              // 真正提交给系统的帧数
     QAtomicInt frames_dropped_{0};                                                              // 还没画就被新帧顶掉的帧数
-    QAtomicInt lat_lt1_{0};                                                                    // 上屏延迟 < 1ms 的帧数
-    QAtomicInt lat_1_2_{0};                                                                    // 1~2ms
-    QAtomicInt lat_2_3_{0};                                                                    // 2~3ms
-    QAtomicInt lat_gt3_{0};                                                                    // > 3ms
-    QAtomicInt gap_lt85_{0};                                                                   // 到达间隔 < 8.5ms（约 120fps 以上）
-    QAtomicInt gap_85_17_{0};                                                                  // 8.5~17ms（约 60fps）
-    QAtomicInt gap_17_34_{0};                                                                  // 17~34ms（约 30fps）
-    QAtomicInt gap_gt34_{0};                                                                   // > 34ms（低于 30fps）
-    QAtomicInt swap_lt85_{0};                                                                  // 上屏间隔 < 8.5ms
-    QAtomicInt swap_85_17_{0};                                                                 // 8.5~17ms
-    QAtomicInt swap_17_34_{0};                                                                 // 17~34ms
-    QAtomicInt swap_gt34_{0};                                                                  // > 34ms
+    QAtomicInt lat_lt1_{0};                                                                     // 上屏延迟 < 1ms 的帧数
+    QAtomicInt lat_1_2_{0};                                                                     // 1~2ms
+    QAtomicInt lat_2_3_{0};                                                                     // 2~3ms
+    QAtomicInt lat_gt3_{0};                                                                     // > 3ms
+    QAtomicInt gap_lt85_{0};                                                                    // 到达间隔 < 8.5ms（约 120fps 以上）
+    QAtomicInt gap_85_17_{0};                                                                   // 8.5~17ms（约 60fps）
+    QAtomicInt gap_17_34_{0};                                                                   // 17~34ms（约 30fps）
+    QAtomicInt gap_gt34_{0};                                                                    // > 34ms（低于 30fps）
+    QAtomicInt swap_lt85_{0};                                                                   // 上屏间隔 < 8.5ms
+    QAtomicInt swap_85_17_{0};                                                                  // 8.5~17ms
+    QAtomicInt swap_17_34_{0};                                                                  // 17~34ms
+    QAtomicInt swap_gt34_{0};                                                                   // > 34ms
     qint64 last_swap_us_ = 0;                                                                   // 上一帧上屏（frameSwapped）的时刻
     QAtomicInteger<qint64> lat_max_us_{0};                                                      // 这一秒最大上屏延迟
     QAtomicInteger<qint64> pass_arrive_us_{0};                                                  // 本轮取走那一帧的到达时刻
@@ -150,8 +155,12 @@ private:
     QAtomicInteger<qint64> sync_start_us_{0};                                                   // 本轮 synchronize 的开始时刻
     QAtomicInteger<qint64> last_present_us_{0};                                                 // 上一帧到达（Present 入口）的时刻
     bool swap_hooked_ = false;                                                                  // frameSwapped 只接一次
-    bool filter_hooked_ = false;                                                                // 事件过滤器只装一次
-    QAtomicInteger<qint64> update_request_us_{0};                                               // GUI 线程处理 UpdateRequest 的时刻
     QAtomicInteger<qint64> before_sync_us_{0};                                                  // Qt 发出 beforeSynchronizing 的时刻（渲染线程）
-    QTimer *fps_timer_ = nullptr;                                                               // 每秒触发一次，负责结算帧率
+    QTimer *fps_timer_ = nullptr;                                                               // 每秒触发一次，负责结算统计
+    QTimer *pinch_watch_timer_ = nullptr;                                                        // 100ms 轮询修饰键，兜住松手时窗口没焦点
+    QString pinch_modifier_ = QStringLiteral("ctrl");                                           // 当前捏合修饰键
+    bool pinch_active_ = false;                                                                 // 两根手指是否按着
+    QPointF pinch_center_;                                                                      // 捏合中心（画布坐标）
+    int pinch_radius_ = 40;                                                                     // 两指间距的一半，单位帧像素，跨手势保留
+    qint64 pinch_last_us_ = 0;                                                                  // 上一次捏合的时刻，用来判断要不要重置半径
 };

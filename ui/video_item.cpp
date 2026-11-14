@@ -4,6 +4,7 @@
 
 #include <QDebug>
 #include <QGuiApplication>
+
 #include <QThread>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -15,6 +16,7 @@
 #include <QOpenGLShaderProgram>
 #include <QTimer>
 #include <QQuickWindow>
+#include <windows.h>
 
 #include "base/log.h"
 
@@ -24,6 +26,29 @@ using qsc::stream::Frame;
 
 namespace
 {
+
+// 直接问系统修饰键是否按下：Qt 的 keyboardModifiers() 靠事件更新，没新事件时会读到旧值
+bool ModifierDownNow(const QString &modifier)
+{
+    const auto down = [](int vk) { return (::GetAsyncKeyState(vk) & 0x8000) != 0; };
+    if (modifier == QStringLiteral("none"))
+    {
+        return false;
+    }
+    if (modifier == QStringLiteral("alt"))
+    {
+        return down(VK_MENU);
+    }
+    if (modifier == QStringLiteral("shift"))
+    {
+        return down(VK_SHIFT);
+    }
+    if (modifier == QStringLiteral("ctrl_alt"))
+    {
+        return down(VK_CONTROL) && down(VK_MENU);
+    }
+    return down(VK_CONTROL);
+}
 
 // 一帧的完整事件记录：只在 Debug 编进来，发布版里连这段代码都不存在
 void PrintTrace(const FrameTracePtr& trace, bool swapped, qint64 alive_us)
@@ -382,6 +407,18 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
     fps_timer_->setInterval(1000);
     QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::ReportSecond);
     fps_timer_->start();
+
+    // 松开修饰键时要抬两指，但窗口没焦点时收不到 keyRelease，所以每 250ms 问一次键盘状态兜底
+    pinch_watch_timer_ = new QTimer(this);
+    pinch_watch_timer_->setInterval(250);
+    QObject::connect(pinch_watch_timer_, &QTimer::timeout, this, [this]()
+    {
+        if (pinch_active_ && !ModifierDownNow(pinch_modifier_))
+        {
+            EndPinch();
+        }
+    });
+    pinch_watch_timer_->start();
 }
 
 QQuickFramebufferObject::Renderer *VideoItem::createRenderer() const
@@ -429,6 +466,12 @@ void VideoItem::SetWheelMode(const QString &mode)
 void VideoItem::SetDragPixels(int pixels)
 {
     touch_.SetDragPixels(pixels);
+}
+
+// 左键拖拽倍率：鼠标走 1 像素，设备上的手指走 scale 像素
+void VideoItem::SetDragScale(double scale)
+{
+    touch_.SetDragScale(scale);
 }
 
 // 视频线程调：存下最新一帧，等渲染线程来取
@@ -544,25 +587,9 @@ void VideoItem::Present(const Frame &frame)
             swap_hooked_ = true;
         }
 
-        // 抓 GUI 线程真正处理 UpdateRequest 的时刻：那 5ms 到底在 Qt 内部哪一段就看这个
-        if (!filter_hooked_ && window() != nullptr)
-        {
-            window()->installEventFilter(this);
-            filter_hooked_ = true;
-        }
     }, Qt::QueuedConnection);
 }
 
-// GUI 线程处理窗口的 UpdateRequest 时记一笔，渲染线程用它算"事件到渲染"那一段
-bool VideoItem::eventFilter(QObject *watched, QEvent *event)
-{
-    if (event->type() == QEvent::UpdateRequest)
-    {
-        update_request_us_.storeRelaxed(clock_.nsecsElapsed() / 1000);
-
-    }
-    return QQuickFramebufferObject::eventFilter(watched, event);
-}
 
 // 渲染线程调：取走最新一帧（连它的到达时刻和事件记录），没有就返回无效帧
 Frame VideoItem::TakePendingFrame(FrameTracePtr *trace_out, qint64 *arrive_us_out)
@@ -910,7 +937,26 @@ void VideoItem::wheelEvent(QWheelEvent *event)
     }
 
     SyncMapper();
+
+    // 按住修饰键滚轮 = 双指捏合：上滚放大、下滚缩小，中心跟着鼠标
+    if (PinchModifierHeld(event->modifiers()))
+    {
+        PinchBy(notches, event->position());
+        event->accept();
+        return;
+    }
     // 拖动模式一次会出三条消息，逐条发
+
+    // 没按修饰键就滚：先把两指抬起，否则设备会把滚动当成继续缩放
+    if (pinch_active_)
+    {
+        const QVector<QByteArray> ending = touch_.PinchEnd(pinch_center_, pinch_radius_);
+        for (const QByteArray &message : ending)
+        {
+            EmitControlMessage(message);
+        }
+        pinch_active_ = false;
+    }
     const QVector<QByteArray> messages = touch_.Scroll(event->position(), notches);
     for (const QByteArray &message : messages)
     {
@@ -935,6 +981,12 @@ void VideoItem::keyPressEvent(QKeyEvent *event)
 // 按键抬起：同时清掉这个键的重复计数
 void VideoItem::keyReleaseEvent(QKeyEvent *event)
 {
+    // 松开后捏合键已经不在按下状态就抬两指；其它按键的松开不影响捏合
+    if (pinch_active_ && !ModifierDownNow(pinch_modifier_))
+    {
+        EndPinch();
+    }
+
     const QByteArray message = keys_.Release(event->key(), event->modifiers());
     if (message.isEmpty())
     {
@@ -943,4 +995,88 @@ void VideoItem::keyReleaseEvent(QKeyEvent *event)
     }
     EmitControlMessage(message);
     event->accept();
+}
+
+// 当前按下的修饰键是不是配置里那个捏合键
+bool VideoItem::PinchModifierHeld(Qt::KeyboardModifiers modifiers) const
+{
+    if (pinch_modifier_ == QStringLiteral("none"))
+    {
+        return false;
+    }
+    if (pinch_modifier_ == QStringLiteral("alt"))
+    {
+        return modifiers.testFlag(Qt::AltModifier);
+    }
+    if (pinch_modifier_ == QStringLiteral("shift"))
+    {
+        return modifiers.testFlag(Qt::ShiftModifier);
+    }
+    if (pinch_modifier_ == QStringLiteral("ctrl_alt"))
+    {
+        return modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::AltModifier);
+    }
+    return modifiers.testFlag(Qt::ControlModifier);
+}
+
+// 一格滚轮把两指间距放大或缩小 12%，第一次滚先把两指按下去
+void VideoItem::PinchBy(int notches, const QPointF &pos)
+{
+    pinch_center_ = pos;
+
+    // 半径上限是画面短边的 45%，再大会把第二根手指顶出屏幕
+    const QSize frame = FrameSize();
+    const int limit = qMax(20, qMin(frame.width(), frame.height()) * 50 / 100);
+
+    if (!pinch_active_)
+    {
+        // 半径跨手势保留：滚得慢时每格都会新开一次手势，若每次重置回 40，
+        // 上一格放大的效果就丢了，看起来像"每一格都在放大"
+        const qint64 now_us = clock_.nsecsElapsed() / 1000;
+        if (pinch_last_us_ == 0 || (now_us - pinch_last_us_) > 2000000)
+        {
+            pinch_radius_ = 40;
+        }
+        pinch_last_us_ = now_us;
+        pinch_active_ = true;
+        emit SigPinchingChanged();
+        const QVector<QByteArray> messages = touch_.PinchBegin(pinch_center_, pinch_radius_);
+        for (const QByteArray &message : messages)
+        {
+            EmitControlMessage(message);
+        }
+    }
+
+    // 一格 15%：12% 感觉滚几下就没变化了
+    const double scaled = static_cast<double>(pinch_radius_) * std::pow(1.15, notches);
+    pinch_radius_ = qBound(20, static_cast<int>(scaled), limit);
+
+    const QVector<QByteArray> messages = touch_.PinchStep(pinch_center_, pinch_radius_);
+    for (const QByteArray &message : messages)
+    {
+        EmitControlMessage(message);
+    }
+}
+
+// 捏合修饰键：ctrl / alt / shift / ctrl_alt / none
+void VideoItem::SetPinchModifier(const QString &modifier)
+{
+    pinch_modifier_ = modifier.trimmed().toLower();
+}
+
+// 抬起两指：修饰键松开时调用
+void VideoItem::EndPinch()
+{
+    if (!pinch_active_)
+    {
+        return;
+    }
+
+    const QVector<QByteArray> messages = touch_.PinchEnd(pinch_center_, pinch_radius_);
+    for (const QByteArray &message : messages)
+    {
+        EmitControlMessage(message);
+    }
+    pinch_active_ = false;
+    emit SigPinchingChanged();
 }

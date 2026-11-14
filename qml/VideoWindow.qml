@@ -38,6 +38,24 @@ Window
     flags: Qt.Window | Qt.FramelessWindowHint | (pinned ? Qt.WindowStaysOnTopHint : Qt.NoHint)
 
     // 横屏和竖屏各记一套几何和位置
+    // 修饰键缩写：工具栏只有 66px，Shift 这种全称会被裁掉，完整含义放在悬停提示里
+    function pinchLabel(modifier)
+    {
+        if (modifier === "alt")
+        {
+            return "A"
+        }
+        if (modifier === "shift")
+        {
+            return "S"
+        }
+        if (modifier === "ctrl_alt")
+        {
+            return "C+A"
+        }
+        return "C"
+    }
+
     function geometryKey()
     {
         return landscape ? "video_window_landscape" : "video_window"
@@ -498,11 +516,50 @@ Window
                         }
                     }
 
+                    // 左键拖拽倍率：调 0.1 一档，最大 3.0（和滚轮无关）
+                    Row
+                    {
+                        width: parent.width
+                        spacing: 4
+
+                        ToolButton
+                        {
+                            width: (parent.width - parent.spacing) / 2
+                            label: qsTr("−")
+                            tip: qsTr("拖拽倍率 -0.1")
+                            onClicked: videoController.AdjustDragScale(-1)
+                        }
+
+                        ToolButton
+                        {
+                            width: (parent.width - parent.spacing) / 2
+                            label: qsTr("+")
+                            tip: qsTr("拖拽倍率 +0.1")
+                            onClicked: videoController.AdjustDragScale(1)
+                        }
+                    }
+
+                    Text
+                    {
+                        width: parent.width
+                        height: 20
+                        text: qsTr("拖拽 %1x").arg(videoController.dragScale.toFixed(1))
+                        color: videoController.dragScale > 1.0 ? "#5aa9ff" : "#7c8698"
+                        font.pixelSize: 11
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    // 捏合缩放：修饰键 + 滚轮，点一下换下一个修饰键；按着时后面多个圆点
                     ToolButton
                     {
-                        label: qsTr("音量 +")
-                        tip: qsTr("设备音量加一档")
-                        onClicked: videoController.SendVolumeUp()
+                        label: videoController.pinchModifier === "none"
+                            ? qsTr("捏合 关")
+                            : qsTr("捏合 %1%2").arg(pinchLabel(videoController.pinchModifier))
+                                .arg(videoController.pinching ? " ●" : "")
+                        active: videoController.pinching || videoController.pinchModifier !== "none"
+                        tip: qsTr("按住 %1 滚轮 = 双指放大/缩小，松开结束").arg(pinchLabel(videoController.pinchModifier))
+                        onClicked: videoController.CyclePinchModifier()
                     }
 
                     ToolButton

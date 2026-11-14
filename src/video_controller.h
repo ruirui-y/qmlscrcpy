@@ -16,18 +16,26 @@ class VideoController : public QObject
     Q_OBJECT
     Q_PROPERTY(QString wheelMode READ WheelMode NOTIFY SigWheelModeChanged)
     Q_PROPERTY(int dragPixels READ DragPixels NOTIFY SigDragPixelsChanged)
+    Q_PROPERTY(double dragScale READ DragScale NOTIFY SigDragScaleChanged)
+    Q_PROPERTY(QString pinchModifier READ PinchModifier NOTIFY SigPinchModifierChanged)          // 捏合修饰键
+    Q_PROPERTY(bool pinching READ Pinching NOTIFY SigPinchingChanged)                           // 现在是否两指按着
 
 public:
     explicit VideoController(ControlWriter *writer, QObject *parent = nullptr);
 
     QString WheelMode() const;                                                                  // "scroll" 或 "drag"
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮拖多少像素
+    double DragScale() const;                                                                   // 左键拖拽倍率
+    QString PinchModifier() const;                                                              // 捏合修饰键
+    bool Pinching() const;                                                                      // 两指是否按着
 
     VideoItem *Surface() const;                                                                 // 画布指针，DeviceController 接帧信号时要用
 
     Q_INVOKABLE void SetSurface(QObject *surface);                                              // QML 把 VideoSurface 传进来
     Q_INVOKABLE void SetWheelMode(const QString &mode);                                         // 切换滚轮发法，立即生效并记住
     Q_INVOKABLE void AdjustDragPixels(int delta);                                               // 滑动像素加减，立即生效并记住
+    Q_INVOKABLE void AdjustDragScale(int delta);                                                // 拖拽倍率加减（delta 以 0.1 为单位）
+    Q_INVOKABLE void CyclePinchModifier();                                                      // 捏合修饰键：Ctrl → Alt → Shift → Ctrl+Alt → 关
 
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
     Q_INVOKABLE void SendHome();                                                                // 回桌面（KEYCODE_HOME）
@@ -47,6 +55,9 @@ public:
 signals:
     void SigWheelModeChanged();
     void SigDragPixelsChanged();
+    void SigDragScaleChanged();
+    void SigPinchModifierChanged();
+    void SigPinchingChanged();                                                                  // 捏合状态变了                                                             // 捏合修饰键变了
 
 private:
     void OnSurfaceControlMessage(const QByteArray &message);                                    // 画布翻好的输入消息，转手写进 socket
@@ -56,5 +67,7 @@ private:
     VideoItem *surface_ = nullptr;                                                              // QML 那条视频画布，由 QML 注入
     QString wheel_mode_;                                                                        // 滚轮发法，构造时从配置读进来
     int drag_pixels_ = 60;                                                                      // 滑动模式下一格滚轮拖多少像素
+    double drag_scale_ = 1.0;                                                                   // 左键拖拽倍率
+    QString pinch_modifier_ = QStringLiteral("ctrl");                                           // 捏合修饰键
     quint64 clipboard_sequence_ = 0;                                                            // SetClipboard 的序号，设备 Ack 会带回
 };

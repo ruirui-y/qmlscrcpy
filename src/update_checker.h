@@ -60,7 +60,6 @@ private:
     void AttemptWithCurl(const QString &url);                                                   // 没 OpenSSL 时的兜底
     bool ApplyPayload(const QByteArray &body);                                                  // 成功返回 true
     void OnDownloadFinished(int exit_code);
-    void VerifyAndAnnounce();                                                                   // 校验 sha256，通过才允许点击安装
 
     QString current_version_;                                                                   // 编译期写入的版本，例如 0.1.5
     QString latest_version_;
