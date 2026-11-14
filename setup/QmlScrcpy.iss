@@ -1,4 +1,4 @@
-﻿; ============================================================
+; ============================================================
 ; QmlScrcpy 安装包脚本（Inno Setup 6）
 ; ------------------------------------------------------------
 ; 编译方式二选一：
@@ -17,7 +17,7 @@
 #define MyAppName "QmlScrcpy"
 #define MyAppPublisher "QmlScrcpy"
 #define MyAppExeName "QmlScrcpy.exe"
-#define MyAppVersion "0.1.8"
+#define MyAppVersion "0.1.9"
 #define MyAppId "6f1e2c40-5b0a-4a71-9c2e-3d8a51b7c9f4"
 #define StageDir "stage\QmlScrcpy"
 #define OutputDir "Output"
