@@ -330,6 +330,9 @@ void DeviceController::ApplyVideoSettings(int bit_rate, int max_fps)
     settings.SetVideoMaxFps(max_fps, video_profile_);
     emit SigVideoSettingsChanged();
 
+    qInfo() << "[video] 应用画质：码率" << (bit_rate / 1000000.0) << "Mbps，帧率" << max_fps << "档位"
+            << video_profile_ << (session_ == nullptr ? "（未连接，仅保存）" : "（断开重连）");
+
     // 没连设备就只存配置，下次连接自然生效
     if (session_ == nullptr || reader_ == nullptr)
     {
@@ -653,6 +656,9 @@ void DeviceController::Connect(const QString &serial)
     params.bit_rate_ = settings.VideoBitRate(video_profile_);
     params.max_fps_ = settings.VideoMaxFps(video_profile_);                                     // 0 = 不限，无线嫌卡就填 60
     emit SigVideoSettingsChanged();
+
+    qInfo() << "[video] 本次连接画质：码率" << (params.bit_rate_ / 1000000.0) << "Mbps，帧率" << params.max_fps_
+            << "档位" << video_profile_ << "串号" << params.serial_;
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下（建链是阻塞的）

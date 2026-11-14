@@ -53,11 +53,11 @@ fullscreen=F11
 upload_dir=/sdcard/Download/QmlScrcpy
 
 [video_wired]
-bitrate=8000000
+bit_rate=8000000
 max_fps=0
 
 [video_wireless]
-bitrate=6000000
+bit_rate=6000000
 max_fps=0
 
 [input]
@@ -363,6 +363,7 @@ int AppSettings::VideoBitRate(const QString &profile) const
     {
         return override_value;
     }
+
 
     // config.ini 里没写 [video_wireless] 时退回到 [video]
     const int configured = ConfigStore().value(key, -1).toInt();

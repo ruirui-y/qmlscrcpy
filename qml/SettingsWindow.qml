@@ -62,12 +62,15 @@ Window
         }
     }
 
-    // 码率下拉：预设档位对应"流畅 / 标准 / 清晰 / 高清 / 超清 / 至臻"
-    property int currentBitrateMbps: Math.round(deviceController.videoBitRate / 1000000)
+    // 码率：appliedMbps 是"正在用的"，selectedMbps 是"下拉里选的"，两者不同说明还没应用
+    property int appliedMbps: Math.round(deviceController.videoBitRate / 1000000)
+    property int selectedMbps: appliedMbps
+    property bool bitrateDirty: selectedMbps !== appliedMbps
+
     property var bitrateValues: {
         const presets = [4, 8, 12, 16, 20, 24]
-        // 配置文件里写的是非预设值（比如 6M）时，把它放到第一项
-        return presets.indexOf(currentBitrateMbps) < 0 ? [currentBitrateMbps].concat(presets) : presets
+        // 正在用的值不是预设（比如 6M）时，把它放到第一项
+        return presets.indexOf(appliedMbps) < 0 ? [appliedMbps].concat(presets) : presets
     }
     property var bitrateOptions: {
         const names = [qsTr("流畅"), qsTr("标准"), qsTr("清晰"), qsTr("高清"), qsTr("超清"), qsTr("至臻")]
@@ -76,7 +79,7 @@ Window
             return names[i] + "（" + mbps + " Mbps）"
         })
         return bitrateValues.length > presetLabels.length
-            ? [qsTr("当前（%1 Mbps）").arg(currentBitrateMbps)].concat(presetLabels)
+            ? [qsTr("当前（%1 Mbps）").arg(appliedMbps)].concat(presetLabels)
             : presetLabels
     }
 
@@ -92,8 +95,9 @@ Window
     {
         if (visible)
         {
-            currentBitrateMbps = Math.round(deviceController.videoBitRate / 1000000)
-            bitrateBox.currentIndex = bitrateIndex(currentBitrateMbps)
+            appliedMbps = Math.round(deviceController.videoBitRate / 1000000)
+            selectedMbps = appliedMbps
+            bitrateBox.currentIndex = bitrateIndex(selectedMbps)
         }
     }
 
@@ -379,18 +383,18 @@ Window
 
                     Component.onCompleted:
                     {
-                        currentIndex = bitrateIndex(settingsWindow.currentBitrateMbps)
+                        currentIndex = bitrateIndex(settingsWindow.selectedMbps)
                     }
 
                     onActivated:
                     {
-                        settingsWindow.currentBitrateMbps = settingsWindow.bitrateValues[index]
+                        settingsWindow.selectedMbps = settingsWindow.bitrateValues[index]
                     }
                 }
 
                 Text
                 {
-                    text: qsTr("每帧约 %1 KB @60fps").arg((settingsWindow.currentBitrateMbps * 1000 / 8 / 60).toFixed(0))
+                    text: qsTr("每帧约 %1 KB @60fps").arg((settingsWindow.selectedMbps * 1000 / 8 / 60).toFixed(0))
                     color: "#7c8698"
                     font.pixelSize: 11
                 }
@@ -409,7 +413,7 @@ Window
                     Text
                     {
                         anchors.centerIn: parent
-                        text: qsTr("应用并重连")
+                        text: settingsWindow.bitrateDirty ? qsTr("应用并重连 *") : qsTr("应用并重连")
                         color: "#ffffff"
                         font.pixelSize: 12
                     }
@@ -423,8 +427,8 @@ Window
                         onClicked:
                         {
                             const fps = parseInt(fpsField.text) || 0
-                            const mbps = bitrateOptions[bitrateBox.currentIndex].mbps
-                            deviceController.ApplyVideoSettings(mbps * 1000000, fps)
+                            deviceController.ApplyVideoSettings(settingsWindow.selectedMbps * 1000000, fps)
+                            settingsWindow.appliedMbps = settingsWindow.selectedMbps
                         }
                     }
                 }
