@@ -1,10 +1,10 @@
 {
-    "latest":  "0.1.9",
+    "latest":  "0.2.0",
     "minimum":  "0.1.0",
     "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes":  "码率六档预设、WiFi 健康度、实际码率统计；修复设置里改码率不生效",
+    "notes":  "拖拽倍率与 Ctrl+滚轮捏合缩放",
     "published_at":  "2026-11-14",
-    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.1.9/QmlScrcpy_Setup_0.1.9.exe",
-    "size":  48060199,
-    "sha256":  "36ded6253550bad62c64884add15174262773371aabdc18b296dfbd049206224"
+    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.2.0/QmlScrcpy_Setup_0.2.0.exe",
+    "size":  48068001,
+    "sha256":  "ff0f5fff624e0801128fca3a7e0a592448b68168542cd2cb2295ea649d899677"
 }
