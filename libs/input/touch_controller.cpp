@@ -256,6 +256,19 @@ QVector<QByteArray> TouchController::PinchEnd(const QPointF &center, int radius)
     return messages;
 }
 
+// 键位映射入口：把 0~1 坐标换算成帧像素，再交给 MakeTouchAt
+QByteArray TouchController::NormalizedTouch(quint64 pointer_id, quint8 action, const QPointF &normalized)
+{
+    if (mapper_ == nullptr)
+    {
+        return QByteArray();
+    }
+
+    const QSize screen = mapper_->FrameSize();
+    const int x = qBound(0, qRound(normalized.x() * screen.width()), screen.width() - 1);
+    const int y = qBound(0, qRound(normalized.y() * screen.height()), screen.height() - 1);
+    return MakeTouchAt(pointer_id, action, QPoint(x, y));
+}
 // 把帧坐标夹进画面，越界的点设备会整条丢掉
 QPoint TouchController::ClampFrame(int x, int y) const
 {

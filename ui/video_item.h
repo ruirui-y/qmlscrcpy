@@ -13,6 +13,10 @@
 
 #include "input/coordinate_mapper.h"
 #include "input/key_controller.h"
+#include <QVariantList>
+
+#include "input/keymap.h"
+#include "input/keymap_engine.h"
 #include "input/touch_controller.h"
 #include "stream/frame.h"
 
@@ -71,6 +75,16 @@ public:
     void SetPinchModifier(const QString &modifier);                                             // 捏合缩放的修饰键：ctrl / alt / shift / ctrl_alt / none
     bool IsPinching() const { return pinch_active_; }                                           // 现在是不是两指按着
 
+    // 映射模式：0 关（键盘照旧转发）/ 1 玩（映射生效）/ 2 编辑（叠加层，键盘不转发）
+    void SetMapMode(int mode);
+    int MapMode() const { return map_mode_; }
+    void SetKeyMapPath(const QString &path);                                                    // 换设备时给新的键位文件路径
+    QVariantList KeyMapItems() const;                                                            // 给 QML 叠加层读键位列表
+    int AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label);   // 新增键位，返回下标
+    void MoveKeyMapItem(int index, double x, double y);                                          // 拖动键位
+    void RemoveKeyMapItem(int index);                                                            // 删除键位
+    void SaveKeyMap();                                                                           // 写回 JSON，编辑退出时调
+
     // 视频线程调：把最新一帧放进来（引用计数，不拷像素），旧的直接丢掉
     void Present(const qsc::stream::Frame &frame);
 
@@ -94,6 +108,8 @@ signals:
     void SigFpsChanged();
     void SigControlMessageReady(const QByteArray &message);                                     // 鼠标键盘翻好的控制消息，交给控制器发出去
     void SigPinchingChanged();                                                                  // 捏合开始或结束，界面用它显示双手状态
+    void SigMapModeChanged();                                                                   // 映射模式变了，工具栏和叠加层跟着切
+    void SigKeyMapChanged();                                                                    // 键位列表变了，叠加层重画
 
 protected:
     void geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry) override;
@@ -162,5 +178,9 @@ private:
     bool pinch_active_ = false;                                                                 // 两根手指是否按着
     QPointF pinch_center_;                                                                      // 捏合中心（画布坐标）
     int pinch_radius_ = 40;                                                                     // 两指间距的一半，单位帧像素，跨手势保留
+    qsc::input::KeyMap key_map_;                                                                 // 当前设备的键位配置
+    qsc::input::KeyMapEngine key_map_engine_;                                                    // 按键 → 触摸动作
+    QString key_map_path_;                                                                       // config/keymap/<串号>.json
+    int map_mode_ = 0;                                                                           // 0 关 / 1 玩 / 2 编辑
     qint64 pinch_last_us_ = 0;                                                                  // 上一次捏合的时刻，用来判断要不要重置半径
 };

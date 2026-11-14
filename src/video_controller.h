@@ -19,6 +19,8 @@ class VideoController : public QObject
     Q_PROPERTY(double dragScale READ DragScale NOTIFY SigDragScaleChanged)
     Q_PROPERTY(QString pinchModifier READ PinchModifier NOTIFY SigPinchModifierChanged)          // 捏合修饰键
     Q_PROPERTY(bool pinching READ Pinching NOTIFY SigPinchingChanged)                           // 现在是否两指按着
+    Q_PROPERTY(int mapMode READ MapMode NOTIFY SigMapModeChanged)                               // 键位映射：0 关 / 1 玩 / 2 编辑
+    Q_PROPERTY(QVariantList keyMapItems READ KeyMapItems NOTIFY SigKeyMapChanged)               // 当前设备的键位列表
 
 public:
     explicit VideoController(ControlWriter *writer, QObject *parent = nullptr);
@@ -28,6 +30,8 @@ public:
     double DragScale() const;                                                                   // 左键拖拽倍率
     QString PinchModifier() const;                                                              // 捏合修饰键
     bool Pinching() const;                                                                      // 两指是否按着
+    int MapMode() const;                                                                        // 键位映射模式
+    QVariantList KeyMapItems() const;                                                           // 键位列表，叠加层用
 
     VideoItem *Surface() const;                                                                 // 画布指针，DeviceController 接帧信号时要用
 
@@ -36,6 +40,11 @@ public:
     Q_INVOKABLE void AdjustDragPixels(int delta);                                               // 滑动像素加减，立即生效并记住
     Q_INVOKABLE void AdjustDragScale(int delta);                                                // 拖拽倍率加减（delta 以 0.1 为单位）
     Q_INVOKABLE void CyclePinchModifier();                                                      // 捏合修饰键：Ctrl → Alt → Shift → Ctrl+Alt → 关
+    Q_INVOKABLE void CycleMapMode();                                                            // 映射模式循环：关 → 玩 → 编辑
+    Q_INVOKABLE void LoadKeyMapFor(const QString &serial);                                       // 连上设备时按串号读键位文件
+    Q_INVOKABLE int AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label);
+    Q_INVOKABLE void MoveKeyMapItem(int index, double x, double y);
+    Q_INVOKABLE void RemoveKeyMapItem(int index);
 
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
     Q_INVOKABLE void SendHome();                                                                // 回桌面（KEYCODE_HOME）
@@ -57,7 +66,9 @@ signals:
     void SigDragPixelsChanged();
     void SigDragScaleChanged();
     void SigPinchModifierChanged();
-    void SigPinchingChanged();                                                                  // 捏合状态变了                                                             // 捏合修饰键变了
+    void SigPinchingChanged();                                                                  // 捏合状态变了
+    void SigMapModeChanged();                                                                   // 映射模式变了
+    void SigKeyMapChanged();                                                                    // 键位列表变了                                                             // 捏合修饰键变了
 
 private:
     void OnSurfaceControlMessage(const QByteArray &message);                                    // 画布翻好的输入消息，转手写进 socket

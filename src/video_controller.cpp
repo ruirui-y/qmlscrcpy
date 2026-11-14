@@ -63,6 +63,8 @@ void VideoController::SetSurface(QObject *surface)
     surface_->SetDragScale(drag_scale_);
     surface_->SetPinchModifier(pinch_modifier_);
     QObject::connect(surface_, &VideoItem::SigPinchingChanged, this, &VideoController::SigPinchingChanged);
+    QObject::connect(surface_, &VideoItem::SigMapModeChanged, this, &VideoController::SigMapModeChanged);
+    QObject::connect(surface_, &VideoItem::SigKeyMapChanged, this, &VideoController::SigKeyMapChanged);
 }
 
 // 画布翻好的输入消息，转手交给会话层写出去
@@ -467,4 +469,75 @@ void VideoController::SaveScreenshot()
                                     : QStringLiteral("截图只复制到剪贴板，保存失败"));
     }
     qCInfo(qsc::base::lcRender) << "截图" << path << saved;
+}
+
+// 映射模式：0 关 / 1 玩 / 2 编辑
+int VideoController::MapMode() const
+{
+    return surface_ != nullptr ? surface_->MapMode() : 0;
+}
+
+QVariantList VideoController::KeyMapItems() const
+{
+    return surface_ != nullptr ? surface_->KeyMapItems() : QVariantList();
+}
+
+// 工具栏按钮：关 → 玩 → 编辑 → 关
+void VideoController::CycleMapMode()
+{
+    if (surface_ == nullptr)
+    {
+        return;
+    }
+
+    const int next = (surface_->MapMode() + 1) % 3;
+    if (surface_->MapMode() == 2 && next == 0)
+    {
+        surface_->SaveKeyMap();                                                                 // 退出编辑时顺手存盘
+    }
+    surface_->SetMapMode(next);
+}
+
+// 连上设备后按串号读这台设备的键位文件
+void VideoController::LoadKeyMapFor(const QString &serial)
+{
+    if (surface_ == nullptr)
+    {
+        return;
+    }
+
+    // 串号里的冒号不能做文件名，换成下划线
+    QString name = serial.trimmed();
+    name.replace(QLatin1Char(':'), QLatin1Char('_'));
+    const QString path = QCoreApplication::applicationDirPath() + QStringLiteral("/config/keymap/") + name
+                         + QStringLiteral(".json");
+    surface_->SetKeyMapPath(path);
+
+    // 调试用：QS_KEYMAP_MODE=1 直接进玩模式，2 进编辑模式，方便无人值守抓图
+    const int forced = qEnvironmentVariableIntValue("QS_KEYMAP_MODE");
+    if (forced > 0)
+    {
+        surface_->SetMapMode(forced);
+    }
+}
+
+int VideoController::AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label)
+{
+    return surface_ != nullptr ? surface_->AddKeyMapItem(type, key, x, y, label) : -1;
+}
+
+void VideoController::MoveKeyMapItem(int index, double x, double y)
+{
+    if (surface_ != nullptr)
+    {
+        surface_->MoveKeyMapItem(index, x, y);
+    }
+}
+
+void VideoController::RemoveKeyMapItem(int index)
+{
+    if (surface_ != nullptr)
+    {
+        surface_->RemoveKeyMapItem(index);
+    }
 }

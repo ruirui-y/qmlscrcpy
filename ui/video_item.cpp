@@ -14,6 +14,9 @@
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
+#include <QDir>
+#include <QFileInfo>
+#include <QKeySequence>
 #include <QTimer>
 #include <QQuickWindow>
 #include <windows.h>
@@ -26,6 +29,27 @@ using qsc::stream::Frame;
 
 namespace
 {
+
+// 引擎的动作枚举转成协议那边的 0 按下 / 1 抬起 / 2 移动
+quint8 ActionCode(qsc::input::KeyMapAction::Kind kind)
+{
+    switch (kind)
+    {
+    case qsc::input::KeyMapAction::Kind::Up:
+        return 1;
+    case qsc::input::KeyMapAction::Kind::Move:
+        return 2;
+    case qsc::input::KeyMapAction::Kind::Down:
+    default:
+        return 0;
+    }
+}
+
+// Qt 的键值转成配置里写的文本：Q → "Q"，空格 → "Space"
+QString KeyName(int qt_key)
+{
+    return QKeySequence(qt_key).toString(QKeySequence::PortableText);
+}
 
 // 直接问系统修饰键是否按下：Qt 的 keyboardModifiers() 靠事件更新，没新事件时会读到旧值
 bool ModifierDownNow(const QString &modifier)
@@ -968,6 +992,17 @@ void VideoItem::wheelEvent(QWheelEvent *event)
 // 按键按下：没映射的键交回基类处理
 void VideoItem::keyPressEvent(QKeyEvent *event)
 {
+    // 玩模式：已映射的键转成触摸，不再作为按键转发
+    if (map_mode_ == 1 && !event->isAutoRepeat() && key_map_engine_.Handles(KeyName(event->key())))
+    {
+        for (const qsc::input::KeyMapAction &action : key_map_engine_.Press(KeyName(event->key())))
+        {
+            EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
+        }
+        event->accept();
+        return;
+    }
+
     const QByteArray message = keys_.Press(event->key(), event->modifiers(), event->isAutoRepeat());
     if (message.isEmpty())
     {
@@ -985,6 +1020,16 @@ void VideoItem::keyReleaseEvent(QKeyEvent *event)
     if (pinch_active_ && !ModifierDownNow(pinch_modifier_))
     {
         EndPinch();
+    }
+
+    if (map_mode_ == 1 && key_map_engine_.Handles(KeyName(event->key())))
+    {
+        for (const qsc::input::KeyMapAction &action : key_map_engine_.Release(KeyName(event->key())))
+        {
+            EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
+        }
+        event->accept();
+        return;
     }
 
     const QByteArray message = keys_.Release(event->key(), event->modifiers());
@@ -1079,4 +1124,110 @@ void VideoItem::EndPinch()
     }
     pinch_active_ = false;
     emit SigPinchingChanged();
+}
+
+// 切映射模式：从"玩/编辑"退出时要把所有按住的手指抬起来，否则设备会一直按着
+void VideoItem::SetMapMode(int mode)
+{
+    const int clamped = qBound(0, mode, 2);
+    if (clamped == map_mode_)
+    {
+        return;
+    }
+
+    if (map_mode_ != 0)
+    {
+        for (const qsc::input::KeyMapAction &action : key_map_engine_.Reset())
+        {
+            EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
+        }
+    }
+
+    map_mode_ = clamped;
+    if (map_mode_ == 2)
+    {
+        emit SigKeyMapChanged();
+    }
+    emit SigMapModeChanged();
+}
+
+// 换设备：读这台设备自己的键位文件，读不到就是空配置
+void VideoItem::SetKeyMapPath(const QString &path)
+{
+    key_map_path_ = path;
+    QString error;
+    key_map_ = qsc::input::KeyMap::Load(path, &error);
+    if (!error.isEmpty())
+    {
+        qWarning() << "[keymap]" << error;
+    }
+    key_map_engine_.SetMap(key_map_);
+    qInfo() << "[keymap] 已加载" << key_map_.items_.size() << "个键位：" << path;
+    emit SigKeyMapChanged();
+}
+
+// 给 QML 叠加层用的键位快照：位置已经换算成 0~1，界面直接按比例摆
+QVariantList VideoItem::KeyMapItems() const
+{
+    QVariantList list;
+    for (int i = 0; i < key_map_.items_.size(); ++i)
+    {
+        const qsc::input::KeyMapItem &item = key_map_.items_.at(i);
+        QVariantMap entry;
+        entry.insert(QStringLiteral("index"), i);
+        entry.insert(QStringLiteral("type"), static_cast<int>(item.type_));
+        entry.insert(QStringLiteral("label"), item.label_);
+        entry.insert(QStringLiteral("key"), item.key_);
+        entry.insert(QStringLiteral("x"), item.pos_.x());
+        entry.insert(QStringLiteral("y"), item.pos_.y());
+        entry.insert(QStringLiteral("radius"), item.radius_);
+        list.append(entry);
+    }
+    return list;
+}
+
+// 新增一条键位，返回它的下标；type 0 点按 1 按住 2 摇杆
+int VideoItem::AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label)
+{
+    qsc::input::KeyMapItem item;
+    item.type_ = static_cast<qsc::input::KeyMapItemType>(qBound(0, type, 2));
+    item.key_ = key;
+    item.label_ = label;
+    item.pos_ = QPointF(x, y);
+    key_map_.Add(item);
+    key_map_engine_.SetMap(key_map_);
+
+    const int index = key_map_.items_.size() - 1;
+    emit SigKeyMapChanged();
+    return index;
+}
+
+void VideoItem::MoveKeyMapItem(int index, double x, double y)
+{
+    key_map_.Move(index, QPointF(x, y));
+    key_map_engine_.SetMap(key_map_);
+    emit SigKeyMapChanged();
+}
+
+void VideoItem::RemoveKeyMapItem(int index)
+{
+    key_map_.Remove(index);
+    key_map_engine_.SetMap(key_map_);
+    emit SigKeyMapChanged();
+}
+
+// 写回 JSON：目录不存在时先建
+void VideoItem::SaveKeyMap()
+{
+    if (key_map_path_.isEmpty())
+    {
+        return;
+    }
+    const QFileInfo info(key_map_path_);
+    QDir().mkpath(info.absolutePath());
+    QString error;
+    if (!key_map_.Save(key_map_path_, &error))
+    {
+        qWarning() << "[keymap]" << error;
+    }
 }

@@ -748,6 +748,12 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     // 记住这次连的设备，下次启动优先连它
     AppSettings().SetLastSerial(device_name_);
 
+    // 连上之后读这台设备自己的键位配置，切换设备时不会串
+    if (video_ != nullptr)
+    {
+        video_->LoadKeyMapFor(device_name_);
+    }
+
     // 连上了才让投屏窗出来（启动时只显示主窗）
     if (!connected_)
     {

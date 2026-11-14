@@ -260,6 +260,138 @@ Window
                     keepAspect: false                                                           // 窗口比例已经跟着帧走了，这里直接拉满
                 }
 
+
+                // 键位映射叠加层：只在「映射 编辑」时出现，圆点位置就是触摸落点
+                Rectangle
+                {
+                    id: keyMapOverlay
+                    anchors.fill: parent
+                    visible: videoController.mapMode === 2
+                    color: "#33000000"
+                    z: 5
+
+                    Repeater
+                    {
+                        model: videoController.keyMapItems
+
+                        Rectangle
+                        {
+                            width: 34
+                            height: 34
+                            radius: 17
+                            color: "#cc2b4a6f"
+                            border.width: 1
+                            border.color: "#5aa9ff"
+                            x: modelData.x * keyMapOverlay.width - width / 2
+                            y: modelData.y * keyMapOverlay.height - height / 2
+
+                            Text
+                            {
+                                anchors.centerIn: parent
+                                text: modelData.type === 2 ? "◎" : (modelData.key.length > 0 ? modelData.key : "?")
+                                color: "#ffffff"
+                                font.pixelSize: 12
+                                font.bold: true
+                            }
+
+                            MouseArea
+                            {
+                                anchors.fill: parent
+                                drag.target: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onPositionChanged:
+                                {
+                                    if (drag.active)
+                                    {
+                                        const nx = Math.max(0, Math.min(1, parent.x / keyMapOverlay.width))
+                                        const ny = Math.max(0, Math.min(1, parent.y / keyMapOverlay.height))
+                                        videoController.MoveKeyMapItem(modelData.index, nx, ny)
+                                    }
+                                }
+                                onClicked:
+                                {
+                                    if (mouse.button === Qt.RightButton)
+                                    {
+                                        videoController.RemoveKeyMapItem(modelData.index)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 新增键位：填键名 + 选类型，加在画面中心，之后拖到目标位置
+                    Rectangle
+                    {
+                        id: addPanel
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 12
+                        width: 210
+                        height: 40
+                        radius: 6
+                        color: "#cc101820"
+                        border.width: 1
+                        border.color: "#2c323c"
+
+                        Row
+                        {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 6
+
+                            TextField
+                            {
+                                id: newKeyField
+                                width: 54
+                                height: 28
+                                placeholderText: qsTr("键")
+                                color: "#d8dee9"
+                                font.pixelSize: 12
+                                leftPadding: 6
+                                background: Rectangle
+                                {
+                                    radius: 4
+                                    color: "#151920"
+                                    border.width: 1
+                                    border.color: "#2c323c"
+                                }
+                            }
+
+                            ComboBox
+                            {
+                                id: newTypeBox
+                                width: 74
+                                height: 28
+                                font.pixelSize: 12
+                                model: [ qsTr("点按"), qsTr("按住"), qsTr("摇杆") ]
+                            }
+
+                            ToolButton
+                            {
+                                width: 54
+                                label: qsTr("添加")
+                                onClicked:
+                                {
+                                    if (newKeyField.text.length > 0)
+                                    {
+                                        videoController.AddKeyMapItem(newTypeBox.currentIndex, newKeyField.text, 0.5, 0.5, newKeyField.text)
+                                        newKeyField.text = ""
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Text
+                    {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.margins: 12
+                        text: qsTr("编辑模式：拖圆点调位置，右键删除，左下角添加键位")
+                        color: "#9cc4ff"
+                        font.pixelSize: 12
+                    }
+                }
                 // 文件拖放：把文件拖进画面就推到手机 Download/，拖动时给个高亮提示
                 DropArea
                 {
@@ -560,6 +692,17 @@ Window
                         active: videoController.pinching || videoController.pinchModifier !== "none"
                         tip: qsTr("按住 %1 滚轮 = 双指放大/缩小，松开结束").arg(pinchLabel(videoController.pinchModifier))
                         onClicked: videoController.CyclePinchModifier()
+                    }
+
+                    // 键位映射：关 → 玩 → 编辑 → 关
+                    ToolButton
+                    {
+                        label: videoController.mapMode === 0
+                            ? qsTr("映射 关")
+                            : (videoController.mapMode === 1 ? qsTr("映射 玩") : qsTr("映射 编"))
+                        active: videoController.mapMode !== 0
+                        tip: qsTr("关：键盘照旧；玩：已映射的键走触摸；编辑：画面上摆键位")
+                        onClicked: videoController.CycleMapMode()
                     }
 
                     ToolButton

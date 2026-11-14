@@ -42,6 +42,9 @@ public:
     QVector<QByteArray> PinchBegin(const QPointF &center, int radius);
     QVector<QByteArray> PinchStep(const QPointF &center, int radius);
     QVector<QByteArray> PinchEnd(const QPointF &center, int radius);
+
+    // 键位映射用：坐标是 0~1 归一化，action 取 0 按下 / 1 抬起 / 2 移动
+    QByteArray NormalizedTouch(quint64 pointer_id, quint8 action, const QPointF &normalized);
     QPoint ClampFrame(int x, int y) const;                                                      // 把帧坐标夹进画面
 
 private:
