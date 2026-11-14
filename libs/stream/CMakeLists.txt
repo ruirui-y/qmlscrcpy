@@ -3,9 +3,11 @@
 add_library(qsc_stream STATIC
     h264_decoder.cpp
     video_reader.cpp
+    video_traffic.cpp
     yuv_convert.cpp
     h264_decoder.h
     video_reader.h
+    video_traffic.h
     yuv_convert.h
     frame.h
 )

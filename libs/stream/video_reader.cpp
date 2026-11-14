@@ -5,6 +5,7 @@
 
 #include "protocol/video_packet.h"
 #include "stream/h264_decoder.h"
+#include "stream/video_traffic.h"
 
 namespace qsc::stream
 {
@@ -101,6 +102,7 @@ void VideoReader::run()
         // 切出负载并把整帧从缓冲区删掉，不删会反复解同一帧
         const QByteArray payload = buffer.mid(VideoPacketHeader::kSize, static_cast<int>(header.size_));
         buffer.remove(0, total);
+        VideoTraffic::Instance().AddBytes(total);                                           // 记实际流量：头 + 负载才是线上真正收到的字节
 
         // 配置包只存不放画面；容器复用，clear 只清大小不释放容量
         frames.clear();

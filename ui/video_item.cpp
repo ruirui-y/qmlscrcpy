@@ -1,5 +1,7 @@
 #include "ui/video_item.h"
 
+#include "stream/video_traffic.h"
+
 #include <QDebug>
 #include <QGuiApplication>
 #include <QThread>
@@ -790,11 +792,17 @@ void VideoItem::ReportSecond()
         return QString::number(percent(count, total), 'f', 0);
     };
 
-    qInfo().noquote() << QStringLiteral("[perf] 1s 到达 %1 帧，上屏 %2 帧，丢 %3（%4%）")
+    // 实际链路流量：字节数 × 8 / 1000000 就是这一秒跑出来的 Mbps
+    const qint64 bytes = qsc::stream::VideoTraffic::Instance().TakeBytes();
+    const double actual_mbps = bytes * 8.0 / 1000000.0;
+
+    qInfo().noquote() << QStringLiteral("[perf] 1s 到达 %1 帧，上屏 %2 帧，丢 %3（%4%），实际 %5 KB/s（%6 Mbps）")
                              .arg(frames)
                              .arg(swapped)
                              .arg(dropped)
-                             .arg(QString::number(drop_rate, 'f', 1));
+                             .arg(QString::number(drop_rate, 'f', 1))
+                             .arg(bytes / 1024)
+                             .arg(QString::number(actual_mbps, 'f', 1));
 
     qInfo().noquote() << QStringLiteral("[perf]     上屏延迟 <1.5ms %1% / 1.5~2.5ms %2% / 2.5~3.5ms %3% / >3.5ms %4%，最大 %5 ms")
                              .arg(pcts(l_lt1, lat_total))
