@@ -564,6 +564,13 @@ Window
 
                     ToolButton
                     {
+                        label: qsTr("音量 +")
+                        tip: qsTr("设备音量加一档")
+                        onClicked: videoController.SendVolumeUp()
+                    }
+
+                    ToolButton
+                    {
                         label: qsTr("音量 −")
                         tip: qsTr("设备音量减一档")
                         onClicked: videoController.SendVolumeDown()
