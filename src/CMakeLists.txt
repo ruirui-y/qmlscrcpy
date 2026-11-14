@@ -16,7 +16,9 @@ add_executable(QmlScrcpy ${qs_subsystem}
     device_controller.cpp
     device_controller.h
     video_controller.cpp
+    wifi_status.cpp
     video_controller.h
+    wifi_status.h
     control_writer.h
     update_checker.cpp
     update_checker.h

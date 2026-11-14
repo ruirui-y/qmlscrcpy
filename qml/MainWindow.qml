@@ -726,6 +726,99 @@ Window
                 wrapMode: Text.Wrap
                 elide: Text.ElideRight
             }
+
+            // WiFi 健康度：只有无线连接时出现，颜色分四档（绿 / 黄 / 橙 / 红）
+            Row
+            {
+                id: wifiChip
+                visible: deviceController.wifiStatus.available
+                spacing: 6
+                Layout.alignment: Qt.AlignVCenter
+
+                Rectangle
+                {
+                    width: 8
+                    height: 8
+                    radius: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    color:
+                    {
+                        const level = deviceController.wifiStatus.level
+                        if (level === 3)
+                        {
+                            return "#e05a5a"
+                        }
+                        if (level === 2)
+                        {
+                            return "#e0a355"
+                        }
+                        if (level === 1)
+                        {
+                            return "#d8c94f"
+                        }
+                        return "#3ecf8e"
+                    }
+                }
+
+                Text
+                {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: deviceController.wifiStatus.summary
+                    color: "#9aa4b2"
+                    font.pixelSize: 11
+                }
+
+                HoverHandler
+                {
+                    id: wifiHover
+
+                    onHoveredChanged:
+                    {
+                        if (hovered)
+                        {
+                            wifiTip.open()
+                        }
+                        else
+                        {
+                            wifiTip.close()
+                        }
+                    }
+                }
+            }
+        }
+
+        // WiFi 详情气泡：自绘，和整套深色主题一致（系统 ToolTip 是白底，没法改）
+        Popup
+        {
+            id: wifiTip
+            width: Math.min(tipText.implicitWidth + 20, 320)
+            height: tipText.implicitHeight + 16
+            padding: 0
+            closePolicy: Popup.NoAutoClose
+
+            // 贴芯片上方、右对齐，再夹到窗口里，避免超出边界被裁掉
+            x: Math.max(8, Math.min(controlWindow.width - width - 8,
+                                   wifiChip.mapToItem(null, 0, 0).x + wifiChip.width - width))
+            y: Math.max(8, wifiChip.mapToItem(null, 0, 0).y - height - 6)
+
+            background: Rectangle
+            {
+                radius: 6
+                color: "#1a1f27"
+                border.width: 1
+                border.color: "#2c323c"
+            }
+
+            contentItem: Text
+            {
+                id: tipText
+                anchors.fill: parent
+                anchors.margins: 10
+                text: deviceController.wifiStatus.detail
+                color: "#cdd4de"
+                font.pixelSize: 11
+                lineHeight: 1.3
+            }
         }
     }
 }

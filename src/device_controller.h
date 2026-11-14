@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <memory>
 #include "control_writer.h"
+#include "wifi_status.h"
 #include "video_controller.h"
 #include "session/server_session.h"
 #include "stream/h264_decoder.h"
@@ -36,6 +37,7 @@ class DeviceController : public QObject, public ControlWriter
     Q_PROPERTY(int videoBitRate READ VideoBitRate NOTIFY SigVideoSettingsChanged)
     Q_PROPERTY(int videoMaxFps READ VideoMaxFps NOTIFY SigVideoSettingsChanged)
     Q_PROPERTY(QString videoProfile READ VideoProfile NOTIFY SigVideoSettingsChanged)
+    Q_PROPERTY(QObject *wifiStatus READ WifiStatusObject CONSTANT)                                   // WiFi 健康状态，只有无线连接时 available 为 true
     Q_PROPERTY(bool connected READ IsConnected NOTIFY SigConnectedChanged)
     Q_PROPERTY(QString bossKey READ BossKey NOTIFY SigBossKeyChanged)
     Q_PROPERTY(QString shortcutBack READ ShortcutBack NOTIFY SigShortcutsChanged)
@@ -56,7 +58,8 @@ public:
     bool ShowConsole() const;                                                                   // 控制台窗口当前显示着没有
     int VideoBitRate() const;                                                                   // 当前生效的码率（bps）
     int VideoMaxFps() const;                                                                    // 当前生效的帧率上限，0 = 不限
-    QString VideoProfile() const;                                                               // wired 或 wireless，看当前连的是哪种
+    QString VideoProfile() const;
+    QObject *WifiStatusObject() { return &wifi_status_; }                                          // WiFi 状态对象，QML 通过它读 summary / level
     bool IsConnected() const override;                                                                   // 会话建起来没有，投屏窗靠它决定要不要显示
     QString BossKey() const;                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
     QString ShortcutBack() const;                                                               // 返回键的快捷键
@@ -143,6 +146,7 @@ private:
     QMetaObject::Connection clipboard_connection_;                                              // 自动同步的剪贴板信号连接
     bool connected_ = false;                                                                    // 会话活着就是 true
     QString video_profile_ = QStringLiteral("wired");                                           // 当前连接方式的画质档位
+    qsc::app::WifiStatus wifi_status_;                                                          // 无线时每 3 秒采一次信号/速率/重传
     bool show_console_ = false;                                                                 // 控制台窗口显示状态
     QStringList device_labels_;                                                                 // 下拉框显示文字，和 devices_ 下标对应
 

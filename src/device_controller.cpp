@@ -659,6 +659,16 @@ void DeviceController::Connect(const QString &serial)
 
     qInfo() << "[video] 本次连接画质：码率" << (params.bit_rate_ / 1000000.0) << "Mbps，帧率" << params.max_fps_
             << "档位" << video_profile_ << "串号" << params.serial_;
+
+    // 无线才采样 WiFi 健康状态；有线不显示这一块
+    if (video_profile_ == QStringLiteral("wireless"))
+    {
+        wifi_status_.Start(params.serial_);
+    }
+    else
+    {
+        wifi_status_.Stop();
+    }
     params.log_level_ = QStringLiteral("error");
 
     // 这里同步阻塞 1~2 秒，界面会卡一下（建链是阻塞的）
@@ -755,6 +765,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
 // 断开并回到未连接状态
 void DeviceController::Disconnect()
 {
+    wifi_status_.Stop();                                                                        // 断线就别再问手机了
     if (reader_ == nullptr && !session_)
     {
         SetStatus(QStringLiteral("没在连接"));
