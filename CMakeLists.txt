@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 
 # 版本号只在这里维护一处，main.cpp 通过编译宏拿
-project(QmlScrcpy VERSION 0.3.0 LANGUAGES CXX)
+project(QmlScrcpy VERSION 0.2.1 LANGUAGES CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerOptions)
