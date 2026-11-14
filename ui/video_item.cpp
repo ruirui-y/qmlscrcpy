@@ -1359,3 +1359,36 @@ void VideoItem::DispatchKeyMapActions(const QVector<qsc::input::KeyMapAction> &a
         EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
     }
 }
+
+// 进入录制：点圆点后调它，下一次按键就绑到这个键位；Esc 取消
+void VideoItem::BeginKeyRecord(int index)
+{
+    if (index < 0 || index >= key_map_.items_.size())
+    {
+        return;
+    }
+    record_index_ = index;
+    forceActiveFocus();                                                                          // 叠加层不拿焦点，不抢就收不到按键
+    qInfo() << "[keymap] record start index" << index;
+    emit SigRecordingChanged();
+}
+
+// QML 收到按键后调它：把键绑到当前录制目标上
+void VideoItem::BindRecordedKey(int qt_key)
+{
+    if (record_index_ < 0 || record_index_ >= key_map_.items_.size())
+    {
+        return;
+    }
+    const int index = record_index_;
+    record_index_ = -1;
+    if (key_map_.items_.at(index).type_ != qsc::input::KeyMapItemType::Steer)
+    {
+        key_map_.items_[index].key_ = KeyName(qt_key);
+        key_map_.items_[index].label_ = KeyName(qt_key);
+        key_map_engine_.SetMap(key_map_);
+        qInfo() << "[keymap] record bound" << KeyName(qt_key) << "to index" << index;
+        emit SigKeyMapChanged();
+    }
+    emit SigRecordingChanged();
+}

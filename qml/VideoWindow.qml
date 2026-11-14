@@ -272,6 +272,14 @@ Window
                     color: "#33000000"
                     z: 5
 
+                    // 录制时由叠加层接键盘：VideoItem 在编辑模式下拿不到焦点，只能在这里收键
+                    focus: videoController.recording
+                    Keys.onPressed:
+                    {
+                        videoController.BindRecordedKey(event.key)
+                        event.accepted = true
+                    }
+
                     Repeater
                     {
                         model: videoController.keyMapItems
@@ -333,14 +341,9 @@ Window
                                         videoController.RemoveKeyMapItem(modelData.index)
                                         keyMapOverlay.steerEditIndex = -1
                                     }
-                                    else if (modelData.type === 2)
+                                    else if (modelData.type !== 2)
                                     {
-                                        keyMapOverlay.steerEditItem = modelData
-                                        keyMapOverlay.steerEditIndex = modelData.index
-                                        steerFields.itemAt(0).text = modelData.up
-                                        steerFields.itemAt(1).text = modelData.down
-                                        steerFields.itemAt(2).text = modelData.left
-                                        steerFields.itemAt(3).text = modelData.right
+                                        videoController.BeginKeyRecord(modelData.index)
                                     }
                                 }
                             }
@@ -415,7 +418,9 @@ Window
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.margins: 12
-                        text: qsTr("编辑模式：拖圆点调位置，右键删除，左下角添加键位")
+                        text: videoController.recording
+                            ? qsTr("请按下要绑定的键…（Esc 取消）")
+                            : qsTr("编辑模式：拖圆点调位置，右键删除，点圆点可重绑按键")
                         color: "#9cc4ff"
                         font.pixelSize: 12
                     }

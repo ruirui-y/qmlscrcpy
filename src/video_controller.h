@@ -21,6 +21,7 @@ class VideoController : public QObject
     Q_PROPERTY(bool pinching READ Pinching NOTIFY SigPinchingChanged)                           // 现在是否两指按着
     Q_PROPERTY(int mapMode READ MapMode NOTIFY SigMapModeChanged)                               // 键位映射：0 关 / 1 玩 / 2 编辑
     Q_PROPERTY(QVariantList keyMapItems READ KeyMapItems NOTIFY SigKeyMapChanged)               // 当前设备的键位列表
+    Q_PROPERTY(bool recording READ Recording NOTIFY SigRecordingChanged)                        // 是否正在录键
 
 public:
     explicit VideoController(ControlWriter *writer, QObject *parent = nullptr);
@@ -32,6 +33,7 @@ public:
     bool Pinching() const;                                                                      // 两指是否按着
     int MapMode() const;                                                                        // 键位映射模式
     QVariantList KeyMapItems() const;                                                           // 键位列表，叠加层用
+    bool Recording() const;                                                                     // 是否正在录键
 
     VideoItem *Surface() const;                                                                 // 画布指针，DeviceController 接帧信号时要用
 
@@ -46,6 +48,8 @@ public:
     Q_INVOKABLE void MoveKeyMapItem(int index, double x, double y);
     Q_INVOKABLE void RemoveKeyMapItem(int index);
     Q_INVOKABLE void SetSteerKeys(int index, const QString &up, const QString &down, const QString &left, const QString &right);
+    Q_INVOKABLE void BeginKeyRecord(int index);                                                  // 点圆点后录下一个按键
+    Q_INVOKABLE void BindRecordedKey(int qt_key);                                                // QML 收到按键后完成绑定
 
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
     Q_INVOKABLE void SendHome();                                                                // 回桌面（KEYCODE_HOME）
@@ -69,7 +73,8 @@ signals:
     void SigPinchModifierChanged();
     void SigPinchingChanged();                                                                  // 捏合状态变了
     void SigMapModeChanged();                                                                   // 映射模式变了
-    void SigKeyMapChanged();                                                                    // 键位列表变了                                                             // 捏合修饰键变了
+    void SigKeyMapChanged();                                                                    // 键位列表变了
+    void SigRecordingChanged();                                                                 // 录制状态变了                                                             // 捏合修饰键变了
 
 private:
     void OnSurfaceControlMessage(const QByteArray &message);                                    // 画布翻好的输入消息，转手写进 socket

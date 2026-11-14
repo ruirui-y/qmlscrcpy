@@ -86,6 +86,9 @@ public:
     void RemoveKeyMapItem(int index);                                                            // 删除键位
     void SetSteerKeys(int index, const QString &up, const QString &down, const QString &left,
                       const QString &right);                                                     // 改摇杆四个方向键
+    void BeginKeyRecord(int index);                                                              // 进入录制：下一个按下的键绑到这个键位
+    bool Recording() const { return record_index_ >= 0; }
+    void BindRecordedKey(int qt_key);                                                            // QML 收到按键后调它完成绑定
     void SaveKeyMap();                                                                           // 写回 JSON，编辑退出时调
 
     // 视频线程调：把最新一帧放进来（引用计数，不拷像素），旧的直接丢掉
@@ -113,6 +116,7 @@ signals:
     void SigPinchingChanged();                                                                  // 捏合开始或结束，界面用它显示双手状态
     void SigMapModeChanged();                                                                   // 映射模式变了，工具栏和叠加层跟着切
     void SigKeyMapChanged();                                                                    // 键位列表变了，叠加层重画
+    void SigRecordingChanged();                                                                 // 进入或退出按键录制
 
 protected:
     void geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry) override;
@@ -187,6 +191,7 @@ private:
     qsc::input::KeyMap key_map_;                                                                 // 当前设备的键位配置
     qsc::input::KeyMapEngine key_map_engine_;                                                    // 按键 → 触摸动作
     QString key_map_path_;                                                                       // config/keymap/<串号>.json
+    int record_index_ = -1;                                                                      // 正在录制的键位下标，-1 表示没在录
     int map_mode_ = 0;                                                                           // 0 关 / 1 玩 / 2 编辑
     QSet<QString> polled_keys_;                                                                  // 轮询到的"当前按着"的键名
     QTimer *keymap_poll_timer_ = nullptr;                                                        // 16ms 轮询物理按键，绕开 Qt 的重复事件

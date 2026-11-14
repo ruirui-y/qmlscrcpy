@@ -65,6 +65,7 @@ void VideoController::SetSurface(QObject *surface)
     QObject::connect(surface_, &VideoItem::SigPinchingChanged, this, &VideoController::SigPinchingChanged);
     QObject::connect(surface_, &VideoItem::SigMapModeChanged, this, &VideoController::SigMapModeChanged);
     QObject::connect(surface_, &VideoItem::SigKeyMapChanged, this, &VideoController::SigKeyMapChanged);
+    QObject::connect(surface_, &VideoItem::SigRecordingChanged, this, &VideoController::SigRecordingChanged);
 }
 
 // 画布翻好的输入消息，转手交给会话层写出去
@@ -548,5 +549,26 @@ void VideoController::SetSteerKeys(int index, const QString &up, const QString &
     if (surface_ != nullptr)
     {
         surface_->SetSteerKeys(index, up, down, left, right);
+    }
+}
+
+bool VideoController::Recording() const
+{
+    return surface_ != nullptr && surface_->Recording();
+}
+
+void VideoController::BeginKeyRecord(int index)
+{
+    if (surface_ != nullptr)
+    {
+        surface_->BeginKeyRecord(index);
+    }
+}
+
+void VideoController::BindRecordedKey(int qt_key)
+{
+    if (surface_ != nullptr)
+    {
+        surface_->BindRecordedKey(qt_key);
     }
 }
