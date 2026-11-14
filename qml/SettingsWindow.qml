@@ -23,6 +23,47 @@ Window
     // 登记给老板键：设置窗开着时按老板键也要一起藏起来
     Component.onCompleted: deviceController.RegisterWindow(settingsWindow)
 
+    // 码率下拉：预设档位对应"流畅 / 标准 / 清晰 / 高清 / 超清 / 至臻"
+    property int currentBitrateMbps: Math.round(deviceController.videoBitRate / 1000000)
+    property var bitrateOptions: {
+        const values = [4, 8, 12, 16, 20, 24]
+        const names = [qsTr("流畅"), qsTr("标准"), qsTr("清晰"), qsTr("高清"), qsTr("超清"), qsTr("至臻")]
+        const items = []
+        for (let i = 0; i < values.length; ++i)
+        {
+            items.push({ label: names[i] + "（" + values[i] + " Mbps）", mbps: values[i] })
+        }
+        // 配置文件里写的是非预设值（比如 6M）时，把它放到第一项显示
+        if (values.indexOf(currentBitrateMbps) < 0)
+        {
+            items.unshift({ label: qsTr("当前（%1 Mbps）").arg(currentBitrateMbps), mbps: currentBitrateMbps })
+        }
+        return items
+    }
+
+    // 按 Mbps 找下拉里的位置
+    function bitrateIndex(mbps)
+    {
+        for (let i = 0; i < bitrateOptions.length; ++i)
+        {
+            if (bitrateOptions[i].mbps === mbps)
+            {
+                return i
+            }
+        }
+        return 0
+    }
+
+    // 每次打开设置窗，按当前实际码率重新选一次（应用并重连之后值会变）
+    onVisibleChanged:
+    {
+        if (visible)
+        {
+            currentBitrateMbps = Math.round(deviceController.videoBitRate / 1000000)
+            bitrateBox.currentIndex = bitrateIndex(currentBitrateMbps)
+        }
+    }
+
     // Esc 直接关掉设置窗（模态窗被挡住时也能退出来）
     Shortcut
     {
@@ -220,32 +261,32 @@ Window
                     color: "#cdd4de"
                     font.pixelSize: 12
                 }
-                TextField
+                ComboBox
                 {
-                    id: bitrateField
-                    Layout.preferredWidth: 80
+                    id: bitrateBox
+                    Layout.preferredWidth: 168
                     Layout.preferredHeight: 28
-                    text: (deviceController.videoBitRate / 1000000).toFixed(1)
-                    color: "#d8dee9"
                     font.pixelSize: 12
-                    leftPadding: 8
-                    validator: DoubleValidator
+                    model: bitrateOptions
+                    textRole: "label"
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("码率越高越清晰；无线下太高会受带宽限制")
+
+                    Component.onCompleted:
                     {
-                        bottom: 0.5
-                        top: 50.0
-                        decimals: 1
+                        currentIndex = bitrateIndex(settingsWindow.currentBitrateMbps)
                     }
-                    background: Rectangle
+
+                    onActivated:
                     {
-                        radius: 6
-                        color: "#151920"
-                        border.width: 1
-                        border.color: "#2c323c"
+                        settingsWindow.currentBitrateMbps = bitrateOptions[index].mbps
                     }
                 }
+
                 Text
                 {
-                    text: qsTr("Mbps")
+                    text: qsTr("每帧约 %1 KB @60fps").arg((settingsWindow.currentBitrateMbps * 1000 / 8 / 60).toFixed(0))
                     color: "#7c8698"
                     font.pixelSize: 11
                 }
@@ -278,8 +319,8 @@ Window
                         onClicked:
                         {
                             const fps = parseInt(fpsField.text) || 0
-                            const mbps = parseFloat(bitrateField.text) || 8.0
-                            deviceController.ApplyVideoSettings(Math.round(mbps * 1000000), fps)
+                            const mbps = bitrateOptions[bitrateBox.currentIndex].mbps
+                            deviceController.ApplyVideoSettings(mbps * 1000000, fps)
                         }
                     }
                 }
