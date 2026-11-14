@@ -1,10 +1,10 @@
 {
-    "latest":  "0.2.0",
+    "latest":  "0.2.1",
     "minimum":  "0.1.0",
     "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes":  "拖拽倍率与 Ctrl+滚轮捏合缩放",
+    "notes":  "按键映射与连点器，修滚轮甩动",
     "published_at":  "2026-11-14",
-    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.2.0/QmlScrcpy_Setup_0.2.0.exe",
-    "size":  48068204,
-    "sha256":  "a56e7367c474a97b0b4ac77a1888ef3a6893a62677f6bab6823fa76612cf1b72"
+    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.2.1/QmlScrcpy_Setup_0.2.1.exe",
+    "size":  48084732,
+    "sha256":  "c70e6b7f00f977447d12422fdfc3baa67cd8d00583c96b112f4feb85f37f8dd6"
 }
