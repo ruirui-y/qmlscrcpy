@@ -45,6 +45,7 @@ public:
     Q_INVOKABLE int AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label);
     Q_INVOKABLE void MoveKeyMapItem(int index, double x, double y);
     Q_INVOKABLE void RemoveKeyMapItem(int index);
+    Q_INVOKABLE void SetSteerKeys(int index, const QString &up, const QString &down, const QString &left, const QString &right);
 
     Q_INVOKABLE void SendBack();                                                                // 返回上一级（顺便能点亮屏幕）
     Q_INVOKABLE void SendHome();                                                                // 回桌面（KEYCODE_HOME）

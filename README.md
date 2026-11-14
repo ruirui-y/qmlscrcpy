@@ -496,6 +496,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [自动连接](docs/自动连接.md) | 启动自动连上次设备、只做一次、存哪 |
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
+| [按键映射](docs/按键映射.md) | 游戏键位映射：三种键位类型、五层结构、七次失败的过程、16ms 轮询方案 |
 | [自动更新](docs/自动更新.md) | 一键下载 + 校验 sha256 + 静默安装，为什么安装仍会弹 UAC |
 | [双仓库发版](docs/双仓库发版.md) | GitHub 放代码、Gitee 放 exe 的完整发版流程与核对方法 |
 | [版本检查](docs/版本检查.md) | 零服务器方案、三个源依次尝试、版本比较规则、发版要多改一个文件 |

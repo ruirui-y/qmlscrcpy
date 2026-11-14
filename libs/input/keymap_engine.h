@@ -33,11 +33,13 @@ public:
     void SetMap(const KeyMap &map);
     const KeyMap &Map() const { return map_; }
 
+    QStringList TrackedKeys() const;                                                            // 所有被映射的键名，轮询物理状态用
     bool Handles(const QString &key) const;                                                     // 这个键是否被映射，决定要不要拦下来
 
     QVector<KeyMapAction> Press(const QString &key);                                            // 按下某个键，返回要发的动作
     QVector<KeyMapAction> Release(const QString &key);                                          // 松开，返回要发的动作
     QVector<KeyMapAction> Reset();                                                              // 全部抬起（断线、退出映射模式时用）
+    QVector<KeyMapAction> Tick();                                                               // 心跳：摇杆按着时补一条原地 MOVE
 
 private:
     quint64 PointerFor(int index) const { return kFirstPointerId + static_cast<quint64>(index); }

@@ -45,6 +45,12 @@ quint8 ActionCode(qsc::input::KeyMapAction::Kind kind)
     }
 }
 
+// 这个键在系统里是否还按着：自动重复会成对发 Press/Release，靠它把假的 Release 挡掉
+bool KeyPhysicallyDown(int qt_key)
+{
+    const int vk = static_cast<int>(qt_key);
+    return (::GetAsyncKeyState(vk) & 0x8000) != 0;
+}
 // Qt 的键值转成配置里写的文本：Q → "Q"，空格 → "Space"
 QString KeyName(int qt_key)
 {
@@ -431,6 +437,28 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
     fps_timer_->setInterval(1000);
     QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::ReportSecond);
     fps_timer_->start();
+
+    // 摇杆心跳：部分设备会把完全静止的触摸判成别的状态，每 100ms 补一条同样的 MOVE
+    keymap_tick_timer_ = new QTimer(this);
+    keymap_tick_timer_->setInterval(100);
+    QObject::connect(keymap_tick_timer_, &QTimer::timeout, this, [this]()
+    {
+        if (map_mode_ != 1)
+        {
+            return;
+        }
+        for (const qsc::input::KeyMapAction &action : key_map_engine_.Tick())
+        {
+            EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
+        }
+    });
+    keymap_tick_timer_->start();
+
+    // 映射键用轮询判断按下/松开：Qt 的自动重复事件在 Windows 上不可信，成对的 Press/Release 会互相干扰
+    keymap_poll_timer_ = new QTimer(this);
+    keymap_poll_timer_->setInterval(16);
+    QObject::connect(keymap_poll_timer_, &QTimer::timeout, this, &VideoItem::SlotKeyMapPoll);
+    keymap_poll_timer_->start();
 
     // 松开修饰键时要抬两指，但窗口没焦点时收不到 keyRelease，所以每 250ms 问一次键盘状态兜底
     pinch_watch_timer_ = new QTimer(this);
@@ -993,16 +1021,13 @@ void VideoItem::wheelEvent(QWheelEvent *event)
 void VideoItem::keyPressEvent(QKeyEvent *event)
 {
     // 玩模式：已映射的键转成触摸，不再作为按键转发
-    if (map_mode_ == 1 && !event->isAutoRepeat() && key_map_engine_.Handles(KeyName(event->key())))
+    if (map_mode_ == 1 && key_map_engine_.Handles(KeyName(event->key())))
     {
-        for (const qsc::input::KeyMapAction &action : key_map_engine_.Press(KeyName(event->key())))
-        {
-            EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
-        }
+        // 映射键全部交给 16ms 轮询处理，这里只负责吞掉，避免 Qt 的自动重复事件干扰
         event->accept();
         return;
-    }
 
+    }
     const QByteArray message = keys_.Press(event->key(), event->modifiers(), event->isAutoRepeat());
     if (message.isEmpty())
     {
@@ -1024,14 +1049,10 @@ void VideoItem::keyReleaseEvent(QKeyEvent *event)
 
     if (map_mode_ == 1 && key_map_engine_.Handles(KeyName(event->key())))
     {
-        for (const qsc::input::KeyMapAction &action : key_map_engine_.Release(KeyName(event->key())))
-        {
-            EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
-        }
+        // 映射键的抬起同样交给轮询，这里只吞掉
         event->accept();
         return;
     }
-
     const QByteArray message = keys_.Release(event->key(), event->modifiers());
     if (message.isEmpty())
     {
@@ -1181,6 +1202,10 @@ QVariantList VideoItem::KeyMapItems() const
         entry.insert(QStringLiteral("x"), item.pos_.x());
         entry.insert(QStringLiteral("y"), item.pos_.y());
         entry.insert(QStringLiteral("radius"), item.radius_);
+        entry.insert(QStringLiteral("up"), item.up_key_);
+        entry.insert(QStringLiteral("down"), item.down_key_);
+        entry.insert(QStringLiteral("left"), item.left_key_);
+        entry.insert(QStringLiteral("right"), item.right_key_);
         list.append(entry);
     }
     return list;
@@ -1229,5 +1254,108 @@ void VideoItem::SaveKeyMap()
     if (!key_map_.Save(key_map_path_, &error))
     {
         qWarning() << "[keymap]" << error;
+    }
+}
+
+// 改摇杆的四个方向键：空的填回默认值，免得某个方向永远推不动
+void VideoItem::SetSteerKeys(int index, const QString &up, const QString &down, const QString &left,
+                             const QString &right)
+{
+    if (index < 0 || index >= key_map_.items_.size() || key_map_.items_.at(index).type_ != qsc::input::KeyMapItemType::Steer)
+    {
+        return;
+    }
+
+    qsc::input::KeyMapItem &item = key_map_.items_[index];
+    item.up_key_ = up.isEmpty() ? item.up_key_ : up;
+    item.down_key_ = down.isEmpty() ? item.down_key_ : down;
+    item.left_key_ = left.isEmpty() ? item.left_key_ : left;
+    item.right_key_ = right.isEmpty() ? item.right_key_ : right;
+
+    key_map_engine_.SetMap(key_map_);
+    emit SigKeyMapChanged();
+}
+
+// 键名字符串转成 Windows 虚拟键码：字母数字用 ASCII，其余查小表
+int VkForName(const QString &name)
+{
+    if (name.size() == 1)
+    {
+        const QChar ch = name.at(0).toUpper();
+        return ch.unicode();
+    }
+    // 表里的键名用小写：配置里可能存成 space / Space，统一按小写查
+    static const QHash<QString, int> kExtra = {
+        { QStringLiteral("space"), VK_SPACE },   { QStringLiteral("tab"), VK_TAB },
+        { QStringLiteral("esc"), VK_ESCAPE },    { QStringLiteral("enter"), VK_RETURN },
+        { QStringLiteral("up"), VK_UP },         { QStringLiteral("down"), VK_DOWN },
+        { QStringLiteral("left"), VK_LEFT },     { QStringLiteral("right"), VK_RIGHT },
+        { QStringLiteral("shift"), VK_SHIFT },   { QStringLiteral("ctrl"), VK_CONTROL },
+        { QStringLiteral("alt"), VK_MENU },
+    };
+    return kExtra.value(name.toLower(), 0);
+}
+
+// 16ms 轮询：只有"按下状态"发生变化才发触摸，自动重复事件完全不影响这里
+void VideoItem::SlotKeyMapPoll()
+{
+    if (map_mode_ != 1)
+    {
+        if (!polled_keys_.isEmpty())
+        {
+            DispatchKeyMapActions(key_map_engine_.Reset());
+            polled_keys_.clear();
+        }
+        return;
+    }
+
+    for (const QString &name : key_map_engine_.TrackedKeys())
+    {
+        const int vk = VkForName(name);
+        if (vk == 0)
+        {
+            continue;
+        }
+        const bool down = (::GetAsyncKeyState(vk) & 0x8000) != 0;
+        const bool was_down = polled_keys_.contains(name);
+        if (down == was_down)
+        {
+            continue;
+        }
+
+        if (down)
+        {
+            polled_keys_.insert(name);
+            qInfo() << "[keymap] poll down" << name;
+            DispatchKeyMapActions(key_map_engine_.Press(name));
+        }
+        else
+        {
+            polled_keys_.remove(name);
+            qInfo() << "[keymap] poll up" << name;
+            DispatchKeyMapActions(key_map_engine_.Release(name));
+        }
+    }
+}
+
+// 动作翻成控制消息：点按类先按下，40ms 后补一个抬起
+void VideoItem::DispatchKeyMapActions(const QVector<qsc::input::KeyMapAction> &actions)
+{
+    const bool tap_pair = actions.size() == 2
+                          && actions.at(0).kind_ == qsc::input::KeyMapAction::Kind::Down
+                          && actions.at(1).kind_ == qsc::input::KeyMapAction::Kind::Up;
+    for (const qsc::input::KeyMapAction &action : actions)
+    {
+        if (tap_pair && action.kind_ == qsc::input::KeyMapAction::Kind::Up)
+        {
+            const quint64 pointer = action.pointer_id_;
+            const QPointF pos = action.pos_;
+            QTimer::singleShot(40, this, [this, pointer, pos]()
+            {
+                EmitControlMessage(touch_.NormalizedTouch(pointer, 1, pos));
+            });
+            continue;
+        }
+        EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
     }
 }

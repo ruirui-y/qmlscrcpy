@@ -186,7 +186,7 @@ int KeyMap::FindByKey(const QString &key) const
 {
     for (int i = 0; i < items_.size(); ++i)
     {
-        if (items_[i].type_ != KeyMapItemType::Steer && items_[i].key_ == key)
+        if (items_[i].type_ != KeyMapItemType::Steer && items_[i].key_.compare(key, Qt::CaseInsensitive) == 0)
         {
             return i;
         }
@@ -204,7 +204,8 @@ int KeyMap::FindBySteerKey(const QString &key, KeyMapItem *item_out) const
         {
             continue;
         }
-        if (item.up_key_ == key || item.down_key_ == key || item.left_key_ == key || item.right_key_ == key)
+        if (item.up_key_.compare(key, Qt::CaseInsensitive) == 0 || item.down_key_.compare(key, Qt::CaseInsensitive) == 0
+            || item.left_key_.compare(key, Qt::CaseInsensitive) == 0 || item.right_key_.compare(key, Qt::CaseInsensitive) == 0)
         {
             if (item_out != nullptr)
             {

@@ -13,6 +13,7 @@
 
 #include "input/coordinate_mapper.h"
 #include "input/key_controller.h"
+#include <QSet>
 #include <QVariantList>
 
 #include "input/keymap.h"
@@ -83,6 +84,8 @@ public:
     int AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label);   // 新增键位，返回下标
     void MoveKeyMapItem(int index, double x, double y);                                          // 拖动键位
     void RemoveKeyMapItem(int index);                                                            // 删除键位
+    void SetSteerKeys(int index, const QString &up, const QString &down, const QString &left,
+                      const QString &right);                                                     // 改摇杆四个方向键
     void SaveKeyMap();                                                                           // 写回 JSON，编辑退出时调
 
     // 视频线程调：把最新一帧放进来（引用计数，不拷像素），旧的直接丢掉
@@ -125,6 +128,8 @@ private:
     void ReportSecond();
     bool PinchModifierHeld(Qt::KeyboardModifiers modifiers) const;                              // 当前修饰键是不是捏合键
     void PinchBy(int notches, const QPointF &pos);                                              // 按一格滚轮做一次捏合
+    void SlotKeyMapPoll();                                                                       // 轮询物理按键，状态变化才发触摸
+    void DispatchKeyMapActions(const QVector<qsc::input::KeyMapAction> &actions);                // 把动作翻成控制消息
     void EndPinch();                                                                             // 抬起两指，结束捏合
     void NotifyFrameSize();                                                                     // GUI 线程：帧尺寸变了才发信号
     void SyncMapper();                                                                          // 把画布尺寸、帧尺寸、缩放模式同步给坐标换算器
@@ -173,6 +178,7 @@ private:
     bool swap_hooked_ = false;                                                                  // frameSwapped 只接一次
     QAtomicInteger<qint64> before_sync_us_{0};                                                  // Qt 发出 beforeSynchronizing 的时刻（渲染线程）
     QTimer *fps_timer_ = nullptr;                                                               // 每秒触发一次，负责结算统计
+    QTimer *keymap_tick_timer_ = nullptr;                                                        // 摇杆心跳：按住期间每 100ms 补一条 MOVE
     QTimer *pinch_watch_timer_ = nullptr;                                                        // 100ms 轮询修饰键，兜住松手时窗口没焦点
     QString pinch_modifier_ = QStringLiteral("ctrl");                                           // 当前捏合修饰键
     bool pinch_active_ = false;                                                                 // 两根手指是否按着
@@ -182,5 +188,7 @@ private:
     qsc::input::KeyMapEngine key_map_engine_;                                                    // 按键 → 触摸动作
     QString key_map_path_;                                                                       // config/keymap/<串号>.json
     int map_mode_ = 0;                                                                           // 0 关 / 1 玩 / 2 编辑
+    QSet<QString> polled_keys_;                                                                  // 轮询到的"当前按着"的键名
+    QTimer *keymap_poll_timer_ = nullptr;                                                        // 16ms 轮询物理按键，绕开 Qt 的重复事件
     qint64 pinch_last_us_ = 0;                                                                  // 上一次捏合的时刻，用来判断要不要重置半径
 };

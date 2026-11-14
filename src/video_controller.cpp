@@ -541,3 +541,12 @@ void VideoController::RemoveKeyMapItem(int index)
         surface_->RemoveKeyMapItem(index);
     }
 }
+
+void VideoController::SetSteerKeys(int index, const QString &up, const QString &down, const QString &left,
+                                   const QString &right)
+{
+    if (surface_ != nullptr)
+    {
+        surface_->SetSteerKeys(index, up, down, left, right);
+    }
+}

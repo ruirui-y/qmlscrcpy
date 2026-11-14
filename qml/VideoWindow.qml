@@ -265,6 +265,8 @@ Window
                 Rectangle
                 {
                     id: keyMapOverlay
+                    property int steerEditIndex: -1                                                         // 正在改键的摇杆下标，-1 表示没开
+                    property var steerEditItem: null
                     anchors.fill: parent
                     visible: videoController.mapMode === 2
                     color: "#33000000"
@@ -282,6 +284,8 @@ Window
                             color: "#cc2b4a6f"
                             border.width: 1
                             border.color: "#5aa9ff"
+
+                            // 位置用绑定算：窗口尺寸变化时圆点跟着走；拖动时在 onPressed 里断掉绑定
                             x: modelData.x * keyMapOverlay.width - width / 2
                             y: modelData.y * keyMapOverlay.height - height / 2
 
@@ -297,22 +301,46 @@ Window
                             MouseArea
                             {
                                 anchors.fill: parent
-                                drag.target: parent
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onPositionChanged:
+                                drag.target: parent
+                                drag.minimumX: -parent.width / 2
+                                drag.maximumX: keyMapOverlay.width - parent.width / 2
+                                drag.minimumY: -parent.height / 2
+                                drag.maximumY: keyMapOverlay.height - parent.height / 2
+
+                                // 按下时把 x/y 的绑定断掉，否则拖动会被绑定值拉回原位
+                                onPressed:
                                 {
-                                    if (drag.active)
+                                    if (mouse.button === Qt.LeftButton)
                                     {
-                                        const nx = Math.max(0, Math.min(1, parent.x / keyMapOverlay.width))
-                                        const ny = Math.max(0, Math.min(1, parent.y / keyMapOverlay.height))
-                                        videoController.MoveKeyMapItem(modelData.index, nx, ny)
+                                        parent.x = parent.x
+                                        parent.y = parent.y
                                     }
                                 }
+
+                                // 松手才写回模型：拖动过程中写会触发 Repeater 重建，圆点会跳
+                                onReleased:
+                                {
+                                    const nx = Math.max(0, Math.min(1, (parent.x + parent.width / 2) / keyMapOverlay.width))
+                                    const ny = Math.max(0, Math.min(1, (parent.y + parent.height / 2) / keyMapOverlay.height))
+                                    videoController.MoveKeyMapItem(modelData.index, nx, ny)
+                                }
+
                                 onClicked:
                                 {
                                     if (mouse.button === Qt.RightButton)
                                     {
                                         videoController.RemoveKeyMapItem(modelData.index)
+                                        keyMapOverlay.steerEditIndex = -1
+                                    }
+                                    else if (modelData.type === 2)
+                                    {
+                                        keyMapOverlay.steerEditItem = modelData
+                                        keyMapOverlay.steerEditIndex = modelData.index
+                                        steerFields.itemAt(0).text = modelData.up
+                                        steerFields.itemAt(1).text = modelData.down
+                                        steerFields.itemAt(2).text = modelData.left
+                                        steerFields.itemAt(3).text = modelData.right
                                     }
                                 }
                             }
@@ -390,6 +418,87 @@ Window
                         text: qsTr("编辑模式：拖圆点调位置，右键删除，左下角添加键位")
                         color: "#9cc4ff"
                         font.pixelSize: 12
+                    }
+
+                    // 摇杆改键：点一下摇杆圆点就弹出来，四个方向各填一个键
+                    Rectangle
+                    {
+                        id: steerPanel
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 12
+                        width: 230
+                        height: 76
+                        radius: 6
+                        color: "#cc101820"
+                        border.width: 1
+                        border.color: "#2c323c"
+                        visible: keyMapOverlay.steerEditIndex >= 0
+
+                        Column
+                        {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 6
+
+                            Row
+                            {
+                                spacing: 6
+
+                                Repeater
+                                {
+                                    id: steerFields
+                                    model: [ { "hint": qsTr("上"), "id": "up" }, { "hint": qsTr("下"), "id": "down" },
+                                             { "hint": qsTr("左"), "id": "left" }, { "hint": qsTr("右"), "id": "right" } ]
+
+                                    TextField
+                                    {
+                                        width: 46
+                                        height: 26
+                                        placeholderText: modelData.hint
+                                        color: "#d8dee9"
+                                        font.pixelSize: 12
+                                        leftPadding: 6
+                                        background: Rectangle
+                                        {
+                                            radius: 4
+                                            color: "#151920"
+                                            border.width: 1
+                                            border.color: "#2c323c"
+                                        }
+                                    }
+                                }
+                            }
+
+                            Row
+                            {
+                                spacing: 6
+
+                                ToolButton
+                                {
+                                    width: 70
+                                    label: qsTr("保存")
+                                    onClicked:
+                                    {
+                                        const item = keyMapOverlay.steerEditItem
+                                        if (item)
+                                        {
+                                            videoController.SetSteerKeys(keyMapOverlay.steerEditIndex,
+                                                steerFields.itemAt(0).text, steerFields.itemAt(1).text,
+                                                steerFields.itemAt(2).text, steerFields.itemAt(3).text)
+                                        }
+                                        keyMapOverlay.steerEditIndex = -1
+                                    }
+                                }
+
+                                ToolButton
+                                {
+                                    width: 70
+                                    label: qsTr("取消")
+                                    onClicked: keyMapOverlay.steerEditIndex = -1
+                                }
+                            }
+                        }
                     }
                 }
                 // 文件拖放：把文件拖进画面就推到手机 Download/，拖动时给个高亮提示

@@ -11,19 +11,19 @@ namespace
 // 方向键映射成单位向量，四向同时按会自然叠加成斜向
 QPointF DirectionVector(const QString &key, const KeyMapItem &item)
 {
-    if (!item.up_key_.isEmpty() && key == item.up_key_)
+    if (!item.up_key_.isEmpty() && key.compare(item.up_key_, Qt::CaseInsensitive) == 0)
     {
         return QPointF(0.0, -1.0);
     }
-    if (!item.down_key_.isEmpty() && key == item.down_key_)
+    if (!item.down_key_.isEmpty() && key.compare(item.down_key_, Qt::CaseInsensitive) == 0)
     {
         return QPointF(0.0, 1.0);
     }
-    if (!item.left_key_.isEmpty() && key == item.left_key_)
+    if (!item.left_key_.isEmpty() && key.compare(item.left_key_, Qt::CaseInsensitive) == 0)
     {
         return QPointF(-1.0, 0.0);
     }
-    if (!item.right_key_.isEmpty() && key == item.right_key_)
+    if (!item.right_key_.isEmpty() && key.compare(item.right_key_, Qt::CaseInsensitive) == 0)
     {
         return QPointF(1.0, 0.0);
     }
@@ -188,4 +188,51 @@ QPointF KeyMapEngine::SteerPos(const KeyMapItem &item, int index) const
     return pos;
 }
 
+
+// 心跳：有些设备会把"完全静止的触摸"判成别的状态，按住摇杆期间补一条同样的 MOVE 撑住
+QVector<KeyMapAction> KeyMapEngine::Tick()
+{
+    QVector<KeyMapAction> actions;
+    if (steer_keys_.isEmpty())
+    {
+        return actions;
+    }
+
+    for (int i = 0; i < map_.items_.size(); ++i)
+    {
+        const KeyMapItem &item = map_.items_.at(i);
+        if (item.type_ != KeyMapItemType::Steer)
+        {
+            continue;
+        }
+        actions.append({ KeyMapAction::Kind::Move, PointerFor(i), SteerPos(item, i) });
+        break;
+    }
+    return actions;
+}
+
+// 所有被映射的键名：轮询要逐个查物理状态
+QStringList KeyMapEngine::TrackedKeys() const
+{
+    QStringList keys;
+    for (const KeyMapItem &item : map_.items_)
+    {
+        if (item.type_ == KeyMapItemType::Steer)
+        {
+            for (const QString &key : { item.up_key_, item.down_key_, item.left_key_, item.right_key_ })
+            {
+                if (!key.isEmpty())
+                {
+                    keys.append(key);
+                }
+            }
+        }
+        else if (!item.key_.isEmpty())
+        {
+            keys.append(item.key_);
+        }
+    }
+    keys.removeDuplicates();
+    return keys;
+}
 } // namespace qsc::input
