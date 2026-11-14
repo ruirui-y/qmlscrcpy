@@ -819,6 +819,17 @@ Window
                         onClicked: videoController.CycleMapMode()
                     }
 
+                    // 连点：抢票用，按住空格按间隔在鼠标位置连点；点一下切换 关 → 50 → 100 → 200
+                    ToolButton
+                    {
+                        label: videoController.clickerInterval > 0
+                            ? qsTr("连点 %1").arg(videoController.clickerInterval)
+                            : qsTr("连点 关")
+                        active: videoController.clickerInterval > 0
+                        tip: qsTr("开启后按住空格键，在鼠标所在位置连续点击；点一下切换间隔")
+                        onClicked: videoController.CycleClicker()
+                    }
+
                     ToolButton
                     {
                         label: qsTr("音量 +")

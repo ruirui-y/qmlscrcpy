@@ -64,6 +64,7 @@ max_fps=0
 wheel_mode=scroll
 drag_pixels=60
 drag_scale=1.0
+click_interval=0
 pinch_modifier=ctrl
 
 [device]
@@ -110,6 +111,7 @@ wheel_mode=scroll
 # 滑动模式下一格滚轮手指移动多少像素（太小会被当点击，太大一下翻过头）
 drag_pixels=60
 drag_scale=1.0
+click_interval=0
 pinch_modifier=ctrl
 # 电脑剪贴板一变就自动推到设备（会同步敏感内容，默认关）
 clipboard_autosync=false
@@ -544,4 +546,17 @@ void AppSettings::SaveVideoPosition(const QString &key, int x, int y)
     store.setValue(QStringLiteral("y"), y);
     store.endGroup();
     // 同上：位置保存也在拖动结束时触发，别同步落盘
+}
+
+// 连点间隔：0 表示关闭，按住空格时按这个间隔在鼠标位置连点
+int AppSettings::ClickerInterval() const
+{
+    return WindowStore().value(QStringLiteral("input/click_interval"), 0).toInt();
+}
+
+void AppSettings::SetClickerInterval(int ms)
+{
+    QSettings &store = WindowStore();
+    store.setValue(QStringLiteral("input/click_interval"), ms);
+    store.sync();
 }

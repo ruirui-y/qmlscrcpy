@@ -86,6 +86,8 @@ public:
     void RemoveKeyMapItem(int index);                                                            // 删除键位
     void SetSteerKeys(int index, const QString &up, const QString &down, const QString &left,
                       const QString &right);                                                     // 改摇杆四个方向键
+    void SetClickerInterval(int ms);                                                             // 连点间隔，0 = 关闭
+    int ClickerInterval() const { return clicker_interval_ms_; }
     void BeginKeyRecord(int index);                                                              // 进入录制：下一个按下的键绑到这个键位
     bool Recording() const { return record_index_ >= 0; }
     void BindRecordedKey(int qt_key);                                                            // QML 收到按键后调它完成绑定
@@ -191,6 +193,10 @@ private:
     qsc::input::KeyMap key_map_;                                                                 // 当前设备的键位配置
     qsc::input::KeyMapEngine key_map_engine_;                                                    // 按键 → 触摸动作
     QString key_map_path_;                                                                       // config/keymap/<串号>.json
+    QTimer *clicker_timer_ = nullptr;                                                            // 连点：按住空格时按间隔在鼠标位置连点
+    int clicker_interval_ms_ = 0;                                                                // 0 = 关闭
+    qint64 clicker_next_us_ = 0;                                                                 // 下一次该点的时刻
+    QPointF clicker_pos_;                                                                        // 最近一次算出的连点位置（归一化）
     int record_index_ = -1;                                                                      // 正在录制的键位下标，-1 表示没在录
     int map_mode_ = 0;                                                                           // 0 关 / 1 玩 / 2 编辑
     QSet<QString> polled_keys_;                                                                  // 轮询到的"当前按着"的键名

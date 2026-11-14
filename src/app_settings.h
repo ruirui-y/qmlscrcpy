@@ -51,6 +51,8 @@ public:
 
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮手指移动多少像素，window.ini 里调过的优先
     void SetDragPixels(int pixels);
+    int ClickerInterval() const;                                                                // 连点间隔毫秒，0 = 关闭
+    void SetClickerInterval(int ms);
     double DragScale() const;                                                                   // 左键拖拽倍率：鼠标拖 1 像素手指走多少像素
     QString PinchModifier() const;                                                              // 捏合修饰键：ctrl / alt / shift / ctrl_alt / none
     void SetPinchModifier(const QString &modifier);

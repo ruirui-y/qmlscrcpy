@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QKeySequence>
+#include <QCursor>
 #include <QTimer>
 #include <QQuickWindow>
 #include <windows.h>
@@ -29,6 +30,8 @@ using qsc::stream::Frame;
 
 namespace
 {
+
+constexpr quint64 kClickerPointerId = 99;                                                       // 连点专用手指，避开鼠标和映射键
 
 // 引擎的动作枚举转成协议那边的 0 按下 / 1 抬起 / 2 移动
 quint8 ActionCode(qsc::input::KeyMapAction::Kind kind)
@@ -459,6 +462,48 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
     keymap_poll_timer_->setInterval(16);
     QObject::connect(keymap_poll_timer_, &QTimer::timeout, this, &VideoItem::SlotKeyMapPoll);
     keymap_poll_timer_->start();
+
+    // 连点：按住空格时按设定间隔在鼠标位置连续点击
+    clicker_timer_ = new QTimer(this);
+    clicker_timer_->setInterval(10);
+    QObject::connect(clicker_timer_, &QTimer::timeout, this, [this]()
+    {
+        if (clicker_interval_ms_ <= 0 || map_mode_ == 2 || width() <= 0 || height() <= 0)
+        {
+            return;
+        }
+
+        // 位置直接查全局光标：不做 hover 跟踪，避免影响滚轮和拖动
+        const QPointF local = mapFromGlobal(QCursor::pos());
+        if (local.x() < 0 || local.y() < 0 || local.x() >= width() || local.y() >= height())
+        {
+            return;
+        }
+        clicker_pos_ = QPointF(local.x() / width(), local.y() / height());
+
+        // 空格没按着就什么都不做，按下去的瞬间重新计时
+        if ((::GetAsyncKeyState(VK_SPACE) & 0x8000) == 0)
+        {
+            clicker_next_us_ = 0;
+            return;
+        }
+
+        const qint64 now_us = clock_.nsecsElapsed() / 1000;
+        if (clicker_next_us_ != 0 && now_us < clicker_next_us_)
+        {
+            return;
+        }
+        clicker_next_us_ = now_us + static_cast<qint64>(clicker_interval_ms_) * 1000;
+
+        // 用和鼠标点击相同的通道发：按下 + 20ms 后抬起
+        EmitControlMessage(touch_.NormalizedTouch(kClickerPointerId, 0, clicker_pos_));
+        const QPointF pos = clicker_pos_;
+        QTimer::singleShot(20, this, [this, pos]()
+        {
+            EmitControlMessage(touch_.NormalizedTouch(kClickerPointerId, 1, pos));
+        });
+    });
+    clicker_timer_->start();
 
     // 松开修饰键时要抬两指，但窗口没焦点时收不到 keyRelease，所以每 250ms 问一次键盘状态兜底
     pinch_watch_timer_ = new QTimer(this);
@@ -1392,3 +1437,11 @@ void VideoItem::BindRecordedKey(int qt_key)
     }
     emit SigRecordingChanged();
 }
+
+// 连点间隔：0 关，其它值按毫秒连点；同时把开关状态记进配置
+void VideoItem::SetClickerInterval(int ms)
+{
+    clicker_interval_ms_ = qBound(0, ms, 1000);
+    clicker_next_us_ = 0;
+}
+

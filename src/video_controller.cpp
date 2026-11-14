@@ -66,6 +66,7 @@ void VideoController::SetSurface(QObject *surface)
     QObject::connect(surface_, &VideoItem::SigMapModeChanged, this, &VideoController::SigMapModeChanged);
     QObject::connect(surface_, &VideoItem::SigKeyMapChanged, this, &VideoController::SigKeyMapChanged);
     QObject::connect(surface_, &VideoItem::SigRecordingChanged, this, &VideoController::SigRecordingChanged);
+    surface_->SetClickerInterval(AppSettings().ClickerInterval());
 }
 
 // 画布翻好的输入消息，转手交给会话层写出去
@@ -570,5 +571,28 @@ void VideoController::BindRecordedKey(int qt_key)
     if (surface_ != nullptr)
     {
         surface_->BindRecordedKey(qt_key);
+    }
+}
+
+int VideoController::ClickerInterval() const
+{
+    return surface_ != nullptr ? surface_->ClickerInterval() : 0;
+}
+
+// 工具栏按钮：关 → 50ms → 100ms → 200ms → 关
+void VideoController::CycleClicker()
+{
+    if (surface_ == nullptr)
+    {
+        return;
+    }
+    const int current = surface_->ClickerInterval();
+    const int next = current <= 0 ? 50 : (current == 50 ? 100 : (current == 100 ? 200 : 0));
+    surface_->SetClickerInterval(next);
+    AppSettings().SetClickerInterval(next);
+    emit SigClickerChanged();
+    if (writer_ != nullptr)
+    {
+        writer_->ReportStatus(next > 0 ? QStringLiteral("连点：%1ms").arg(next) : QStringLiteral("连点已关闭"));
     }
 }
