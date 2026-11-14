@@ -17,6 +17,27 @@ Window
     title: qsTr("QmlScrcpy")
     color: "#14161a"
 
+    // 首帧闪白：窗口会先被系统画一帧白底，等 GL 出第一帧才变深色。
+    // 先整窗透明，等 frameSwapped（第一帧真的提交了）再显出来，肉眼就看不到白底。
+    opacity: 0
+
+    onFrameSwapped:
+    {
+        if (opacity === 0)
+        {
+            opacity = 1
+        }
+    }
+
+    // 保险：万一 frameSwapped 没来（窗口完全透明时有些平台会跳过渲染），600ms 后强制显现
+    Timer
+    {
+        interval: 600
+        running: true
+        repeat: false
+        onTriggered: controlWindow.opacity = 1
+    }
+
     // 主窗控制整个进程：关掉它就退出（投屏窗和工具栏跟着走）
     onClosing: Qt.quit()
 
