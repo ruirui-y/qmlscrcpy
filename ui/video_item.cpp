@@ -1059,7 +1059,17 @@ void VideoItem::wheelEvent(QWheelEvent *event)
     {
         EmitControlMessage(message);
     }
-    event->accept();
+
+    // 拖动模式：抬起延后 120ms，让手指在终点停稳；安卓取最后 100ms 的速度，停住就不会甩动
+    if (touch_.Mode() == qsc::input::WheelMode::Drag)
+    {
+        const QPointF pos = event->position();
+        const int count = notches;
+        QTimer::singleShot(120, this, [this, pos, count]()
+        {
+            EmitControlMessage(touch_.ScrollDragEnd(pos, count));
+        });
+    }
 }
 
 // 按键按下：没映射的键交回基类处理

@@ -37,6 +37,7 @@ public:
 
     // 滚轮：正数表示往上滚；拖动模式会返回三条消息，所以用容器
     QVector<QByteArray> Scroll(const QPointF &pos, int notches);
+    QByteArray ScrollDragEnd(const QPointF &pos, int notches);                                  // 拖动模式的抬起，延迟调用避免甩动
 
     // 双指捏合：begin 两指按下，step 只移动，end 抬起；radius 单位是帧坐标像素
     QVector<QByteArray> PinchBegin(const QPointF &center, int radius);

@@ -586,8 +586,8 @@ void VideoController::CycleClicker()
     {
         return;
     }
-    const int current = surface_->ClickerInterval();
-    const int next = current <= 0 ? 50 : (current == 50 ? 100 : (current == 100 ? 200 : 0));
+    // 只有开和关两态：固定 50ms，档位多了也没人用
+    const int next = surface_->ClickerInterval() > 0 ? 0 : 50;
     surface_->SetClickerInterval(next);
     AppSettings().SetClickerInterval(next);
     emit SigClickerChanged();

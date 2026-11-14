@@ -1,5 +1,7 @@
 #include "input/touch_controller.h"
 
+#include <QDebug>
+
 #include "protocol/control_message.h"
 
 namespace qsc::input
@@ -164,7 +166,7 @@ QVector<QByteArray> TouchController::ScrollByDrag(const QPointF &pos, int notche
 
     messages.append(protocol::ControlMessage::InjectTouch(down));
     messages.append(protocol::ControlMessage::InjectTouch(move));
-    messages.append(protocol::ControlMessage::InjectTouch(up));
+    // 抬起不在这里发：立刻抬起会让列表判定成"极快甩动"，抬起由 ScrollDragEnd 延迟发
     return messages;
 }
 
@@ -302,4 +304,27 @@ QByteArray TouchController::MakeTouch(quint8 action, const QPointF &pos)
     return protocol::ControlMessage::InjectTouch(event);
 }
 
+// 拖动模式下那一格的抬起：调用方隔 30ms 再调，速度降下来就不会触发惯性甩动
+QByteArray TouchController::ScrollDragEnd(const QPointF &pos, int notches)
+{
+    if (mapper_ == nullptr)
+    {
+        return QByteArray();
+    }
+
+    bool inside = false;
+    const QPoint frame_pos = mapper_->Map(pos, &inside);
+    if (!inside)
+    {
+        return QByteArray();
+    }
+
+    const QSize screen = mapper_->FrameSize();
+    const int delta = (notches > 0 ? 1 : -1) * drag_pixels_ * qAbs(notches);
+    const int end_y = qBound(0, frame_pos.y() + delta, screen.height() - 1);
+    const QPoint end(frame_pos.x(), end_y);
+    return MakeTouchAt(kMousePointerId, kActionUp, end);
+}
+
 } // namespace qsc::input
+
