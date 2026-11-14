@@ -131,11 +131,17 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
     const qint64 pass_start_us = video_item->SyncStartUs();
 
     FrameTracePtr trace;
-    const Frame frame = video_item->TakePendingFrame(&trace);
+    qint64 arrive_us = 0;
+
+    // 先清掉上一轮的到达时刻：这一轮没取到帧时，MarkSwapped 就不会把旧值算成延迟
+    video_item->SetPassArriveUs(0);
+    video_item->SetPassSyncUs(pass_start_us);
+    const Frame frame = video_item->TakePendingFrame(&trace, &arrive_us);
     if (!frame.IsValid())
     {
         return;
     }
+    video_item->SetPassArriveUs(arrive_us);
 
     // 这一帧等渲染线程等了多久：拆成 update() → 渲染线程被唤醒 → Qt 同步前准备 → synchronize
     const qint64 update_done_us = trace ? trace->update_done_us.load() : 0;
@@ -365,9 +371,13 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
     setAcceptedMouseButtons(Qt::LeftButton);                                                    // 只认左键：右键留给后面做菜单
 
     // 重绘由 Present 逐帧投递，尺寸变化也在 Present 里通知，GUI 线程不再有 8ms 轮询定时器
+    trace_enabled_ = qEnvironmentVariableIntValue("QS_TRACE_FRAMES") == 1;
+    qInfo() << "[perf] 逐帧追踪" << (trace_enabled_ ? "开" : "关");
+
+    // 每秒结算一次：到达 / 上屏 / 丢帧率 / 延迟分布
     fps_timer_ = new QTimer(this);
     fps_timer_->setInterval(1000);
-    QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::UpdateFps);
+    QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::ReportSecond);
     fps_timer_->start();
 }
 
@@ -428,35 +438,67 @@ void VideoItem::Present(const Frame &frame)
 
     const qint64 enqueue_us = clock_.nsecsElapsed() / 1000;
 
-    // 每一帧带一份自己的事件记录，从到达到上屏（或到被顶掉）都由它自己记
-    auto trace = std::make_shared<FrameTrace>();
-    trace->id = ++next_frame_id_;
-    trace->arrive_us = enqueue_us;
-
+    // 到达间隔分档：和上屏延迟分开统计，一个看源多快、一个看我们多慢
     const qint64 prev_present_us = last_present_us_.fetchAndStoreRelaxed(enqueue_us);
-    if (prev_present_us > 0)
+    const qint64 gap_us = prev_present_us > 0 ? (enqueue_us - prev_present_us) : 0;
+    if (gap_us > 0 && gap_us < 1000000)
     {
-        trace->gap_us = enqueue_us - prev_present_us;
+        if (gap_us < 8500)
+        {
+            gap_lt85_.ref();
+        }
+        else if (gap_us < 17000)
+        {
+            gap_85_17_.ref();
+        }
+        else if (gap_us < 34000)
+        {
+            gap_17_34_.ref();
+        }
+        else
+        {
+            gap_gt34_.ref();
+        }
+    }
+
+    // 逐帧追踪才建 Trace；平时只有计数和两个时间戳，开销可以忽略
+    FrameTracePtr trace;
+    if (trace_enabled_)
+    {
+        trace = std::make_shared<FrameTrace>();
+        trace->id = ++next_frame_id_;
+        trace->arrive_us = enqueue_us;
+        trace->gap_us = gap_us;
     }
 
     FrameTracePtr replaced_trace;
     qint64 replaced_alive_us = 0;
+    bool replaced = false;
     bool size_changed = false;
     {
         QMutexLocker locker(&mutex_);
         // 只留最新一帧：视频线程比渲染快的时候，旧帧直接覆盖，不排队
-        if (has_pending_)
+        replaced = has_pending_;
+        if (replaced && trace_enabled_)
         {
             replaced_trace = pending_trace_;
             replaced_alive_us = enqueue_us - pending_trace_->arrive_us;
         }
         size_changed = frame_size_ != frame.Size();
         pending_ = frame;
-        pending_trace_ = trace;
+        pending_arrive_us_ = enqueue_us;
+        if (trace_enabled_)
+        {
+            pending_trace_ = trace;
+        }
         has_pending_ = true;
         frame_size_ = frame.Size();
     }
     frames_arrived_.ref();
+    if (replaced)
+    {
+        frames_dropped_.ref();
+    }
 
     // 尺寸变了（设备旋转）才通知 QML；emit 只能在 GUI 线程做，投递一次
     if (size_changed)
@@ -471,12 +513,18 @@ void VideoItem::Present(const Frame &frame)
     }
 
     // 到帧就排队请求一次重绘：视频线程直接调 update() 不安全，投递到 GUI 线程执行
-    QMetaObject::invokeMethod(this, [this, trace]()
+    QMetaObject::invokeMethod(this, [this, trace, enqueue_us]()
     {
         const qint64 start_us = clock_.nsecsElapsed() / 1000;
-        trace->queue_us.store(start_us - trace->arrive_us);
+        if (trace)
+        {
+            trace->queue_us.store(start_us - trace->arrive_us);
+        }
         update();
-        trace->update_done_us.store(clock_.nsecsElapsed() / 1000);
+        if (trace)
+        {
+            trace->update_done_us.store(clock_.nsecsElapsed() / 1000);
+        }
 
         // 交换缓冲发生在我们看不见的地方，接 frameSwapped 才能量到它阻塞了多久
         if (!swap_hooked_ && window() != nullptr)
@@ -513,8 +561,8 @@ bool VideoItem::eventFilter(QObject *watched, QEvent *event)
     return QQuickFramebufferObject::eventFilter(watched, event);
 }
 
-// 渲染线程调：取走最新一帧和它的事件记录，没有就返回无效帧
-Frame VideoItem::TakePendingFrame(FrameTracePtr *trace_out)
+// 渲染线程调：取走最新一帧（连它的到达时刻和事件记录），没有就返回无效帧
+Frame VideoItem::TakePendingFrame(FrameTracePtr *trace_out, qint64 *arrive_us_out)
 {
     QMutexLocker locker(&mutex_);
     if (!has_pending_)
@@ -525,6 +573,10 @@ Frame VideoItem::TakePendingFrame(FrameTracePtr *trace_out)
     if (trace_out != nullptr)
     {
         *trace_out = pending_trace_;
+    }
+    if (arrive_us_out != nullptr)
+    {
+        *arrive_us_out = pending_arrive_us_;
     }
     pending_ = Frame();
     pending_trace_.reset();
@@ -551,9 +603,44 @@ qint64 VideoItem::SyncStartUs() const
     return sync_start_us_.loadRelaxed();
 }
 
-// 这一帧真正提交给系统了：交换缓冲阻塞多久算在它自己头上，然后整条打出来
+// 这一帧真正提交给系统了：先记统计（永远开），开启追踪时再打整条明细
 void VideoItem::MarkSwapped()
 {
+    const qint64 now_us = clock_.nsecsElapsed() / 1000;
+
+    // 上屏延迟 = 现在 - 本轮取走那一帧的到达时刻；取完清零。
+    // 两条防陈旧：帧不早于本轮 sync（真属于这一轮），且 swap 离 sync 不超过 100ms
+    const qint64 arrive_us = pass_arrive_us_.fetchAndStoreRelaxed(0);
+    const qint64 pass_sync_us = pass_sync_us_.loadRelaxed();
+    const bool fresh = arrive_us > 0 && pass_sync_us >= arrive_us
+                       && (pass_sync_us - arrive_us) < 100000
+                       && (now_us - pass_sync_us) < 100000;
+    if (fresh && now_us > arrive_us)
+    {
+        const qint64 latency_us = now_us - arrive_us;
+        frames_swapped_.ref();
+        if (latency_us < 1000)
+        {
+            lat_lt1_.ref();
+        }
+        else if (latency_us < 2000)
+        {
+            lat_1_2_.ref();
+        }
+        else if (latency_us < 3000)
+        {
+            lat_2_3_.ref();
+        }
+        else
+        {
+            lat_gt3_.ref();
+        }
+        if (latency_us > lat_max_us_.loadRelaxed())
+        {
+            lat_max_us_.storeRelaxed(latency_us);
+        }
+    }
+
     FrameTracePtr trace;
     {
         QMutexLocker locker(&mutex_);
@@ -565,7 +652,6 @@ void VideoItem::MarkSwapped()
         return;
     }
 
-    const qint64 now_us = clock_.nsecsElapsed() / 1000;
     const qint64 render_end_us = trace->render_end_us.load();
     if (render_end_us > 0 && now_us > render_end_us)
     {
@@ -626,19 +712,68 @@ void VideoItem::NotifyFrameSize()
     }
 }
 
-// 每秒结算一次"收到多少帧"（渲染帧数看 [perf] 行里的「渲」）
-void VideoItem::UpdateFps()
+// 每秒结算一次：帧数 / 丢帧率一行，上屏延迟与到达间隔各一行
+void VideoItem::ReportSecond()
 {
     const int arrived = frames_arrived_.loadAcquire();
-    // 用成员变量而不是函数内 static：断线重连时计数器归零，static 会算出一个巨大的负数
     const int frames = arrived - fps_last_arrived_;
     fps_last_arrived_ = arrived;
-    if (frames == fps_)
+
+    const int swapped = frames_swapped_.fetchAndStoreOrdered(0);
+    const int dropped = frames_dropped_.fetchAndStoreOrdered(0);
+    const int l_lt1 = lat_lt1_.fetchAndStoreOrdered(0);
+    const int l_12 = lat_1_2_.fetchAndStoreOrdered(0);
+    const int l_23 = lat_2_3_.fetchAndStoreOrdered(0);
+    const int l_gt3 = lat_gt3_.fetchAndStoreOrdered(0);
+    const qint64 max_us = lat_max_us_.fetchAndStoreOrdered(0);
+    const int g_lt85 = gap_lt85_.fetchAndStoreOrdered(0);
+    const int g_8517 = gap_85_17_.fetchAndStoreOrdered(0);
+    const int g_1734 = gap_17_34_.fetchAndStoreOrdered(0);
+    const int g_gt34 = gap_gt34_.fetchAndStoreOrdered(0);
+
+    if (frames != fps_)
+    {
+        fps_ = frames;
+        emit SigFpsChanged();
+    }
+
+    // 窗口还没显示时全是"丢"，这种秒不报，避免启动噪音
+    if (swapped <= 0)
     {
         return;
     }
-    fps_ = frames;
-    emit SigFpsChanged();
+
+    const double drop_rate = frames > 0 ? (100.0 * dropped / frames) : 0.0;
+    const int lat_total = l_lt1 + l_12 + l_23 + l_gt3;
+    const int gap_total = g_lt85 + g_8517 + g_1734 + g_gt34;
+
+    const auto percent = [](int count, int total)
+    {
+        return total > 0 ? (100.0 * count / total) : 0.0;
+    };
+    const auto pcts = [&percent](int count, int total)
+    {
+        return QString::number(percent(count, total), 'f', 0);
+    };
+
+    qInfo().noquote() << QStringLiteral("[perf] 1s 到达 %1 帧，上屏 %2 帧，丢 %3（%4%）")
+                             .arg(frames)
+                             .arg(swapped)
+                             .arg(dropped)
+                             .arg(QString::number(drop_rate, 'f', 1));
+
+    qInfo().noquote() << QStringLiteral("[perf]     上屏延迟 <1.5ms %1% / 1.5~2.5ms %2% / 2.5~3.5ms %3% / >3.5ms %4%，最大 %5 ms")
+                             .arg(pcts(l_lt1, lat_total))
+                             .arg(pcts(l_12, lat_total))
+                             .arg(pcts(l_23, lat_total))
+                             .arg(pcts(l_gt3, lat_total))
+                             .arg(QString::number(max_us / 1000.0, 'f', 1));
+
+    qInfo().noquote() << QStringLiteral("[perf]     到达间隔 <8.5ms %1% / 8.5~17ms %2% / 17~34ms %3% / >34ms %4%")
+                             .arg(pcts(g_lt85, gap_total))
+                             .arg(pcts(g_8517, gap_total))
+                             .arg(pcts(g_1734, gap_total))
+                             .arg(pcts(g_gt34, gap_total));
 }
 
 // 画布尺寸变了，重绘一次让 FBO 跟上
