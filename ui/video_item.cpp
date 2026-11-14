@@ -45,7 +45,8 @@ void PrintTrace(const FrameTracePtr& trace, bool swapped, qint64 alive_us)
     }
 
 
-    qInfo().nospace() << "  帧 " << trace->id << " 上屏：到达间隔 " << ms(trace->gap_us) << "，GUI 排队 "
+    qInfo().nospace() << "  帧 " << trace->id << " 上屏：到达间隔 " << ms(trace->gap_us) << "，上屏间隔 "
+                      << ms(trace->swap_gap_us) << "，GUI 排队 "
         << ms(trace->queue_us.load()) << "，GUI 到渲染线程 " << ms(trace->schedule_us.load())
         << "，唤醒 " << ms(trace->schedule_us.load()) << "，预处理 " << ms(trace->preprocess_us.load()) << "，取帧 " << ms(trace->sync_us.load())
         << "，画一帧 " << ms(trace->draw_us.load()) << "，交换阻塞 " << ms(trace->swap_us.load())
@@ -608,6 +609,41 @@ void VideoItem::MarkSwapped()
 {
     const qint64 now_us = clock_.nsecsElapsed() / 1000;
 
+    // 先把这一轮的事件记录取出来，统计和逐帧打印都用它
+    FrameTracePtr trace;
+    {
+        QMutexLocker locker(&mutex_);
+        trace = swapped_trace_;
+        swapped_trace_.reset();
+    }
+
+    // 上屏间隔：相邻两次 frameSwapped 的间距，用来判断"没丢帧但看着卡"是不是抖动
+    if (last_swap_us_ > 0 && now_us > last_swap_us_)
+    {
+        const qint64 swap_gap = now_us - last_swap_us_;
+        if (trace)
+        {
+            trace->swap_gap_us = swap_gap;
+        }
+        if (swap_gap < 8500)
+        {
+            swap_lt85_.ref();
+        }
+        else if (swap_gap < 17000)
+        {
+            swap_85_17_.ref();
+        }
+        else if (swap_gap < 34000)
+        {
+            swap_17_34_.ref();
+        }
+        else
+        {
+            swap_gt34_.ref();
+        }
+    }
+    last_swap_us_ = now_us;
+
     // 上屏延迟 = 现在 - 本轮取走那一帧的到达时刻；取完清零。
     // 两条防陈旧：帧不早于本轮 sync（真属于这一轮），且 swap 离 sync 不超过 100ms
     const qint64 arrive_us = pass_arrive_us_.fetchAndStoreRelaxed(0);
@@ -641,12 +677,6 @@ void VideoItem::MarkSwapped()
         }
     }
 
-    FrameTracePtr trace;
-    {
-        QMutexLocker locker(&mutex_);
-        trace = swapped_trace_;
-        swapped_trace_.reset();
-    }
     if (!trace)
     {
         return;
@@ -730,6 +760,10 @@ void VideoItem::ReportSecond()
     const int g_8517 = gap_85_17_.fetchAndStoreOrdered(0);
     const int g_1734 = gap_17_34_.fetchAndStoreOrdered(0);
     const int g_gt34 = gap_gt34_.fetchAndStoreOrdered(0);
+    const int w_lt85 = swap_lt85_.fetchAndStoreOrdered(0);
+    const int w_8517 = swap_85_17_.fetchAndStoreOrdered(0);
+    const int w_1734 = swap_17_34_.fetchAndStoreOrdered(0);
+    const int w_gt34 = swap_gt34_.fetchAndStoreOrdered(0);
 
     if (frames != fps_)
     {
@@ -774,6 +808,13 @@ void VideoItem::ReportSecond()
                              .arg(pcts(g_8517, gap_total))
                              .arg(pcts(g_1734, gap_total))
                              .arg(pcts(g_gt34, gap_total));
+
+    const int swap_total = w_lt85 + w_8517 + w_1734 + w_gt34;
+    qInfo().noquote() << QStringLiteral("[perf]     上屏间隔 <8.5ms %1% / 8.5~17ms %2% / 17~34ms %3% / >34ms %4%")
+                             .arg(pcts(w_lt85, swap_total))
+                             .arg(pcts(w_8517, swap_total))
+                             .arg(pcts(w_1734, swap_total))
+                             .arg(pcts(w_gt34, swap_total));
 }
 
 // 画布尺寸变了，重绘一次让 FBO 跟上

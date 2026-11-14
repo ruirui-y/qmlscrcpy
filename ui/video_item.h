@@ -25,6 +25,7 @@ struct FrameTrace
     quint64 id = 0;                                                                             // 帧序号，从 1 开始
     qint64 arrive_us = 0;                                                                       // 到进程的时刻
     qint64 gap_us = 0;                                                                          // 距上一帧到达的间隔
+    qint64 swap_gap_us = 0;                                                                     // 距上一帧上屏的间隔
     std::atomic<qint64> queue_us{-1};                                                           // 事件在 GUI 队列里等多久
     std::atomic<qint64> update_done_us{0};                                                      // update() 执行完的时刻
     std::atomic<qint64> schedule_us{-1};                                                        // update 完到渲染线程被唤醒（beforeSynchronizing）
@@ -134,6 +135,11 @@ private:
     QAtomicInt gap_85_17_{0};                                                                  // 8.5~17ms（约 60fps）
     QAtomicInt gap_17_34_{0};                                                                  // 17~34ms（约 30fps）
     QAtomicInt gap_gt34_{0};                                                                   // > 34ms（低于 30fps）
+    QAtomicInt swap_lt85_{0};                                                                  // 上屏间隔 < 8.5ms
+    QAtomicInt swap_85_17_{0};                                                                 // 8.5~17ms
+    QAtomicInt swap_17_34_{0};                                                                 // 17~34ms
+    QAtomicInt swap_gt34_{0};                                                                  // > 34ms
+    qint64 last_swap_us_ = 0;                                                                   // 上一帧上屏（frameSwapped）的时刻
     QAtomicInteger<qint64> lat_max_us_{0};                                                      // 这一秒最大上屏延迟
     QAtomicInteger<qint64> pass_arrive_us_{0};                                                  // 本轮取走那一帧的到达时刻
     QAtomicInteger<qint64> pass_sync_us_{0};                                                    // 本轮 synchronize 的开始时刻
