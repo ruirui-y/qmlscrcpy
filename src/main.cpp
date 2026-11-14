@@ -52,9 +52,13 @@ QQuickWindow *FindVideoWindow()
 // 高 DPI 和默认 GL 格式，都必须在 QGuiApplication 构造之前定好
 void PrepareSurfaceFormat()
 {
-    // Qt 默认的 threaded/basic 渲染循环里，update() 之后要过约 5ms 才处理重绘请求，
-    // 实测换到 windows 循环后这段变成 2ms，客户端总延迟 7.1ms → 3.8ms
-    qputenv("QSG_RENDER_LOOP", "windows");
+    // Qt 用一个定时器给"下一帧什么时候准备"留余量，默认 5ms；关掉这个余量后
+    // update() 到渲染线程被唤醒从 5ms 降到 0.1ms，客户端总延迟 6.3ms → 2.4ms。
+    // 换 windows 渲染循环只是绕过同一段等待（3.8ms），不如直接把余量关掉。
+    if (qEnvironmentVariableIsEmpty("QT_QPA_UPDATE_IDLE_TIME"))
+    {
+        qputenv("QT_QPA_UPDATE_IDLE_TIME", "0");
+    }
 
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
