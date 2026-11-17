@@ -22,11 +22,11 @@ if(NOT deploy_result EQUAL 0)
 endif()
 
 # 部署完必须能在 exe 旁边看到 QML 模块树。
-# 注意 windeployqt 是平铺拷的：QtQuick.2/、QtQuick/Controls.2/ 直接躺在 exe 旁边，
-# 不放在 qml/ 子目录里，所以这里要递归找而不是只看 qml/。
+# 注意两代 windeployqt 布局不一样：Qt5 平铺拷到 exe 旁边（QtQuick.2/、QtQuick/Controls.2/），
+# Qt6 改成放进 exe 旁边的 qml/ 子目录。所以按"任意一层里有 qmldir"去找，两边都能命中。
 # 少了这一步，构建是"成功"的，启动才报一堆 "module QtQuick is not installed"。
 get_filename_component(binary_dir "${QS_BINARY}" DIRECTORY)
-file(GLOB_RECURSE deployed_qmldir "${binary_dir}/QtQuick*/qmldir" "${binary_dir}/QtQml*/qmldir")
+file(GLOB_RECURSE deployed_qmldir "${binary_dir}/*/qmldir")
 if(NOT deployed_qmldir)
     message(FATAL_ERROR "QML 模块没被部署到 ${binary_dir}，检查 --qmldir 是否指到了 qml 目录")
 endif()

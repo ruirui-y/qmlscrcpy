@@ -1,7 +1,7 @@
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Window 2.15
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Window
 
 // 控制窗：一行操作 + 一行状态。画面和工具栏都在 VideoWindow 里。
 // 按钮和输入框都用自绘背景：系统默认样式在不同 DPI 的屏幕上会变成白底方块。
@@ -637,6 +637,7 @@ Window
                     color: "#d8dee9"
                     font.pixelSize: 13
                     leftPadding: 10
+                    verticalAlignment: TextInput.AlignVCenter
                     placeholderTextColor: "#6b7280"
 
                     background: Rectangle

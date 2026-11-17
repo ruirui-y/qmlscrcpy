@@ -14,5 +14,5 @@ add_library(qsc_protocol STATIC
 # 一眼看出来自哪个模块，以后加 session/ 也不会撞名
 target_include_directories(qsc_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-# PUBLIC：链接本库的人自动拿到 Qt5::Core 和我们的编译选项，不用每个 target 重复写
-target_link_libraries(qsc_protocol PUBLIC Qt5::Core qs_options)
+# PUBLIC：链接本库的人自动拿到 Qt6::Core 和我们的编译选项，不用每个 target 重复写
+target_link_libraries(qsc_protocol PUBLIC Qt6::Core qs_options)

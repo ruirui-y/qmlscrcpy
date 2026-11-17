@@ -28,6 +28,33 @@
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"
       }
+    },
+    {
+      "name": "windows-qt6-base",
+      "hidden": true,
+      "description": "Windows x64 + MSVC 2022 + Qt 6.8.3 msvc2022_64（装在 H:/Qt）",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "H:/Qt/6.8.3/msvc2022_64"
+      }
+    },
+    {
+      "name": "qt6-debug",
+      "displayName": "QmlScrcpy Qt6 Debug",
+      "inherits": "windows-qt6-base",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug"
+      }
+    },
+    {
+      "name": "qt6-release",
+      "displayName": "QmlScrcpy Qt6 Release",
+      "inherits": "windows-qt6-base",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
@@ -39,6 +66,16 @@
     {
       "name": "build-windows-release",
       "configurePreset": "windows-release",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "build-qt6-debug",
+      "configurePreset": "qt6-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "build-qt6-release",
+      "configurePreset": "qt6-release",
       "configuration": "RelWithDebInfo"
     }
   ]

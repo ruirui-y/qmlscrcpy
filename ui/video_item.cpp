@@ -668,22 +668,6 @@ void VideoItem::Present(const Frame &frame)
         {
             trace->update_done_us.store(clock_.nsecsElapsed() / 1000);
         }
-
-        // 交换缓冲发生在我们看不见的地方，接 frameSwapped 才能量到它阻塞了多久
-        if (!swap_hooked_ && window() != nullptr)
-        {
-            QObject::connect(window(), &QQuickWindow::frameSwapped, this, [this]() { MarkSwapped(); },
-                             Qt::UniqueConnection);
-
-            // 渲染线程刚开始这一轮的时刻：它到 synchronize 之间的差就是 Qt 自己的准备工作
-            QObject::connect(window(), &QQuickWindow::beforeSynchronizing, this, [this]()
-            {
-                before_sync_us_.storeRelaxed(clock_.nsecsElapsed() / 1000);
-            }, Qt::DirectConnection);
-
-            swap_hooked_ = true;
-        }
-
     }, Qt::QueuedConnection);
 }
 
@@ -949,12 +933,36 @@ void VideoItem::ReportSecond()
                              .arg(pcts(w_gt34, swap_total));
 }
 
-// 画布尺寸变了，重绘一次让 FBO 跟上
-void VideoItem::geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry)
+// 画布尺寸变了，重绘一次让 FBO 跟上（Qt6 起钩子名是 geometryChange）
+void VideoItem::geometryChange(const QRectF &new_geometry, const QRectF &old_geometry)
 {
-    QQuickItem::geometryChanged(new_geometry, old_geometry);
+    QQuickItem::geometryChange(new_geometry, old_geometry);
     // 画布尺寸变了，FBO 也要跟着变，请一次重绘让渲染线程重新拿尺寸
     update();
+}
+
+// 组件树建好后窗口才一定有：交换缓冲和同步起点的两个信号只在这里接一次。
+// 之前放在每帧的队列回调里，Qt6 下 update() 会同步进渲染循环再回到这里，栈直接爆掉
+void VideoItem::componentComplete()
+{
+    QQuickFramebufferObject::componentComplete();
+
+    if (window() == nullptr)
+    {
+        return;
+    }
+
+    // 交换缓冲发生在我们看不见的地方，接 frameSwapped 才能量到它阻塞了多久。
+    // Qt6 里 Qt::UniqueConnection 配 lambda 会直接断言（Qt5 是静默忽略），这里靠 swap_hooked_ 保证只接一次
+    QObject::connect(window(), &QQuickWindow::frameSwapped, this, [this]() { MarkSwapped(); });
+
+    // 渲染线程刚开始这一轮的时刻：它到 synchronize 之间的差就是 Qt 自己的准备工作
+    QObject::connect(window(), &QQuickWindow::beforeSynchronizing, this, [this]()
+    {
+        before_sync_us_.storeRelaxed(clock_.nsecsElapsed() / 1000);
+    }, Qt::DirectConnection);
+
+    swap_hooked_ = true;
 }
 
 // 坐标换算器要用最新的画布尺寸和帧尺寸，每次事件前同步一次（都是几个赋值，开销可忽略）
@@ -989,7 +997,7 @@ void VideoItem::mousePressEvent(QMouseEvent *event)
     // 点了才要键盘焦点，免得一启动就把焦点抢过来
     forceActiveFocus();
     SyncMapper();
-    EmitControlMessage(touch_.Press(event->localPos()));
+    EmitControlMessage(touch_.Press(event->position()));
     event->accept();
 }
 
@@ -1004,7 +1012,7 @@ void VideoItem::mouseMoveEvent(QMouseEvent *event)
     }
 
     SyncMapper();
-    EmitControlMessage(touch_.Move(event->localPos()));
+    EmitControlMessage(touch_.Move(event->position()));
     event->accept();
 }
 
@@ -1018,7 +1026,7 @@ void VideoItem::mouseReleaseEvent(QMouseEvent *event)
     }
 
     SyncMapper();
-    EmitControlMessage(touch_.Release(event->localPos()));
+    EmitControlMessage(touch_.Release(event->position()));
     event->accept();
 }
 

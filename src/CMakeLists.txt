@@ -41,9 +41,10 @@ target_link_libraries(QmlScrcpy PRIVATE
     qsc_stream
     qsc_input
     qsc_update
-    Qt5::Quick
-    Qt5::QuickControls2
-    Qt5::Network
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Network
+    Qt6::OpenGL                                                                                 # video_item 里的 QOpenGLShaderProgram / FBO 都在这个模块
 )
 
 # 多配置生成器会在 bin 下再套一层 Debug/，实际产物在 bin/<Config>/
@@ -57,12 +58,12 @@ set_target_properties(QmlScrcpy PROPERTIES
 # 两件事必须做对，否则启动就是一堆 "module QtQuick is not installed"：
 #
 # 1. --qmldir 必须给。不给的话 windeployqt 只拷 DLL 不拷 qml 模块树；而一旦
-#    Qt5Core.dll 躺在 exe 旁边，Qt 就按"已部署布局"去 <exe目录>/qml 找导入路径，
+#    Qt6Core.dll 躺在 exe 旁边，Qt 就按"已部署布局"去 <exe目录>/qml 找导入路径，
 #    不会再回 Qt 安装目录找 → 所有 QML 模块都"没装"。
 #
-# 2. PATH 必须把 5.15.2 顶到最前面。windeployqt 是按 DLL 名字在 PATH 里找依赖的，
-#    本机 PATH 第一个是 Qt 5.14.2（C:\Users\Mars\QT5.14.2\...），不顶掉就会把 5.14 的
-#    插件拷进来，启动报"无法定位程序输入点"。
+# 2. PATH 必须把当前这套 Qt 顶到最前面。windeployqt 是按 DLL 名字在 PATH 里找依赖的，
+#    本机上别处还躺着一套 Qt 5.14.2，不顶掉就可能把别的版本的插件拷进来，启动报
+#    "无法定位程序输入点"。
 #
 # 具体怎么改 PATH 放在 cmake/DeployQt.cmake 里做：在那行 add_custom_command 里直接写
 # ${ENV P A T H} 会被 CMake 当列表按分号拆开，整条命令就散架了。
@@ -88,6 +89,18 @@ add_custom_command(TARGET QmlScrcpy POST_BUILD
         "${PROJECT_SOURCE_DIR}/third_party/scrcpy-server"
         "$<TARGET_FILE_DIR:QmlScrcpy>/scrcpy-server"
     COMMENT "拷贝 scrcpy-server 到输出目录"
+)
+
+# adb 在仓库根的 Tools/ 里，构建后抄到 exe 旁边：跑起来就直接能用，不用手工拷。
+# 用 copy_if_different 而不是 copy_directory：目标没变就不写盘，adb server 正跑着也不会报“文件被占用”
+add_custom_command(TARGET QmlScrcpy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:QmlScrcpy>/Tools"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/Tools/adb.exe"
+        "${PROJECT_SOURCE_DIR}/Tools/AdbWinApi.dll"
+        "${PROJECT_SOURCE_DIR}/Tools/AdbWinUsbApi.dll"
+        "$<TARGET_FILE_DIR:QmlScrcpy>/Tools"
+    COMMENT "拷贝 Tools（adb.exe 与两个 DLL）到输出目录"
 )
 
 qs_deploy_ffmpeg(QmlScrcpy)

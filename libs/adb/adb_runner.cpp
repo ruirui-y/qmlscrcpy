@@ -65,17 +65,10 @@ QList<AdbDevice> ParseDevices(const QByteArray &std_out)
     return devices;
 }
 
-// 取 adb 路径：只认程序目录下的 Tools\adb.exe；没有就交给 PATH
+// 取 adb 路径：只认程序目录下的 Tools\adb.exe
 QString AdbPath()
 {
-    const QString in_tools = QCoreApplication::applicationDirPath() + QStringLiteral("/Tools/adb.exe");
-    if (QFileInfo::exists(in_tools))
-    {
-        return in_tools;
-    }
-
-    // 安装包一定带 Tools\adb.exe；走到这里说明是开发环境或用户手动删了
-    return QStringLiteral("adb");
+    return QCoreApplication::applicationDirPath() + QStringLiteral("/Tools/adb.exe");
 }
 
 // 跑一条 adb 命令并等它结束，超时就杀进程

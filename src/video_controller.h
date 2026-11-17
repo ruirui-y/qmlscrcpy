@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 #include <QUrl>
+#include <QVariantList>                                                                             // Q_PROPERTY 用了 QVariantList，Qt6 的 moc 要求类型在这里就完整
 
 class ControlWriter;
 class VideoItem;

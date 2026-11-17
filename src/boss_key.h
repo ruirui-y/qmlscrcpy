@@ -29,7 +29,8 @@ signals:
     void SigTriggered();
 
 protected:
-    bool nativeEventFilter(const QByteArray &event_type, void *message, long *result) override;
+    // Qt6 把最后一个参数从 long* 改成了 qintptr*，Windows 上 x64 两者同宽但签名必须一致
+    bool nativeEventFilter(const QByteArray &event_type, void *message, qintptr *result) override;
 
 private:
     bool bound_ = false;                                                                        // 当前有没有注册成功

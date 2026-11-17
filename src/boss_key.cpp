@@ -67,7 +67,7 @@ bool BossKey::IsBound() const
 }
 
 // WM_HOTKEY 到了就发信号；其余消息不管
-bool BossKey::nativeEventFilter(const QByteArray &event_type, void *message, long *result)
+bool BossKey::nativeEventFilter(const QByteArray &event_type, void *message, qintptr *result)
 {
     Q_UNUSED(result)
 #ifdef _WIN32

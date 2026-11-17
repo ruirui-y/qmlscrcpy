@@ -503,8 +503,8 @@ void AppSettings::SaveVideoStateAsync(const QString &pos_key, int x, int y,
 
     qsc::base::TaskRunner::Instance().Post([path, pos_key, x, y, geom_key, width, height, save_geometry]()
     {
+        // Qt6 的 QSettings 读写 ini 一律按 UTF-8，指定编码的 setIniCodec 已经删掉了
         QSettings store(path, QSettings::IniFormat);
-        store.setIniCodec("UTF-8");
 
         store.beginGroup(pos_key);
         store.setValue(QStringLiteral("x"), x);

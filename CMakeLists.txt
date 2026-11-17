@@ -7,12 +7,13 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerOptions)
 include(Ffmpeg)
 
-# 5.15 是硬底线：QWindow::startSystemMove() 从 5.15 才有，无边框窗口拖动靠它
-find_package(Qt5 5.15 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network)
-message(STATUS "[QmlScrcpy] Qt ${Qt5_VERSION} @ ${Qt5_DIR}")
+# 6.5 是底线：VideoItem 是 QQuickFramebufferObject，Qt6 起它只能挂在 OpenGL 后端上，
+# 而"指定后端"这件事要有 RHI（6.0 才有），6.5 之后 API 才稳定
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network OpenGL)
+message(STATUS "[QmlScrcpy] Qt ${Qt6_VERSION} @ ${Qt6_DIR}")
 
-# 当前这套 Qt 的根目录，部署时要用
-get_filename_component(QS_QT_ROOT "${Qt5_DIR}/../../.." ABSOLUTE)
+# 当前这套 Qt 的根目录，部署时要用（Qt6_DIR 是 <root>/lib/cmake/Qt6，退三级回到 root）
+get_filename_component(QS_QT_ROOT "${Qt6_DIR}/../../.." ABSOLUTE)
 
 # 全 QML，不做 .ui；AUTOMOC 先开着，P1 加 QObject 类型时才能自动生成 moc
 set(CMAKE_AUTOMOC ON)

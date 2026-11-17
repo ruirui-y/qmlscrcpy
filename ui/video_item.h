@@ -121,7 +121,11 @@ signals:
     void SigRecordingChanged();                                                                 // 进入或退出按键录制
 
 protected:
-    void geometryChanged(const QRectF &new_geometry, const QRectF &old_geometry) override;
+    // Qt5 叫 geometryChanged，Qt6 改名成 geometryChange，参数含义没变
+    void geometryChange(const QRectF &new_geometry, const QRectF &old_geometry) override;
+
+    // 挂在窗口上的两个信号只在这里接一次：放到每帧的队列回调里会在 Qt6 下重入
+    void componentComplete() override;
 
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;

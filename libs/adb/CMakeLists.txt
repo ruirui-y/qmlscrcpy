@@ -16,4 +16,4 @@ add_library(qsc_adb STATIC
 
 target_include_directories(qsc_adb PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-target_link_libraries(qsc_adb PUBLIC Qt5::Core qs_options)
+target_link_libraries(qsc_adb PUBLIC Qt6::Core qs_options)

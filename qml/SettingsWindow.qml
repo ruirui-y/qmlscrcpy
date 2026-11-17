@@ -1,7 +1,7 @@
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Window 2.15
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Window
 
 // 设置窗：画质 / 快捷键 / 其他。独立小窗口，主窗只留一个「设置」入口。
 // 用独立窗口而不是 Popup，是因为 Popup 画在父母口内部，主窗 250 高塞不下这些内容。
@@ -10,7 +10,7 @@ Window
     id: settingsWindow
 
     width: 620
-    height: 560
+    height: 580
     minimumWidth: 620
     minimumHeight: 520
     visible: false

@@ -60,7 +60,7 @@ void PrepareSurfaceFormat()
         qputenv("QT_QPA_UPDATE_IDLE_TIME", "0");
     }
 
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    // Qt6 的高 DPI 缩放默认就开着，AA_EnableHighDpiScaling 这个属性已经删掉，只剩取整策略要定
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 
     // 视频帧最终走 OpenGL 纹理上传，先把默认格式定死，免得每台机器默认值不一样
@@ -69,6 +69,10 @@ void PrepareSurfaceFormat()
     format.setProfile(QSurfaceFormat::NoProfile);                                               // 不要求核心模式，兼容面最大
     format.setSwapInterval(0);                                                                  // 关垂直同步：投屏延迟第一刀
     QSurfaceFormat::setDefaultFormat(format);
+
+    // VideoItem 是 QQuickFramebufferObject，它的 render() 里全是裸 GL 调用，只在 OpenGL
+    // 后端下会被调用。Qt6 在 Windows 上默认挑 D3D11，不指定的话这个节点直接被跳过（画面全黑）
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 }
 
 // 任务栏和 Alt+Tab 用的图标与程序元信息

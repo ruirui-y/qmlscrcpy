@@ -59,8 +59,8 @@ public:
     int VideoBitRate() const;                                                                   // 当前生效的码率（bps）
     int VideoMaxFps() const;                                                                    // 当前生效的帧率上限，0 = 不限
     QString VideoProfile() const;
-    QObject *WifiStatusObject() { return &wifi_status_; }                                          // WiFi 状态对象，QML 通过它读 summary / level
-    bool IsConnected() const override;                                                                   // 会话建起来没有，投屏窗靠它决定要不要显示
+    QObject *WifiStatusObject() { return &wifi_status_; }                                       // WiFi 状态对象，QML 通过它读 summary / level
+    bool IsConnected() const override;                                                          // 会话建起来没有，投屏窗靠它决定要不要显示
     QString BossKey() const;                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
     QString ShortcutBack() const;                                                               // 返回键的快捷键
     QString ShortcutHome() const;                                                               // 回桌面的快捷键

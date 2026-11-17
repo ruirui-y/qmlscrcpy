@@ -1,5 +1,5 @@
 # 视频链路：读包、解码、转 RGB、帧所有权。
-# 只依赖 QtCore + Qt5::Network（读 socket）+ 协议层（包头）+ FFmpeg，不碰界面。
+# 只依赖 QtCore + Qt6::Network（读 socket）+ 协议层（包头）+ FFmpeg，不碰界面。
 add_library(qsc_stream STATIC
     h264_decoder.cpp
     video_reader.cpp
@@ -14,4 +14,4 @@ add_library(qsc_stream STATIC
 
 target_include_directories(qsc_stream PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-target_link_libraries(qsc_stream PUBLIC qsc_base qsc_protocol qs_ffmpeg Qt5::Core Qt5::Gui Qt5::Network)
+target_link_libraries(qsc_stream PUBLIC qsc_base qsc_protocol qs_ffmpeg Qt6::Core Qt6::Gui Qt6::Network)

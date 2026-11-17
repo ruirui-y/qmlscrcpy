@@ -1,4 +1,4 @@
-﻿# 收集发布文件：把 Release 构建产物收拾成 setup/stage/QmlScrcpy
+# 收集发布文件：把 Release 构建产物收拾成 setup/stage/QmlScrcpy
 #
 # 用法（在仓库根目录跑）：
 #   powershell -ExecutionPolicy Bypass -File setup\collect.ps1
@@ -107,35 +107,20 @@ foreach ($name in @('Log', 'screenshots', 'config', 'QmlScrcpy.pdb'))
 Get-ChildItem $stageDir -Filter '*.pdb' -File | Remove-Item -Force
 Get-ChildItem $stageDir -Filter 'userdata.ini.*' -File | Remove-Item -Force
 
-# 5. 捎上 adb：没有 adb 的用户装完就能直接连
-Write-Host '[5/5] 找 adb ...'
-$adbPath = $null
-if ($env:QS_ADB_PATH -and (Test-Path $env:QS_ADB_PATH))
-{
-    $adbPath = $env:QS_ADB_PATH
-}
-else
-{
-    $onPath = Get-Command adb.exe -ErrorAction SilentlyContinue
-    if ($onPath) { $adbPath = $onPath.Source }
-}
+# 5. 捎上 adb：直接用仓库根 Tools\ 里的那份，构建时 CMake 也是拷这一份
+Write-Host '[5/5] 拷 Tools ...'
+$repoTools = Join-Path $repoRoot 'Tools'
+$adbSource = Join-Path $repoTools 'adb.exe'
 
-if ($adbPath)
+if (Test-Path $adbSource)
 {
     $toolsDir = Join-Path $stageDir 'Tools'
-    New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
-    Copy-Item $adbPath $toolsDir -Force
-    # adb 依赖这两个 DLL，同一个目录里一般都有
-    foreach ($dll in @('AdbWinApi.dll', 'AdbWinUsbApi.dll'))
-    {
-        $source = Join-Path (Split-Path $adbPath -Parent) $dll
-        if (Test-Path $source) { Copy-Item $source $toolsDir -Force }
-    }
-    Write-Host "      已带上 adb：$adbPath"
+    Copy-Item $repoTools $toolsDir -Recurse -Force
+    Write-Host "      已带上 Tools：$repoTools"
 }
 else
 {
-    Write-Warning '没找到 adb.exe：安装包不带 adb，用户需要自己设 QS_ADB_PATH 或装 platform-tools'
+    Write-Warning "仓库根缺少 Tools\adb.exe：$adbSource"
 }
 
 $size = (Get-ChildItem $stageDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB

@@ -1,7 +1,7 @@
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Window 2.15
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Window
 import QmlScrcpy 1.0
 
 // 投屏窗：一扇窗口里水平排两块 —— 左边是"视频窗（标题栏 + 画面）"，右边是工具栏列。
