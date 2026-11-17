@@ -1,0 +1,198 @@
+<mxfile host="Electron" pages="2">
+  <diagram name="帧的来源" id="RNUMpDBX0Q5PvvQQH_DN">
+    <mxGraphModel dx="3591" dy="2219" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="500" pageHeight="500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-2" parent="1" style="swimlane;html=1;startSize=70;fillColor=#f0a30a;strokeColor=#BD7000;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;fontColor=#000000;" value="&lt;div&gt;帧的来源：有线与无线链路&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;一帧 H.264 是怎么从手机屏幕编码出来，经 USB 或 WiFi 的 adb 隧道送到电脑的？&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="1210" width="2010" x="-1410" y="-950" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-3" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-4" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-5" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-68" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-66">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-69" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-67">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-6" parent="X_Wez7H7AfjV_myfvEDx-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;div&gt;手机端&lt;/div&gt;&lt;div&gt;&lt;b&gt;采集：Surface 拿到屏幕原图&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;编码：MediaCodec 压成 H.264（Annex-B）&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;打包：每帧加 12 字节头（配置/关键帧/µs 时间戳/长度）→ adbd&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="68" width="320" x="70" y="726" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-7" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-8" parent="X_Wez7H7AfjV_myfvEDx-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;b&gt;采集：Surface 屏幕原图&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;服务端用 VirtualDisplay 把屏幕内容投到一块 Surface 上。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;不截屏、不走 PNG，屏幕画面直接渲染进 Surface，省掉一次完整拷贝。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;这块 Surface 同时就是编码器的输入源，中间不再经过内存。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;分辨率跟着设备走，客户端按帧尺寸变化重建纹理。&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="650" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-9" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-10" parent="X_Wez7H7AfjV_myfvEDx-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;b&gt;编码：MediaCodec 压成 H.264&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;服务端开 video/avc 硬编码器，Surface 直接喂进去。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;码率和帧率由客户端启动参数决定（bit_rate_ / max_fps_），但 max_fps_ 只是上限，不是节拍器。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;输出 Annex-B 裸流，SPS/PPS 单独打成配置包，在建链后先发一次。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;关键帧由编码器按自己的 GOP 插入，客户端只读包头的 bit62 判断。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="650" y="536" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-11" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-12" parent="X_Wez7H7AfjV_myfvEDx-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;b&gt;打包：12 字节头 + 负载&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;每帧前面加 12 字节：bit63 配置帧、bit62 关键帧、低 62 位 µs 时间戳、后 4 字节负载长度。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;服务端写到 localabstract:scrcpy_xxxx，scid 由客户端随机生成。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;adbd 把这条抽象 socket 转给 PC 的 27183 端口。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;客户端先凑 12 字节头、再按长度凑整帧，TCP 半包由 FillBuffer 兜住。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="650" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-19" parent="X_Wez7H7AfjV_myfvEDx-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;b&gt;发帧频率：30~120fps，跟着画面变化走&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;官方 README 写 30~120fps，取决于设备和内容。开发者文档写得更直接：只有 surface 上有变化才产生新帧，不重复发送，避免浪费带宽。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;源码兜底 100ms：超过 100ms 没有新画面，编码器把上一帧再发一次，所以静止时约 10fps，不是 0。max_fps 只是上限，填 60 不会补齐到 60。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;频率不是恒定的——同一台机器上，画面静止 10fps、滑动 125fps 会来回跳，这种忽快忽慢正是「卡」的观感来源。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="390" x="1390" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-70" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-66" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-66" parent="X_Wez7H7AfjV_myfvEDx-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;b&gt;节拍：跟着屏幕刷新走，没有定时器&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;编码线程阻塞在 dequeueOutputBuffer(-1) 等帧，不是按 60fps 主动采。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;应用刷 120Hz 就出 120 帧，刷 30Hz 就出 30 帧。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;画面静止不编新内容，但 100ms 后重发上一帧，所以静止时是 9 帧/秒。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;KEY_FRAME_RATE 硬写 60，源码注释明确它不影响实际帧率。&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="650" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-71" edge="1" parent="X_Wez7H7AfjV_myfvEDx-2" source="X_Wez7H7AfjV_myfvEDx-67" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="X_Wez7H7AfjV_myfvEDx-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="X_Wez7H7AfjV_myfvEDx-67" parent="X_Wez7H7AfjV_myfvEDx-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;b&gt;大小：码率 ÷ 帧率，不是固定值&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;每帧平均字节 = bit_rate ÷ 8 ÷ fps。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;实测：画面在动约 41 KB/帧，静止约 2.6 KB/帧，相差 15 倍。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;8M 码率下 60 帧每帧 17 KB，120 帧每帧 8.3 KB，帧数翻倍画质腰斩。&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;USB 上跑的是连续字节流，不是一帧一帧：8M = 1MB/s，USB 2.0 有 60MB/s，线不是瓶颈。&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="650" y="1010" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="软解与上屏" id="rQVVSp4XlAkvPv6HnMwg">
+    <mxGraphModel dx="5873" dy="3548" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="500" pageHeight="500" math="0" shadow="0">
+      <root>
+        <mxCell id="pk9WN5zZ1hlgs31XTIZ5-0" />
+        <mxCell id="pk9WN5zZ1hlgs31XTIZ5-1" parent="pk9WN5zZ1hlgs31XTIZ5-0" />
+        <mxCell id="pk9WN5zZ1hlgs31XTIZ5-2" parent="pk9WN5zZ1hlgs31XTIZ5-1" style="swimlane;html=1;startSize=70;fillColor=#f0a30a;strokeColor=#BD7000;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;fontColor=#000000;" value="&lt;div&gt;&lt;div&gt;帧的还原：软解与上屏&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;一帧 H.264 是怎么从电脑收到的那串字节，解开、变成纹理、最后画到窗口上的?&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="1800" width="5040" x="-1410" y="-908" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-1" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="pk9WN5zZ1hlgs31XTIZ5-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="pk9WN5zZ1hlgs31XTIZ5-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pk9WN5zZ1hlgs31XTIZ5-8" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;电脑端&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;切包：凑 12 字节头 → 按长度凑整帧&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;软解：H264Decoder 解成 YUV420P（FFmpeg avcodec）&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;上屏：拷进渲染 buffer → 三张纹理 → 着色器合成进 FBO&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="320" x="230" y="741" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-3" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="pk9WN5zZ1hlgs31XTIZ5-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-6" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="pk9WN5zZ1hlgs31XTIZ5-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-7" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="pk9WN5zZ1hlgs31XTIZ5-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-9" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="pk9WN5zZ1hlgs31XTIZ5-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-11" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="pk9WN5zZ1hlgs31XTIZ5-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pk9WN5zZ1hlgs31XTIZ5-15" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;b&gt;切包：一个死循环，一次切一帧&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;for (;;) 里跑四步，跑完立刻回到第一步。没有队列，不攒批。&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="45" width="390" x="740" y="757.5" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-13" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-2" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;补头：FillBuffer(12)&lt;/div&gt;&lt;div&gt;while (buffer.size() &amp;lt; 12) 就一直 readAll 往尾部追加，已有字节不动。&lt;/div&gt;&lt;div&gt;waitForReadyRead(200) 是这里唯一空转的地方：200ms 没数据就 continue 再等。&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="59" width="420" x="1350" y="483" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-14" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-4" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;补整帧：FillBuffer(12 + size)&lt;/div&gt;&lt;div&gt;长度从包头读出来，同样是 while 补到够数。&lt;/div&gt;&lt;div&gt;多读的字节留在 buffer 里给下一轮用，不能像建链时那样读完就清。&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="65" width="420" x="1350" y="628" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-15" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-5" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;切走：拷出负载 + 从缓冲区删掉&lt;/div&gt;&lt;div&gt;payload = buffer.mid(12, size)，再 buffer.remove(0, total)。&lt;/div&gt;&lt;div&gt;不删会反复解同一帧，这是整条循环里唯一真正消费字节的动作。&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="65" width="420" x="1350" y="748" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-16" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-8" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;拆完这一帧，同步做三件事&lt;/div&gt;&lt;div&gt;① buffer.remove 删掉这帧的字节&lt;/div&gt;&lt;div&gt;② decoder_-&amp;gt;Push 就地软解，同步阻塞，解码耗时直接算进这个循环&lt;/div&gt;&lt;div&gt;③ 对每一帧 emit SigFrameReady，直连，等于就地调 VideoItem::Present，不进 GUI 队列&lt;/div&gt;&lt;div&gt;三件事都在这个线程里串行完成。&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="420" x="1350" y="871" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-17" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-10" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;做完立刻回到循环头&lt;/div&gt;&lt;div&gt;中间没有等待、没有攒批。下一轮又从 FillBuffer(12) 开始，阻塞等 socket 下 12 字节。&lt;/div&gt;&lt;div&gt;所以「解码慢」会直接变成「读 socket 慢」，再反压回手机端那个阻塞的 write。&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="59" width="420" x="1350" y="1002" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-19" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-21" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-23" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-25" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-24">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-27" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-12" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;b&gt;软解（单线程）：一个包进，0~N 帧出&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;切包那边把 payload 递过来，从这里开始算软解，到返回容器结束&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;这层只有一个线程：判配置包、拼包、送包、解码、收帧、包成 Frame，六件事全串在一起&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;输入一个 H.264 包，输出 0 到 N 个 Frame，中间没有自己的队列&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;一次 Push 实测 4643µs：拼包 4µs、送包 4632µs、收帧 5µs&lt;/b&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="89" width="420" x="1915" y="736" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-18" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;先拦配置包&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;SPS/PPS 不进解码器，只存进 pending_config_ 就返回，这一轮零帧&lt;/div&gt;&lt;div&gt;这一层没给解码器设 extradata，全靠 FFmpeg 的 in-band 解析&lt;/div&gt;&lt;div&gt;参数集必须和后面的 IDR 拼在同一个包里才生效，单独送等于喂了个没人认的东西&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="450" x="2560" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-20" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;拼包，再送包&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;配置包拼到这帧前面，av_new_packet + memcpy 拷一份——FFmpeg 不接管调用方内存&lt;/div&gt;&lt;div&gt;pts 和 dts 都填包头的 µs 值，同值，Baseline 没有 B 帧不需要重排&lt;/div&gt;&lt;div&gt;avcodec_send_packet 送出去；单线程时这一行是同步解码，4643µs 里 4632µs 就砸在这儿&lt;/div&gt;&lt;div&gt;返回 EAGAIN 不是错，是解码器内部队列满了：先把解好的帧取走腾位置，再重送一次&lt;/div&gt;&lt;div&gt;（旧代码这里直接丢包，画面会花到下一个 IDR，日志里看不出来）&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="111" width="450" x="2560" y="569" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-29" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-28">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-22" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;收帧：for(;;) 收到 EAGAIN 为止&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;receive_frame 一次只给一帧，所以必须循环——这是 FFmpeg 的契约&lt;/div&gt;&lt;div&gt;0 帧：送的是配置包（已提前 return），或解码器还没攒够参考帧&lt;/div&gt;&lt;div&gt;1 帧：正常情况，Baseline 无 B 帧，单线程实测 4062 帧全部 1 进 1 出&lt;/div&gt;&lt;div&gt;N 帧：有 B 帧时解码器先留着，某次一起吐出来，这批样本没撞上&lt;/div&gt;&lt;div&gt;EAGAIN 或 EOF 都是收干净了，把这次分配的 AVFrame 释放掉正常返回，不是错误&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="104" width="450" x="2560" y="728.5" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-24" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;解出一帧，立刻交出所有权&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;取到帧先卡格式：必须是 YUV420P，不是就报错退出，别让下游按错的步长读内存&lt;/div&gt;&lt;div&gt;WrapFrame：AVFrame 塞进 shared_ptr 接管，deleter 是 av_frame_free&lt;/div&gt;&lt;div&gt;Frame 只取三个平面指针和三个行跨度，一个像素都不拷，append 进容器&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="450" x="2560" y="900" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-26" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;收干净了才返回容器&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Push 返回时容器里可能是 0 帧、1 帧、多帧，交给读循环 for 一遍逐帧 emit&lt;/div&gt;&lt;div&gt;这一层不投递、不排队、不碰 UI，出去就是现成的 Frame&lt;/div&gt;&lt;div&gt;容器是复用的，每轮 clear 只清长度不释放容量，省掉每帧重新分配&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="450" x="2560" y="1020" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-31" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-36" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-37" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-38" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-39" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="WGBuGD5uSK3rRpqKVQhX-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-28" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;div&gt;&lt;b&gt;软解（4 线程）：把解码从收包线程上摘下来&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;4.64ms 那件事没变，变的是它不再发生在读线程里&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;读线程送完包立刻回去 recv，4 个解码线程并行解&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;一次 Push 从 4643µs 降到 82µs，读线程占用 34% → &amp;lt; 1%&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;代价：解码器内部攒 thread_count - 1 帧，端到端多 25 ~ 100ms&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="92" width="330" x="3170" y="734.5" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-30" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;卡点：这 4.64ms 里读线程不会回去 recv&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;读线程在 avcodec_send_packet 里同步解码，调用进去就把这帧解完才出来&lt;/div&gt;&lt;div&gt;这段时间它既收不了新数据，也切不了包&lt;/div&gt;&lt;div&gt;上游不会等你：手机还在发，字节只能堆在 socket 接收缓冲区里&lt;/div&gt;&lt;div&gt;不是 CPU 不够，是这条线程回不去&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="92" width="430" x="3720" y="441.5" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-32" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;堆了多少：切完一帧后残留 &amp;gt; 0 的比例 8 ~ 21%&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;每切完一帧数一次 socket 接收缓冲区还剩多少字节，&amp;gt; 0 就是后面还排着没切的包&lt;/div&gt;&lt;div&gt;单线程 8 ~ 21%，4 线程 0 ~ 1%&lt;/div&gt;&lt;div&gt;IDR 大帧最明显：传输本身就久，解码也久，两头一起堆&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="430" x="3720" y="591.5" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-33" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;根因：不是算得慢，是占了收数据的那条线程&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;4.64ms 一帧，倒推理论 215fps，帧率从来不是它的瓶颈&lt;/div&gt;&lt;div&gt;真正的问题是同一条线程既收数据又算数据，算的时候收不了&lt;/div&gt;&lt;div&gt;所以目标不是把 4.64ms 变小，是让读线程不必等它&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="430" x="3720" y="741.5" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-34" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;对策：thread_count = 4，换谁来算&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;FFmpeg 自带 frame-level 多线程，一个字段就开，参考帧依赖它内部自己管&lt;/div&gt;&lt;div&gt;原来写死 thread_count = 1 才是偏离上游，scrcpy 的 demuxer.c 压根不设这字段，走按核数自动&lt;/div&gt;&lt;div&gt;单帧还是 4.64ms，变的是 4 个解码线程同时解 4 帧，读线程回来收包&lt;/div&gt;&lt;div&gt;另一条补丁还没打：上游挂了 AV_CODEC_FLAG_LOW_DELAY 压攒帧延迟，我们暂时没挂&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="3720" y="881.5" as="geometry" />
+        </mxCell>
+        <mxCell id="WGBuGD5uSK3rRpqKVQhX-35" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;换来了什么，代价是什么&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;读线程合计 4643 → 82µs，占用 34% → &amp;lt; 1%，切包残留 8 ~ 21% → 0 ~ 1%&lt;/div&gt;&lt;div&gt;最慢单帧 26107 → 6936 ~ 16468µs，单帧尖峰不再直接变成读线程停摆&lt;/div&gt;&lt;div&gt;代价：解码器内部攒 thread_count - 1 帧，120fps 约 25ms、30fps 约 100ms&lt;/div&gt;&lt;div&gt;丢帧 0.05% → 0.99%，但 85 个里 60 个来自同一次抖动，样本不足以下结论&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="92" width="430" x="3720" y="1031.5" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
