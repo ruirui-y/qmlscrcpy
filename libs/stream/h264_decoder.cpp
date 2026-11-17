@@ -71,8 +71,9 @@ bool H264Decoder::Open(QString *error)
         return false;
     }
 
-    // 先单线程：帧级多线程在只收到参数集时会让 send_packet 返回 EAGAIN
-    context_->thread_count = 1;
+    // 帧级多线程：解一帧能快两倍上下，代价是解码器内部要攒几帧才出第一个结果，
+    // 实际端到端会多出约 (thread_count - 1) 帧的延迟，用延迟换吞吐
+    context_->thread_count = 4;
 
     const int ret = avcodec_open2(context_, codec, nullptr);
     if (ret < 0)
@@ -106,6 +107,14 @@ void H264Decoder::Close()
         avcodec_free_context(&context_);
         context_ = nullptr;
     }
+
+    // 临时探针（已关）：重连后从零开始算，别把上一条连接的数字混进来
+    // window_timer_ = QElapsedTimer();
+    // stat_frames_ = 0;
+    // stat_pack_ns_ = 0;
+    // stat_send_ns_ = 0;
+    // stat_drain_ns_ = 0;
+    // stat_max_total_ns_ = 0;
 }
 
 bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
@@ -128,6 +137,9 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
         return true;
     }
 
+    // 临时探针（已关）：量「拼包 → 送包 → 收帧」三段耗时，重新测量时取消下面三行的注释
+    // timer_.start();
+
     QByteArray payload = data;
     if (!pending_config_.isEmpty())
     {
@@ -145,9 +157,19 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
     packet_->pts = pts_us;
     packet_->dts = pts_us;
 
-    const int ret = avcodec_send_packet(context_, packet_);
-    // EAGAIN 表示解码器内部还堵着，先把帧取干净下次再送，不算错误
-    if (ret < 0 && ret != AVERROR(EAGAIN))
+    // const qint64 pack_ns = timer_.nsecsElapsed();                                            // 拼包：两次拷贝加一次分配
+
+    int ret = avcodec_send_packet(context_, packet_);
+    if (ret == AVERROR(EAGAIN))
+    {
+        // 解码器内部队列满了，这个包没被收下：先把已经解好的帧取走腾出位置，再重送一次
+        if (!DrainFrames(frames, error))
+        {
+            return false;
+        }
+        ret = avcodec_send_packet(context_, packet_);
+    }
+    if (ret < 0)
     {
         *error = QStringLiteral("送包失败：%1（码 %2，%3 字节）")
                      .arg(AvErrorText(ret))
@@ -156,8 +178,49 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
         return false;
     }
 
+    // const qint64 send_ns = timer_.nsecsElapsed() - pack_ns;                                  // 送包：单线程时真正解码的地方
+
+    // ReportDecodeTime(pack_ns, send_ns, timer_.nsecsElapsed() - pack_ns - send_ns);
     return DrainFrames(frames, error);
 }
+
+/*
+// 临时探针（已关）：每秒一行，给三段平均值和本秒最慢一帧
+void H264Decoder::ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_ns)
+{
+    ++stat_frames_;
+    stat_pack_ns_ += pack_ns;
+    stat_send_ns_ += send_ns;
+    stat_drain_ns_ += drain_ns;
+    const qint64 total_ns = pack_ns + send_ns + drain_ns;
+    if (total_ns > stat_max_total_ns_)
+    {
+        stat_max_total_ns_ = total_ns;
+    }
+
+    if (!window_timer_.isValid())
+    {
+        window_timer_.start();
+    }
+    if (window_timer_.elapsed() < 1000)
+    {
+        return;
+    }
+
+    const int n = stat_frames_;
+    qInfo() << "[decode] 秒结" << n << "帧：拼包" << stat_pack_ns_ / n / 1000 << "us / 送包"
+            << stat_send_ns_ / n / 1000 << "us / 收帧" << stat_drain_ns_ / n / 1000 << "us / 合计"
+            << (stat_pack_ns_ + stat_send_ns_ + stat_drain_ns_) / n / 1000 << "us（最慢"
+            << stat_max_total_ns_ / 1000 << "us）";
+
+    stat_frames_ = 0;
+    stat_pack_ns_ = 0;
+    stat_send_ns_ = 0;
+    stat_drain_ns_ = 0;
+    stat_max_total_ns_ = 0;
+    window_timer_.restart();
+}
+*/
 
 // 把解码器里已经解好的帧全取出来
 bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)

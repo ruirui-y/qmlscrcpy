@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QString>
 #include <QVector>
 
@@ -32,10 +33,20 @@ public:
 
 private:
     bool DrainFrames(QVector<Frame> &frames, QString *error);                                   // 把解码器里积压的帧全取出来
+    // void ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_ns);                  // 临时探针（已关）：每秒打一行解码耗时
 
     AVCodecContext *context_ = nullptr;                                                         // 解码器上下文，Close 后置空
     AVPacket *packet_ = nullptr;                                                                // 复用一个包，避免每帧都分配
     QByteArray pending_config_;                                                                 // 还没拼出去的那份 SPS/PPS
+
+    // 临时探针（已关）：量单次 Push 三段耗时 + 按秒结算
+    // QElapsedTimer timer_;                                                                    // 量单次 Push 里三段各花多久
+    // QElapsedTimer window_timer_;                                                             // 满一秒就结算一次
+    // int stat_frames_ = 0;                                                                    // 本秒解了多少帧
+    // qint64 stat_pack_ns_ = 0;                                                                // 本秒拼包累计
+    // qint64 stat_send_ns_ = 0;                                                                // 本秒送包累计
+    // qint64 stat_drain_ns_ = 0;                                                               // 本秒收帧累计
+    // qint64 stat_max_total_ns_ = 0;                                                           // 本秒单帧最慢
 };
 
 } // namespace qsc::stream
