@@ -26,3 +26,9 @@ recording/
 # 打包中间目录和产物：由 setup\collect.ps1 生成，不入库
 setup/stage/
 setup/Output/
+
+# scrcpy-server 的版本备份：升级时留一份旧的用来回滚，只提交当前那份
+third_party/scrcpy-server-*
+
+# drawio 打开文件时自动生成的锁文件，不入库
+drawio/.$*
