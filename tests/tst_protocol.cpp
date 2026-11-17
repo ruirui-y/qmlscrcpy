@@ -35,7 +35,7 @@ private slots:
     void DeviceMessageTypeNumbersMatchScrcpy();
 };
 
-// 标志位在高位，时间戳在低 62 位
+// 标志位在高位，时间戳在低 61 位
 void ProtocolTest::VideoHeaderStoresFlagsInTopBits()
 {
     VideoPacketHeader header;
@@ -45,8 +45,8 @@ void ProtocolTest::VideoHeaderStoresFlagsInTopBits()
     const QByteArray bytes = header.Serialize();
     QCOMPARE(bytes.size(), VideoPacketHeader::kSize);
 
-    // 大端：最高位在第一个字节，配置包的标志一置上就该是 0x80
-    QCOMPARE(static_cast<quint8>(bytes.at(0)), quint8(0x80));
+    // 大端：最高位在第一个字节，配置包现在是 bit62，置上就该是 0x40
+    QCOMPARE(static_cast<quint8>(bytes.at(0)), quint8(0x40));
     QCOMPARE(static_cast<quint8>(bytes.at(8)), quint8(0x00));                                   // 长度高字节
     QCOMPARE(static_cast<quint8>(bytes.at(9)), quint8(0x00));
     QCOMPARE(static_cast<quint8>(bytes.at(10)), quint8(0x10));

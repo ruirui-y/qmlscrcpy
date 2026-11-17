@@ -30,7 +30,7 @@ constexpr int kForwardConnectTimeoutMs = 1000;                                  
 constexpr int kInfoPollMs = 300;                                                                // 设备信息轮询间隔
 constexpr int kInfoTimeoutMs = 3000;                                                            // 设备信息总超时
 constexpr int kDeviceNameBytes = 64;                                                            // 设备名固定 64 字节，后面补 0
-constexpr int kInfoBytes = kDeviceNameBytes + 12;                                               // 再加 4 字节编码器 id + 4 宽 + 4 高
+constexpr int kInfoBytes = kDeviceNameBytes + 16;                                               // 再加 4 字节编码器 id + 4 会话标志 + 4 宽 + 4 高
 constexpr int kPushTimeoutMs = 60000;                                                           // 首次 push 可能要传几十 MB 的 jar
 constexpr quint32 kScidUnset = 0xFFFFFFFFu;
 
@@ -331,7 +331,7 @@ bool ServerSession::ConnectForForward(ConnectResult *result)
 // 读 server 发来的设备信息：名字长度、名字、宽高
 bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
 {
-    // 设备信息固定 76 字节：名 64 + 编码器 id 4 + 宽 4 + 高 4
+    // 设备信息固定 80 字节：名 64 + 编码器 id 4 + 会话标志 4 + 宽 4 + 高 4
     QByteArray buffer;
     QElapsedTimer timer;
     timer.start();
@@ -371,8 +371,9 @@ bool ServerSession::ReadInfo(QTcpSocket *socket, ConnectResult *result)
     quint32 codec_id = 0;
     quint32 width = 0;
     quint32 height = 0;
-    if (!reader.Skip(kDeviceNameBytes) || !reader.ReadU32(codec_id) || !reader.ReadU32(width)
-        || !reader.ReadU32(height))
+    // 中间那个 4 字节是会话标志（最高位固定置 1），这里用不上，跳过
+    if (!reader.Skip(kDeviceNameBytes) || !reader.ReadU32(codec_id) || !reader.Skip(4)
+        || !reader.ReadU32(width) || !reader.ReadU32(height))
         {
         result->error_ = QStringLiteral("设备信息解析失败");
         return false;

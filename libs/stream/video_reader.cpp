@@ -87,6 +87,14 @@ void VideoReader::run()
             return;
         }
 
+        // 5.0 起尺寸变化会插一条 SESSION 包：12 字节就是全部，后面没有负载
+        if (header.IsSession())
+        {
+            buffer.remove(0, VideoPacketHeader::kSize);
+            qInfo() << "[read] 尺寸变化" << header.SessionWidth() << "x" << header.SessionHeight();
+            continue;
+        }
+
         // 第二次补的是整帧的长度：包头已经在 buffer 里，这里只是把负载等齐
         const int total = VideoPacketHeader::kSize + static_cast<int>(header.size_);
         if (!FillBuffer(buffer, total, &error))
@@ -120,6 +128,8 @@ void VideoReader::run()
             emit SigFrameReady(frame);
         }
 
+        // 临时：切完这帧看缓冲区还剩多少字节；残留大于 0 说明后面还排着帧没切
+        // qInfo() << "[read] 包" << payload.size() << "，出帧" << frames.size() << "，残留" << buffer.size();
     }
 }
 

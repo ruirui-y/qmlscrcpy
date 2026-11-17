@@ -50,7 +50,7 @@ private:
     bool ConnectSockets(ConnectResult *result);                                                 // 按当前模式建两条 socket 并读设备信息
     bool AcceptForReverse(ConnectResult *result);                                               // reverse 模式：等设备连进来
     bool ConnectForForward(ConnectResult *result);                                              // forward 模式：本机连出去，带重试
-    bool ReadInfo(QTcpSocket *socket, ConnectResult *result);                                   // 读 76 字节设备信息
+    bool ReadInfo(QTcpSocket *socket, ConnectResult *result);                                   // 读 80 字节设备信息
     void RemoveTunnel();                                                                        // 拆掉隧道映射，留着会挡住下一次连接
     QString ResolveLocalServerPath() const;                                                     // 参数没给 jar 路径时用程序目录下的
     QString SocketName() const;                                                                 // 按 scid 算出设备端的 abstract socket 名
