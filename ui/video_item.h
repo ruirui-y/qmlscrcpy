@@ -53,6 +53,9 @@ using FrameTracePtr = std::shared_ptr<FrameTrace>;
 //
 // 视频线程只往这里丢帧（加锁存最新一帧，附带该帧的 FrameTrace），不投递任何跨线程事件；
 // 重绘请求通过 QueuedConnection 交给 GUI 线程发 update()。
+// 逐帧追踪打印：画布的丢帧路径和统计文件都要用
+void PrintTrace(const FrameTracePtr &trace, bool swapped, qint64 alive_us);
+
 class VideoItem : public QQuickFramebufferObject
 {
     Q_OBJECT
