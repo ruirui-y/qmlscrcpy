@@ -5,7 +5,9 @@
 #include <QElapsedTimer>
 #include <QEvent>
 #include <QMutex>
-#include <QQuickFramebufferObject>
+#include <QQuickRhiItem>
+
+#include "ui/video_frame_source.h"
 #include <QSize>
 
 #include <atomic>
@@ -56,7 +58,8 @@ using FrameTracePtr = std::shared_ptr<FrameTrace>;
 // 逐帧追踪打印：画布的丢帧路径和统计文件都要用
 void PrintTrace(const FrameTracePtr &trace, bool swapped, qint64 alive_us);
 
-class VideoItem : public QQuickFramebufferObject
+class VideoItem : public QQuickRhiItem
+    , public qsc::ui::VideoFrameSource
 {
     Q_OBJECT
     Q_PROPERTY(QSize frameSize READ FrameSize NOTIFY SigFrameSizeChanged)
@@ -66,7 +69,7 @@ class VideoItem : public QQuickFramebufferObject
 public:
     explicit VideoItem(QQuickItem *parent = nullptr);
 
-    Renderer *createRenderer() const override;
+    QQuickRhiItemRenderer *createRenderer() override;
 
     QSize FrameSize() const;                                                                    // 最近一帧的尺寸，QML 里用来显示和算宽高比
     bool KeepAspect() const;
@@ -103,7 +106,18 @@ public:
 
     // 渲染线程 synchronize() 里调：取走最新一帧，没有就返回无效帧
     qsc::stream::Frame TakePendingFrame(FrameTracePtr *trace_out, qint64 *arrive_us_out);
-    QSize NotifiedFrameSize() const;                                                            // 已经报给渲染线程的帧尺寸
+    QSize NotifiedFrameSize() const;
+
+    // ---- VideoFrameSource 接口：给 QRhi 渲染器用 ----
+    qsc::stream::Frame TakePendingFrame(qsc::ui::RenderFrameTiming *timing_out) override;
+    void NotifySyncPass() override;
+    qint64 SyncPassStartUs() const override;
+    qint64 NowUs() const override;
+    void NotifyRenderEnd(qint64 draw_start_us) override;
+    bool KeepAspectEnabled() const override;
+    QSize CanvasSize() const override;
+
+    FrameTracePtr last_render_trace_;                                                           // 渲染线程最近一帧的追踪记录，MarkRenderEnd 用                                                            // 已经报给渲染线程的帧尺寸
     qint64 AdvanceSyncPass();                                                                   // 记下本轮起点，返回上一轮起点（算两轮间隔用）
     qint64 SyncStartUs() const;                                                                 // 本轮 synchronize 的起始时刻
     void MarkRenderEnd(qint64 start_us, const FrameTracePtr &trace);                            // render() 画完时回报，算绘制耗时

@@ -1,7 +1,7 @@
 #include "ui/video_item.h"
 
 #include "stream/video_traffic.h"
-#include "ui/video_renderer.h"
+#include "ui/video_rhi_renderer.h"
 
 #include <QDebug>
 #include <QGuiApplication>
@@ -76,7 +76,7 @@ bool ModifierDownNow(const QString &modifier)
 
 } // namespace
 
-VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
+VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
 {
     clock_.start();
     setFlag(QQuickItem::ItemHasContents, true);
@@ -168,10 +168,12 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
     });
     pinch_watch_timer_->start();
 }
-
-QQuickFramebufferObject::Renderer *VideoItem::createRenderer() const
+// 渲染线程创建时调一次：把画布自己交给渲染器，之后两者通过 VideoFrameSource 接口通信
+QQuickRhiItemRenderer *VideoItem::createRenderer()
 {
-    return new qsc::ui::YuvRenderer;
+    auto *renderer = new qsc::ui::VideoRhiRenderer();
+    renderer->SetSource(const_cast<VideoItem *>(this));
+    return renderer;
 }
 
 QSize VideoItem::FrameSize() const
@@ -387,7 +389,7 @@ void VideoItem::geometryChange(const QRectF &new_geometry, const QRectF &old_geo
 // 之前放在每帧的队列回调里，Qt6 下 update() 会同步进渲染循环再回到这里，栈直接爆掉
 void VideoItem::componentComplete()
 {
-    QQuickFramebufferObject::componentComplete();
+    QQuickRhiItem::componentComplete();
 
     if (window() == nullptr)
     {
@@ -428,3 +430,52 @@ void VideoItem::EmitControlMessage(const QByteArray &message)
 }
 
 // 鼠标按下：先拿焦点，再换算坐标发触摸按下
+// ---- VideoFrameSource 接口实现：QRhi 渲染器通过这三个方法和画布打交道 ----
+
+// 渲染线程取一帧：顺带把"到达时刻 / 本轮 sync 起点"带出去，供统计用
+qsc::stream::Frame VideoItem::TakePendingFrame(qsc::ui::RenderFrameTiming *timing_out)
+{
+    FrameTracePtr trace;
+    qint64 arrive_us = 0;
+    qsc::stream::Frame frame = TakePendingFrame(&trace, &arrive_us);
+
+    last_render_trace_ = trace;                                                                 // 留给 MarkRenderEnd 结算
+    if (timing_out != nullptr)
+    {
+        timing_out->arrive_us = arrive_us;
+        timing_out->sync_start_us = SyncStartUs();
+    }
+    return frame;
+}
+
+void VideoItem::NotifySyncPass()
+{
+    AdvanceSyncPass();
+}
+
+qint64 VideoItem::SyncPassStartUs() const
+{
+    return SyncStartUs();
+}
+
+qint64 VideoItem::NowUs() const
+{
+    return clock_.nsecsElapsed() / 1000;
+}
+
+bool VideoItem::KeepAspectEnabled() const
+{
+    return KeepAspect();
+}
+
+// 一帧画完：交给统计文件结算上屏延迟
+void VideoItem::NotifyRenderEnd(qint64 draw_start_us)
+{
+    MarkRenderEnd(draw_start_us, last_render_trace_);
+    last_render_trace_.reset();
+}
+
+QSize VideoItem::CanvasSize() const
+{
+    return size().toSize();
+}

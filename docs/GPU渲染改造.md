@@ -164,22 +164,72 @@ target_include_directories(QmlScrcpy PRIVATE "${QS_QT_ROOT}/include/QtGui/${Qt6_
 | 步 | 内容 | 状态 |
 |---|---|---|
 | **1** | 解码器支持导入外部 D3D11 设备（`SetExternalDevice`） | ✅ 已完成（提交 `44c96aa`） |
-| **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | ✅ 代码完成，NV12 分支可用，尚未接线 |
-| **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | 待做 |
+| **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | ✅ 已完成（提交 `6f21092`） |
+| **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | ✅ 已完成，软解出画面 97 fps |
 | **4** | 原生纹理通路：VideoProcessor 输出 RGBA8 → `createFrom` → 直接画 | 待做 |
 
 ### 第 2 步产出了什么
 
 | 文件 | 作用 |
 |---|---|
-| `ui/video_frame_source.h` | 渲染器与画布的接口：`TakePendingFrame` / `AdvanceSyncPass` / `MarkRenderEnd` / `KeepAspect` / `CanvasSize`。换基类时渲染器不用改 |
+| `ui/video_frame_source.h` | 渲染器与画布的接口：`TakePendingFrame` / `NotifySyncPass` / `NotifyRenderEnd` / `KeepAspectEnabled` / `CanvasSize`。换基类时渲染器不用改 |
 | `ui/video_rhi_renderer.{h,cpp}` | `QQuickRhiItemRenderer` 子类：加载 QSB、建 R8/RG8 两张平面纹理、上传、画全屏四边形 |
 | `ui/shaders/quad.vert` + `nv12.frag` | YUV→RGB（BT.601）的 QSB 着色器，系数和 GL 版一致 |
 | `src/CMakeLists.txt` | 登记文件 + 构建后拷贝 `shaders/*.qsb` + 加 RHI 头文件路径 |
 
-**第一版只处理 NV12**（硬解 B 方案的产物）。软解的 YUV420P 三平面还没接，等第 3 步切过去再补——那时才有画面可以对比。
-
 编译结果：`QmlScrcpy.exe` 生成成功，`bin/Debug/shaders/` 里两个 qsb 都在。因为 `VideoItem` 还是 `QQuickFramebufferObject`，渲染器**还没被实例化**，运行行为不变。
+
+### 第 3 步产出了什么
+
+| 文件 | 变化 |
+|---|---|
+| `ui/video_item.h` | 基类换成 `QQuickRhiItem`，同时实现 `VideoFrameSource`；`createRenderer()` 不再 `const` |
+| `ui/video_item.cpp` | `createRenderer()` 返回 `VideoRhiRenderer` 并 `SetSource(this)`；实现 6 个接口方法；删掉 GL 渲染器引用 |
+| `ui/video_item_input.cpp` | 基类事件转发改名（`QQuickRhiItem::mousePressEvent` 等） |
+| `src/main.cpp` | `setGraphicsApi(QSGRendererInterface::Direct3D11)` |
+| `ui/video_renderer.{h,cpp}` | **删除**（GL 版渲染器作废，代码在 git 历史里） |
+
+软解 `YUV420P` 没有单独做三平面管线，而是在 `synchronize()` 里把 U/V 拼成 NV12 交错：
+
+```
+YUV420P：U 平面 + V 平面        → 逐行拼成 U0 V0 U1 V1 …  → 同一套 NV12 着色器
+NV12   ：UV 已经是交错的         → 直接按行拷
+```
+
+代价是每帧一次行拷贝，换掉整整一套着色器 + 三张纹理 + 第二套管线，划算。
+
+### 第 3 步的坑
+
+**坑 9：`createRenderer()` 不是 const**
+
+`QQuickFramebufferObject::createRenderer() const` 到 `QQuickRhiItem::createRenderer()` 少了 `const`，原样照抄会报：
+
+```
+error C3668: 包含重写说明符 override 的方法没有重写任何基类方法
+```
+
+**坑 10：接口方法名和画布已有方法撞了**
+
+画布本来就有 `AdvanceSyncPass()`（返回 qint64）、`ClockUs()`、`MarkRenderEnd(qint64, trace)`。接口里再声明同名不同签名的纯虚函数，直接编译失败：
+
+```
+error C2555: 重写虚函数返回类型有差异
+error C2535: 已经定义或声明成员函数
+```
+
+解决办法是接口用另一套名字：`NotifySyncPass` / `SyncPassStartUs` / `NowUs` / `NotifyRenderEnd`，实现里转调已有方法。
+
+**坑 11：删了 GL 渲染器要连带清三处**
+
+- `video_item.cpp` 的 `#include "ui/video_renderer.h"`
+- `src/CMakeLists.txt` 里的源文件条目
+- `video_item_input.cpp` 里 `QQuickFramebufferObject::xxxEvent` 的基类调用
+
+漏任何一处都是编译错误。
+
+**坑 12：日志刷屏**
+
+`QQuickRhiItem` 在窗口缩放/场景图重建时会重新 `createRenderer()`，初始化日志打了几百行。改成函数内 `static bool` 只打第一次。
 
 **为什么 2 在 3 之前**：渲染器先能画 CPU 帧，切后端时才有画面可验证；否则一切换就是黑屏，分不清问题在哪。
 

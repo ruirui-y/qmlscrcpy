@@ -25,8 +25,6 @@ add_executable(QmlScrcpy ${qs_subsystem}
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_frame_source.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_renderer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_renderer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item_input.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item_trace.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.cpp

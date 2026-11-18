@@ -28,13 +28,13 @@ public:
     virtual qsc::stream::Frame TakePendingFrame(RenderFrameTiming *timing_out) = 0;
 
     // 渲染开始/结束的时刻记录，统计用
-    virtual void AdvanceSyncPass() = 0;
-    virtual qint64 SyncStartUs() const = 0;
-    virtual qint64 ClockUs() const = 0;
-    virtual void MarkRenderEnd(qint64 draw_start_us) = 0;
+    virtual void NotifySyncPass() = 0;                                                          // 新的一轮同步开始（统计用）
+    virtual qint64 SyncPassStartUs() const = 0;
+    virtual qint64 NowUs() const = 0;
+    virtual void NotifyRenderEnd(qint64 draw_start_us) = 0;                                     // 一帧画完
 
     // 画布属性
-    virtual bool KeepAspect() const = 0;
+    virtual bool KeepAspectEnabled() const = 0;
     virtual QSize CanvasSize() const = 0;
 };
 

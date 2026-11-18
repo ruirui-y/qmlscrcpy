@@ -146,7 +146,13 @@ void VideoRhiRenderer::initialize(QRhiCommandBuffer *cb)
     Q_UNUSED(cb)
 
     rhi_ = rhi();
-    qInfo() << "[rhi] 渲染器初始化，后端" << rhi_->backendName();
+    // 渲染器会被重建很多次（缩放、场景图重建），这行只在第一次打，避免刷屏
+    static bool logged = false;
+    if (!logged)
+    {
+        logged = true;
+        qInfo() << "[rhi] 渲染器初始化，后端" << rhi_->backendName();
+    }
 }
 
 void VideoRhiRenderer::synchronize(QQuickRhiItem *)
@@ -156,22 +162,19 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *)
         return;
     }
 
-    source_->AdvanceSyncPass();
+    source_->NotifySyncPass();
     RenderFrameTiming timing;
-    timing.sync_start_us = source_->SyncStartUs();
+    timing.sync_start_us = source_->SyncPassStartUs();
 
     const qsc::stream::Frame frame = source_->TakePendingFrame(&timing);
     if (!frame.IsValid())
     {
         return;
     }
-    if (frame.Format() != qsc::stream::PixelFormat::Nv12)
-    {
-        return;                                                                                 // 第一版只处理 NV12
-    }
 
-    // 拷成紧凑平面：源每行可能有对齐填充
     const QSize size = frame.Size();
+
+    // Y 平面：两种像素格式都是连续的 w×h，逐行按源步长拷成紧凑排列
     plane_y_.resize(size.width() * size.height());
     for (int row = 0; row < size.height(); ++row)
     {
@@ -179,12 +182,34 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *)
                frame.Y() + static_cast<qsizetype>(row) * frame.StrideY(), size.width());
     }
 
+    // UV 平面：着色器只认 NV12（U/V 交错），软解的 YUV420P 在这里合并成交错格式。
+    // 这一步是纯 CPU 拼接，比换一套三平面管线简单得多，代价也只是每帧一次行拷贝。
     const int chroma_height = (size.height() + 1) / 2;
+    const int chroma_width = (size.width() + 1) / 2;
     plane_uv_.resize(size.width() * chroma_height);
-    for (int row = 0; row < chroma_height; ++row)
+
+    if (frame.Format() == qsc::stream::PixelFormat::Nv12)
     {
-        memcpy(plane_uv_.data() + row * size.width(),
-               frame.U() + static_cast<qsizetype>(row) * frame.StrideU(), size.width());
+        for (int row = 0; row < chroma_height; ++row)
+        {
+            memcpy(plane_uv_.data() + row * size.width(),
+                   frame.U() + static_cast<qsizetype>(row) * frame.StrideU(), size.width());
+        }
+    }
+    // 软解：U/V 分开存，按 2 字节一组拼成交错
+    else
+    {
+        for (int row = 0; row < chroma_height; ++row)
+        {
+            const quint8 *u_row = frame.U() + static_cast<qsizetype>(row) * frame.StrideU();
+            const quint8 *v_row = frame.V() + static_cast<qsizetype>(row) * frame.StrideV();
+            quint8 *dst = reinterpret_cast<quint8 *>(plane_uv_.data()) + row * size.width();
+            for (int col = 0; col < chroma_width; ++col)
+            {
+                dst[col * 2] = u_row[col];                                                      // U 在前
+                dst[col * 2 + 1] = v_row[col];                                                  // V 在后
+            }
+        }
     }
 
     frame_size_ = size;
@@ -234,7 +259,7 @@ void VideoRhiRenderer::render(QRhiCommandBuffer *cb)
 
     cb->endPass();
 
-    source_->MarkRenderEnd(source_->ClockUs());
+    source_->NotifyRenderEnd(source_->NowUs());
 }
 
 } // namespace qsc::ui
