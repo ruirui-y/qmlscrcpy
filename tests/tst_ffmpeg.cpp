@@ -71,7 +71,7 @@ void FfmpegTest::SwscaleConvertsSyntheticFrame()
     std::vector<quint8> v(static_cast<size_t>(chroma_width * chroma_height), 0x80);
 
     const auto owner = std::make_shared<int>(0);
-    const qsc::stream::Frame frame(QSize(width, height), y.data(), u.data(), v.data(), width,
+    const qsc::stream::Frame frame(QSize(width, height), qsc::stream::PixelFormat::Yuv420P, y.data(), u.data(), v.data(), width,
                                    chroma_width, chroma_width, owner);
 
     qsc::stream::YuvConvert convert;
@@ -96,7 +96,7 @@ void FfmpegTest::SwscaleHandlesPaddedStrides()
     std::vector<quint8> v(static_cast<size_t>(stride_uv * (height / 2)), 0x80);
 
     const auto owner = std::make_shared<int>(0);
-    const qsc::stream::Frame frame(QSize(width, height), y.data(), u.data(), v.data(), stride_y,
+    const qsc::stream::Frame frame(QSize(width, height), qsc::stream::PixelFormat::Yuv420P, y.data(), u.data(), v.data(), stride_y,
                                    stride_uv, stride_uv, owner);
 
     qsc::stream::YuvConvert convert;

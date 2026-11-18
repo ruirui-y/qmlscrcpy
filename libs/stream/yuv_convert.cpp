@@ -79,10 +79,10 @@ bool YuvConvert::EnsureBuffers(const QSize &size)
     return true;
 }
 
-// 把一帧 YUV420P 转成 RGB32 的 QImage
+// 把一帧 YUV420P 转成 RGB32 的 QImage。只支持三平面软解帧，NV12 走渲染层的着色器
 QImage YuvConvert::Convert(const Frame &frame)
 {
-    if (!frame.IsValid() || !EnsureBuffers(frame.Size()))
+    if (!frame.IsValid() || frame.Format() != PixelFormat::Yuv420P || !EnsureBuffers(frame.Size()))
     {
         return QImage();
     }

@@ -22,6 +22,8 @@
 #include <QQuickWindow>
 #include <windows.h>
 
+#include <cstring>
+
 #include "base/log.h"
 
 // Release 里不定义这个宏，下面的每帧追踪代码整段不会被编进去
@@ -147,7 +149,36 @@ void main()
 }
 )";
 
+// 片段着色器：NV12（硬解下载下来的排布），Y 一个平面，UV 交错在另一个平面里
+const char *const kNv12FragmentShader = R"(
+varying highp vec2 uv;
+uniform sampler2D texY;
+uniform sampler2D texUV;
+void main()
+{
+    mediump vec3 yuv;
+    yuv.x = texture2D(texY, uv).r - 0.0625;
+    yuv.y = texture2D(texUV, uv).r - 0.5;
+    yuv.z = texture2D(texUV, uv).a - 0.5;
+    mediump vec3 rgb;
+    rgb.r = dot(yuv, vec3(1.164, 0.000, 1.596));
+    rgb.g = dot(yuv, vec3(1.164, -0.391, -0.813));
+    rgb.b = dot(yuv, vec3(1.164, 2.018, 0.000));
+    gl_FragColor = vec4(rgb, 1.0);
+}
+)";
+
 void ResetGlState(QOpenGLFunctions *gl);                                                        // 画完把纹理单元和像素对齐还回默认值
+
+// 把一个平面按行拷成紧凑缓冲：源每行可能有对齐填充，目标不留
+void CopyPlane(QByteArray &target, const quint8 *source, int width, int height, int stride)
+{
+    target.resize(width * height);
+    for (int row = 0; row < height; ++row)
+    {
+        memcpy(target.data() + row * width, source + static_cast<qsizetype>(row) * stride, width);
+    }
+}
 
 // 渲染器：Qt 只在 render() 里保证 GL 上下文是当前的，所有 GL 调用都塞在这一个函数里。
 // synchronize() 在渲染线程但不是 GL 回调，只做"把 GUI 那边的最新一帧拷过来"，
@@ -167,15 +198,17 @@ private:
     VideoItem *item_ = nullptr;                                                                 // synchronize 时记住画布指针，render() 回报耗时要它
     bool keep_aspect_ = false;
 
-    QByteArray planes_[3];                                                                      // 三个平面的紧凑像素副本
+    QByteArray planes_[3];                                                                      // 三个平面的紧凑像素副本（NV12 只用前两个）
     int widths_[3] = {0, 0, 0};
     int heights_[3] = {0, 0, 0};
     QSize frame_size_;                                                                          // 副本对应的帧尺寸
+    bool nv12_ = false;                                                                         // 这一帧是不是 NV12（硬解下载的格式）
     bool dirty_ = false;                                                                        // 有没上传的新像素
 
     GLuint textures_[3] = {0, 0, 0};
     QSize texture_sizes_[3];                                                                    // 每张纹理当前对应的平面尺寸，变了就重建
     QOpenGLShaderProgram program_;
+    QOpenGLShaderProgram nv12_program_;
     bool program_ready_ = false;
 };
 
@@ -227,26 +260,43 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
 
     // 拷进渲染器自己的缓冲：帧只活到这一次 synchronize 结束
     const QSize size = frame.Size();
-    const quint8 *data[3] = {frame.Y(), frame.U(), frame.V()};
-    const int strides[3] = {frame.StrideY(), frame.StrideU(), frame.StrideV()};
-    const int widths[3] = {size.width(), (size.width() + 1) / 2, (size.width() + 1) / 2};
-    const int heights[3] = {size.height(), (size.height() + 1) / 2, (size.height() + 1) / 2};
+    nv12_ = frame.Format() == qsc::stream::PixelFormat::Nv12;
 
-    for (int i = 0; i < 3; ++i)
+    if (nv12_)
     {
-        if (data[i] == nullptr || widths[i] <= 0 || heights[i] <= 0)
+        // NV12：Y 整张；UV 是交错的两个通道，一个像素装一对 U/V，所以宽高都只有一半
+        if (frame.Y() == nullptr || frame.U() == nullptr || size.width() <= 0 || size.height() <= 0)
         {
             return;
         }
-        planes_[i].resize(widths[i] * heights[i]);
-        for (int row = 0; row < heights[i]; ++row)
-        {
-            memcpy(planes_[i].data() + row * widths[i],
-                   data[i] + static_cast<qsizetype>(row) * strides[i], widths[i]);
-        }
-        widths_[i] = widths[i];
-        heights_[i] = heights[i];
+        CopyPlane(planes_[0], frame.Y(), size.width(), size.height(), frame.StrideY());
+        // 一行 UV 的字节数等于帧宽（每两个字节一对 U/V），行数是高度的一半
+        CopyPlane(planes_[1], frame.U(), size.width(), (size.height() + 1) / 2, frame.StrideU());
+        widths_[0] = size.width();
+        heights_[0] = size.height();
+        widths_[1] = (size.width() + 1) / 2;                                                    // LA 纹理：一个纹素装一对 U/V
+        heights_[1] = (size.height() + 1) / 2;
+        widths_[2] = 0;
+        heights_[2] = 0;
     }
+    else
+    {
+        const quint8 *data[3] = {frame.Y(), frame.U(), frame.V()};
+        const int strides[3] = {frame.StrideY(), frame.StrideU(), frame.StrideV()};
+        const int widths[3] = {size.width(), (size.width() + 1) / 2, (size.width() + 1) / 2};
+        const int heights[3] = {size.height(), (size.height() + 1) / 2, (size.height() + 1) / 2};
+        for (int i = 0; i < 3; ++i)
+        {
+            if (data[i] == nullptr || widths[i] <= 0 || heights[i] <= 0)
+            {
+                return;
+            }
+            CopyPlane(planes_[i], data[i], widths[i], heights[i], strides[i]);
+            widths_[i] = widths[i];
+            heights_[i] = heights[i];
+        }
+    }
+
     frame_size_ = size;
     dirty_ = true;
 
@@ -257,7 +307,7 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
     }
 }
 
-// 首次渲染时编译链接 YUV 转 RGB 的着色器
+// 首次渲染时编译链接两套着色器：三平面 YUV420P 和两平面 NV12
 void YuvRenderer::EnsureProgram()
 {
     if (program_ready_)
@@ -280,6 +330,23 @@ void YuvRenderer::EnsureProgram()
     {
         qWarning() << "[video] 着色器链接失败:" << program_.log();
     }
+
+    // NV12 这套只在硬解时用得上，编不过只影响硬解，不该拖累软解
+    if (!nv12_program_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
+        || !nv12_program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kNv12FragmentShader))
+    {
+        qWarning() << "[video] NV12 着色器编译失败:" << nv12_program_.log();
+    }
+    else
+    {
+        nv12_program_.bindAttributeLocation("vertexCoords", 0);
+        nv12_program_.bindAttributeLocation("texCoords", 1);
+        if (!nv12_program_.link())
+        {
+            qWarning() << "[video] NV12 着色器链接失败:" << nv12_program_.log();
+        }
+    }
+
     program_ready_ = true;
 }
 
@@ -308,10 +375,11 @@ void YuvRenderer::render()
     }
 
 
-    // 建纹理 + 上传：只在有像素时才做
+    // 建纹理 + 上传：只在有像素时才做。NV12 两平面，YUV420P 三平面
+    const int plane_count = nv12_ ? 2 : 3;
     if (dirty_)
     {
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < plane_count; ++i)
         {
             // 尺寸变了（横竖屏切换）必须重建纹理，否则 glTexSubImage2D 会越界，画面直接卡住
             const bool size_changed = texture_sizes_[i] != QSize(widths_[i], heights_[i]);
@@ -327,37 +395,47 @@ void YuvRenderer::render()
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                // GL_LUMINANCE 是 GL 2.0 的原生格式，着色器里采样 .r 即可
-                gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, widths_[i], heights_[i], 0,
-                                 GL_LUMINANCE, GL_UNSIGNED_BYTE, nullptr);
+                // NV12 的 UV 平面是交错的两个通道，用 LUMINANCE_ALPHA 一次装进 r 和 a
+                const GLint internal = nv12_ && i == 1 ? GL_LUMINANCE_ALPHA : GL_LUMINANCE;
+                gl->glTexImage2D(GL_TEXTURE_2D, 0, internal, widths_[i], heights_[i], 0, internal,
+                                 GL_UNSIGNED_BYTE, nullptr);
                 texture_sizes_[i] = QSize(widths_[i], heights_[i]);
             }
             gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
             gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            gl->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, widths_[i], heights_[i], GL_LUMINANCE,
+            const GLenum internal = nv12_ && i == 1 ? GL_LUMINANCE_ALPHA : GL_LUMINANCE;
+            gl->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, widths_[i], heights_[i], internal,
                                 GL_UNSIGNED_BYTE, planes_[i].constData());
         }
         dirty_ = false;
     }
 
-    if (!program_.isLinked())
+    QOpenGLShaderProgram &active = nv12_ ? nv12_program_ : program_;
+    if (!active.isLinked())
     {
         return;
     }
 
-    program_.bind();
-    for (int i = 0; i < 3; ++i)
+    active.bind();
+    for (int i = 0; i < plane_count; ++i)
     {
         gl->glActiveTexture(GL_TEXTURE0 + i);
         gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
     }
-    program_.setUniformValue("texY", 0);
-    program_.setUniformValue("texU", 1);
-    program_.setUniformValue("texV", 2);
+    active.setUniformValue("texY", 0);
+    if (nv12_)
+    {
+        active.setUniformValue("texUV", 1);
+    }
+    else
+    {
+        active.setUniformValue("texU", 1);
+        active.setUniformValue("texV", 2);
+    }
 
     DrawQuad(gl, static_cast<float>(item_size_.width()), static_cast<float>(item_size_.height()));
 
-    program_.release();
+    active.release();
     ResetGlState(gl);
 
     // 画完立刻记一笔：缓冲交换发生在 render() 之后，那段时间由 synchronize 侧的"交换+等待"统计

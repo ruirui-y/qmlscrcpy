@@ -497,7 +497,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [命令行窗口](docs/命令行窗口.md) | 控制台开关、为什么用 ShowWindow 而不是 FreeConsole |
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
 | [按键映射](docs/按键映射.md) | 游戏键位映射：三种键位类型、五层结构、七次失败的过程、16ms 轮询方案 |
-| [解码链路](docs/解码链路.md) | H.264 软解：Annex-B 直接喂 FFmpeg、配置包挂起、4 线程折中、帧的引用计数 |
+| [解码链路](docs/解码链路.md) | H.264 解码：软解基线、换 d3d11va 硬解踩的五个坑、NV12 着色器、阶段一实测（下载占 99.8%）与阶段二零拷贝计划 |
 | [Qt6 迁移](docs/Qt6迁移.md) | Qt5.15 → Qt6.8 全过程：断言崩溃、栈溢出、OpenGL 后端、部署布局、adb 路径 |
 | [自动更新](docs/自动更新.md) | 一键下载 + 校验 sha256 + 静默安装，为什么安装仍会弹 UAC |
 | [双仓库发版](docs/双仓库发版.md) | GitHub 放代码、Gitee 放 exe 的完整发版流程与核对方法 |
