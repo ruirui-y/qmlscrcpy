@@ -42,7 +42,7 @@ private:
     bool DrainFrames(QVector<Frame> &frames, QString *error);                                   // 把解码器里积压的帧全取出来
     bool OpenHardware(QString *error);                                                          // 建 D3D11 设备并挂到上下文上
     bool DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *error);                  // 拷进暂存纹理再读回内存，组装成 NV12 帧
-    bool EnsureVideoProcessor(int width, int height, QString *error);                            // 建 VideoProcessor 和双缓冲 BGRA 纹理
+    bool EnsureVideoProcessor(int width, int height, QString *error);                           // 建 VideoProcessor 和双缓冲 BGRA 纹理
     bool ConvertToBgra(AVFrame *hardware_frame, QString *error);                                // GPU 内 NV12 → BGRA，写进双缓冲
     void ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_ns);                     // 每秒一行：拼包/送包/收帧/下载/合计
 

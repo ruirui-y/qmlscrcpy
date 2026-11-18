@@ -62,12 +62,12 @@
     </mxGraphModel>
   </diagram>
   <diagram name="软解与上屏" id="rQVVSp4XlAkvPv6HnMwg">
-    <mxGraphModel dx="5873" dy="3548" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="500" pageHeight="500" math="0" shadow="0">
+    <mxGraphModel dx="2689" dy="1688" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="500" pageHeight="500" math="0" shadow="0">
       <root>
         <mxCell id="pk9WN5zZ1hlgs31XTIZ5-0" />
         <mxCell id="pk9WN5zZ1hlgs31XTIZ5-1" parent="pk9WN5zZ1hlgs31XTIZ5-0" />
         <mxCell id="pk9WN5zZ1hlgs31XTIZ5-2" parent="pk9WN5zZ1hlgs31XTIZ5-1" style="swimlane;html=1;startSize=70;fillColor=#f0a30a;strokeColor=#BD7000;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;fontColor=#000000;" value="&lt;div&gt;&lt;div&gt;帧的还原：软解与上屏&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;一帧 H.264 是怎么从电脑收到的那串字节，解开、变成纹理、最后画到窗口上的?&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="1800" width="5040" x="-1410" y="-908" as="geometry" />
+          <mxGeometry height="1800" width="5430" x="-1410" y="-908" as="geometry" />
         </mxCell>
         <mxCell id="WGBuGD5uSK3rRpqKVQhX-1" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="pk9WN5zZ1hlgs31XTIZ5-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="pk9WN5zZ1hlgs31XTIZ5-15">
           <mxGeometry relative="1" as="geometry" />
@@ -177,20 +177,74 @@
         <mxCell id="WGBuGD5uSK3rRpqKVQhX-28" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;div&gt;&lt;b&gt;软解（4 线程）：把解码从收包线程上摘下来&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;4.64ms 那件事没变，变的是它不再发生在读线程里&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;读线程送完包立刻回去 recv，4 个解码线程并行解&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;一次 Push 从 4643µs 降到 82µs，读线程占用 34% → &amp;lt; 1%&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;代价：解码器内部攒 thread_count - 1 帧，端到端多 25 ~ 100ms&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="92" width="330" x="3170" y="734.5" as="geometry" />
         </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-1" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-0">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="WGBuGD5uSK3rRpqKVQhX-30" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;卡点：这 4.64ms 里读线程不会回去 recv&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;读线程在 avcodec_send_packet 里同步解码，调用进去就把这帧解完才出来&lt;/div&gt;&lt;div&gt;这段时间它既收不了新数据，也切不了包&lt;/div&gt;&lt;div&gt;上游不会等你：手机还在发，字节只能堆在 socket 接收缓冲区里&lt;/div&gt;&lt;div&gt;不是 CPU 不够，是这条线程回不去&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="92" width="430" x="3720" y="441.5" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-2" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-32" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-0">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="WGBuGD5uSK3rRpqKVQhX-32" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;堆了多少：切完一帧后残留 &amp;gt; 0 的比例 8 ~ 21%&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;每切完一帧数一次 socket 接收缓冲区还剩多少字节，&amp;gt; 0 就是后面还排着没切的包&lt;/div&gt;&lt;div&gt;单线程 8 ~ 21%，4 线程 0 ~ 1%&lt;/div&gt;&lt;div&gt;IDR 大帧最明显：传输本身就久，解码也久，两头一起堆&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="78" width="430" x="3720" y="591.5" as="geometry" />
         </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-3" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-33" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="x2nz8xx_jYfLwncO0FUB-0">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="WGBuGD5uSK3rRpqKVQhX-33" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;根因：不是算得慢，是占了收数据的那条线程&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;4.64ms 一帧，倒推理论 215fps，帧率从来不是它的瓶颈&lt;/div&gt;&lt;div&gt;真正的问题是同一条线程既收数据又算数据，算的时候收不了&lt;/div&gt;&lt;div&gt;所以目标不是把 4.64ms 变小，是让读线程不必等它&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="78" width="430" x="3720" y="741.5" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-4" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-0">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="WGBuGD5uSK3rRpqKVQhX-34" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;对策：thread_count = 4，换谁来算&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;FFmpeg 自带 frame-level 多线程，一个字段就开，参考帧依赖它内部自己管&lt;/div&gt;&lt;div&gt;原来写死 thread_count = 1 才是偏离上游，scrcpy 的 demuxer.c 压根不设这字段，走按核数自动&lt;/div&gt;&lt;div&gt;单帧还是 4.64ms，变的是 4 个解码线程同时解 4 帧，读线程回来收包&lt;/div&gt;&lt;div&gt;另一条补丁还没打：上游挂了 AV_CODEC_FLAG_LOW_DELAY 压攒帧延迟，我们暂时没挂&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="100" width="430" x="3720" y="881.5" as="geometry" />
         </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-5" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="WGBuGD5uSK3rRpqKVQhX-35" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-0">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="WGBuGD5uSK3rRpqKVQhX-35" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;换来了什么，代价是什么&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;读线程合计 4643 → 82µs，占用 34% → &amp;lt; 1%，切包残留 8 ~ 21% → 0 ~ 1%&lt;/div&gt;&lt;div&gt;最慢单帧 26107 → 6936 ~ 16468µs，单帧尖峰不再直接变成读线程停摆&lt;/div&gt;&lt;div&gt;代价：解码器内部攒 thread_count - 1 帧，120fps 约 25ms、30fps 约 100ms&lt;/div&gt;&lt;div&gt;丢帧 0.05% → 0.99%，但 85 个里 60 个来自同一次抖动，样本不足以下结论&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="92" width="430" x="3720" y="1031.5" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-7" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="x2nz8xx_jYfLwncO0FUB-0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-10" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="x2nz8xx_jYfLwncO0FUB-0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-11" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="x2nz8xx_jYfLwncO0FUB-0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-13" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="x2nz8xx_jYfLwncO0FUB-0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-73" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="x2nz8xx_jYfLwncO0FUB-0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-14">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-74" edge="1" parent="pk9WN5zZ1hlgs31XTIZ5-2" source="x2nz8xx_jYfLwncO0FUB-0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="x2nz8xx_jYfLwncO0FUB-72">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-0" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;b&gt;硬解码（D3D11VA）&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;OpenHardware 建 D3D11 设备 → 挂 get_format&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;解码产物是显存纹理，不是像素数组&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;所以必须&quot;下载&quot;或&quot;零拷贝&quot;二选一&lt;/b&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="78" width="250" x="4310" y="741.5" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-6" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;&lt;div&gt;入口：OpenHardware 只做三件事&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;① av_hwdevice_ctx_create / 自己建 D3D11 设备（枚举 DXGI，跳过虚拟适配器）&lt;/div&gt;&lt;div&gt;② context_-&amp;gt;hw_device_ctx = 设备引用&lt;/div&gt;&lt;div&gt;③ context_-&amp;gt;get_format = PickPixelFormat&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;设备建不起来不算失败，直接退软解&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="4730" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-8" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;格式协商：只认 D3D11&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;FFmpeg 问&quot;这帧用哪个像素格式&quot; → 回调里只返回 AV_PIX_FMT_D3D11&lt;/div&gt;&lt;div&gt;拿不到就返回 formats[0]，FFmpeg 自动退回软解&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;if (*format == AV_PIX_FMT_D3D11) return *format;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="92" width="430" x="4730" y="598" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-9" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;产物：显存里的纹理，不是内存里的像素&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;av_frame-&amp;gt;format == AV_PIX_FMT_D3D11&lt;/div&gt;&lt;div&gt;data[0] = ID3D11Texture2D*&lt;/div&gt;&lt;div&gt;data[1] = 数组切片号（解码器池第几张）&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;⚠ 数据在 GPU，CPU 摸不到 → 后面所有麻烦都从这来&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="4730" y="741.5" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-12" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;怎么回内存：复用一张暂存纹理&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CopySubresourceRegion(staging, 0, texture, slice)&lt;/div&gt;&lt;div&gt;Map(staging, 0, D3D11_MAP_READ)&amp;nbsp; &amp;nbsp; &amp;nbsp; ← 卡在这等 GPU&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;⚠ Map 是同步点：拷贝 1269us + 读回 1081us，4.7ms 全等在这&lt;/div&gt;&lt;div&gt;UV 平面不用单独拷，偏移 = RowPitch × height&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="4730" y="908" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-14" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;怎么进 QML：Frame(NV12) → 两平面 → 着色器&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Frame 只装 Y + UV 两个平面 → Present → synchronize 拷进渲染器&lt;/div&gt;&lt;div&gt;Y&amp;nbsp; → GL_LUMINANCE（w × h）&lt;/div&gt;&lt;div&gt;UV → GL_LUMINANCE_ALPHA（半宽 × 半高，一个纹素装一对 U/V）&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;片元着色器做 YUV→RGB（BT.601），CPU 不参与转色&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="4730" y="1075" as="geometry" />
+        </mxCell>
+        <mxCell id="x2nz8xx_jYfLwncO0FUB-72" parent="pk9WN5zZ1hlgs31XTIZ5-2" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=4;fillColor=#b1ddf0;strokeColor=#10739e;" value="&lt;div&gt;将来：A 方案零拷贝&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;解码纹理 → VideoProcessor 转 BGRA → wglDXRegisterObjectNV → GL 直接画&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;省掉的是 ④ 的下载 和 ⑤ 的 CPU 上传&lt;/div&gt;&lt;div&gt;卡在：解码线程写纹理 / 渲染线程锁纹理，没有帧序号同步&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="4730" y="1228" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

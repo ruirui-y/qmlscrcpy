@@ -341,7 +341,7 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
     {
         timer_.start();
     }
-
+                                
     QByteArray payload = data;
     if (!pending_config_.isEmpty())
     {
