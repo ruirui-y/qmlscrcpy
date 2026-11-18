@@ -125,14 +125,61 @@ cb->setViewport({0.0f, 0.0f, float(size.width()), float(size.height())});
 
 `qsb.exe` 编译出来的是 `quad.vert.qsb` / `quad.frag.qsb`，运行时按相对路径加载。构建时用 `copy_if_different` 拷到输出目录，否则运行时打不开、管线创建失败、画出来全黑。
 
+### 坑 6：`uploadTexture(tex, QByteArray)` 这个重载不存在
+
+第一次写成了：
+
+```cpp
+batch->uploadTexture(texture_y_, plane_y_);        // ❌ 没有这个重载
+```
+
+正确写法要套一层 entry（一个 entry = 一个 mip 层）：
+
+```cpp
+const QRhiTextureUploadDescription desc(QRhiTextureUploadEntry(
+    0, 0, QRhiTextureSubresourceUploadDescription(data, size)));
+batch->uploadTexture(texture_y_, desc);
+```
+
+### 坑 7：顶点缓冲建了不等于传了
+
+`QRhiBuffer::create()` 只是分配，数据要用 `uploadStaticBuffer`。而且**必须放在 `beginPass` 之前**（`render()` 开头、还没进 pass 时），否则就是坑 4 那个断言。
+
+### 坑 8：RHI 头文件不在默认 include 路径里
+
+`#include <rhi/qrhi.h>` 编译不过，因为它在版本化目录：
+
+```
+include/QtGui/6.8.3/QtGui/rhi/qrhi.h
+```
+
+Qt 的 imported target 不会带上，要手动加：
+
+```cmake
+target_include_directories(QmlScrcpy PRIVATE "${QS_QT_ROOT}/include/QtGui/${Qt6_VERSION}/QtGui")
+```
+
 ## 五、四步改造计划（每步可回退）
 
 | 步 | 内容 | 状态 |
 |---|---|---|
 | **1** | 解码器支持导入外部 D3D11 设备（`SetExternalDevice`） | ✅ 已完成（提交 `44c96aa`） |
-| **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | 待做 |
+| **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | ✅ 代码完成，NV12 分支可用，尚未接线 |
 | **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | 待做 |
 | **4** | 原生纹理通路：VideoProcessor 输出 RGBA8 → `createFrom` → 直接画 | 待做 |
+
+### 第 2 步产出了什么
+
+| 文件 | 作用 |
+|---|---|
+| `ui/video_frame_source.h` | 渲染器与画布的接口：`TakePendingFrame` / `AdvanceSyncPass` / `MarkRenderEnd` / `KeepAspect` / `CanvasSize`。换基类时渲染器不用改 |
+| `ui/video_rhi_renderer.{h,cpp}` | `QQuickRhiItemRenderer` 子类：加载 QSB、建 R8/RG8 两张平面纹理、上传、画全屏四边形 |
+| `ui/shaders/quad.vert` + `nv12.frag` | YUV→RGB（BT.601）的 QSB 着色器，系数和 GL 版一致 |
+| `src/CMakeLists.txt` | 登记文件 + 构建后拷贝 `shaders/*.qsb` + 加 RHI 头文件路径 |
+
+**第一版只处理 NV12**（硬解 B 方案的产物）。软解的 YUV420P 三平面还没接，等第 3 步切过去再补——那时才有画面可以对比。
+
+编译结果：`QmlScrcpy.exe` 生成成功，`bin/Debug/shaders/` 里两个 qsb 都在。因为 `VideoItem` 还是 `QQuickFramebufferObject`，渲染器**还没被实例化**，运行行为不变。
 
 **为什么 2 在 3 之前**：渲染器先能画 CPU 帧，切后端时才有画面可验证；否则一切换就是黑屏，分不清问题在哪。
 
