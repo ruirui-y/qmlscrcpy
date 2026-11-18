@@ -1,10 +1,10 @@
 {
-    "latest":  "0.2.1",
+    "latest":  "0.3.0",
     "minimum":  "0.1.0",
     "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes":  "按键映射与连点器，修滚轮甩动",
-    "published_at":  "2026-11-14",
-    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.2.1/QmlScrcpy_Setup_0.2.1.exe",
-    "size":  48084732,
-    "sha256":  "c70e6b7f00f977447d12422fdfc3baa67cd8d00583c96b112f4feb85f37f8dd6"
+    "notes":  "Qt6.8 迁移 + GPU 硬解（D3D11VA），打字跟手",
+    "published_at":  "2026-11-18",
+    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.3.0/QmlScrcpy_Setup_0.3.0.exe",
+    "size":  63949246,
+    "sha256":  "61d3e63663b6bcdac677ee03743e5e1aaf4823e10df88eba328498b9a5d68bd9"
 }
