@@ -33,12 +33,18 @@ private:
     bool EnsureShaders();                                                                       // 加载 QSB 着色器
     bool EnsurePipeline();                                                                      // 建管线、采样器、顶点缓冲
     bool EnsureTextures(const QSize &size);                                                     // 建/重建两张平面纹理
+    bool EnsureRgbaPipeline();
+    bool EnsureNativeConverter(const QSize &size);
+    void *ConvertNativeFrame();
+    QRhiTexture *NativeWrapFor(void *source, const QSize &size);
+    void ReleaseNativeWraps();
 
     VideoFrameSource *source_ = nullptr;
 
     QRhi *rhi_ = nullptr;
     QShader vertex_shader_;
     QShader fragment_shader_;
+    QShader fragment_rgba_;
     QRhiShaderResourceBindings *bindings_ = nullptr;
     QRhiSampler *sampler_ = nullptr;
     QRhiBuffer *vertex_buffer_ = nullptr;
@@ -46,6 +52,26 @@ private:
 
     QRhiTexture *texture_y_ = nullptr;                                                          // R8
     QRhiTexture *texture_uv_ = nullptr;                                                         // RG8
+    QRhiTexture *native_texture_ = nullptr;
+    struct NativeWrap
+    {
+        void *source = nullptr;
+        QRhiTexture *texture = nullptr;
+    };
+    NativeWrap native_wraps_[4];
+    void *video_device_ = nullptr;
+    void *video_context_ = nullptr;
+    void *processor_enum_ = nullptr;
+    void *processor_ = nullptr;
+    void *output_texture_ = nullptr;
+    void *output_view_ = nullptr;
+    QSize converter_size_;
+    int native_slice_ = 0;
+    QRhiGraphicsPipeline *rgba_pipeline_ = nullptr;
+    QRhiShaderResourceBindings *rgba_bindings_ = nullptr;
+    void *native_ptr_ = nullptr;
+    QSize native_size_;
+    bool has_native_ = false;
     QSize texture_size_;
     bool vertex_uploaded_ = false;                                                              // 顶点缓冲是否已上传（render 里、beginPass 之前做）
 

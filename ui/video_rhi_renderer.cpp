@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QFile>
 
+#include <d3d11.h>
+
 namespace qsc::ui
 {
 
@@ -143,6 +145,9 @@ VideoRhiRenderer::~VideoRhiRenderer()
     delete bindings_;
     delete sampler_;
     delete vertex_buffer_;
+    ReleaseNativeWraps();
+    delete rgba_pipeline_;
+    delete rgba_bindings_;
 }
 
 void VideoRhiRenderer::SetSource(VideoFrameSource *source)
@@ -175,6 +180,217 @@ void VideoRhiRenderer::initialize(QRhiCommandBuffer *cb)
     }
 }
 
+// 建原生纹理的直通管线：一张纹理，着色器只采样输出
+
+// 建渲染线程独占的 VideoProcessor：设备从 RHI 借，不和视频线程共用上下文
+bool VideoRhiRenderer::EnsureNativeConverter(const QSize &size)
+{
+    if (processor_ != nullptr && converter_size_ == size)
+    {
+        return true;
+    }
+
+    auto *handles = const_cast<QRhiD3D11NativeHandles *>(
+        static_cast<const QRhiD3D11NativeHandles *>(rhi_->nativeHandles()));
+    if (handles == nullptr || handles->dev == nullptr)
+    {
+        return false;
+    }
+
+    auto *device = static_cast<ID3D11Device *>(handles->dev);
+    auto *context = static_cast<ID3D11DeviceContext *>(handles->context);
+
+    ID3D11VideoDevice *video_device = nullptr;
+    ID3D11VideoContext *video_context = nullptr;
+    if (FAILED(device->QueryInterface(__uuidof(ID3D11VideoDevice), reinterpret_cast<void **>(&video_device)))
+        || FAILED(context->QueryInterface(__uuidof(ID3D11VideoContext), reinterpret_cast<void **>(&video_context))))
+    {
+        return false;
+    }
+
+    D3D11_VIDEO_PROCESSOR_CONTENT_DESC content = {};
+    content.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+    content.InputWidth = static_cast<UINT>(size.width());
+    content.InputHeight = static_cast<UINT>(size.height());
+    content.OutputWidth = static_cast<UINT>(size.width());
+    content.OutputHeight = static_cast<UINT>(size.height());
+    content.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
+
+    ID3D11VideoProcessorEnumerator *processor_enum = nullptr;
+    ID3D11VideoProcessor *processor = nullptr;
+    if (FAILED(video_device->CreateVideoProcessorEnumerator(&content, &processor_enum))
+        || FAILED(video_device->CreateVideoProcessor(processor_enum, 0, &processor)))
+    {
+        return false;
+    }
+
+    D3D11_TEXTURE2D_DESC texture_desc = {};
+    texture_desc.Width = static_cast<UINT>(size.width());
+    texture_desc.Height = static_cast<UINT>(size.height());
+    texture_desc.MipLevels = 1;
+    texture_desc.ArraySize = 1;
+    texture_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texture_desc.SampleDesc.Count = 1;
+    texture_desc.Usage = D3D11_USAGE_DEFAULT;
+    texture_desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+    ID3D11Texture2D *output = nullptr;
+    if (FAILED(device->CreateTexture2D(&texture_desc, nullptr, &output)))
+    {
+        return false;
+    }
+
+    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC output_desc = {};
+    output_desc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+    output_desc.Texture2D.MipSlice = 0;
+
+    ID3D11VideoProcessorOutputView *output_view = nullptr;
+    if (FAILED(video_device->CreateVideoProcessorOutputView(output, processor_enum, &output_desc, &output_view)))
+    {
+        return false;
+    }
+
+    video_device_ = video_device;
+    video_context_ = video_context;
+    processor_enum_ = processor_enum;
+    processor_ = processor;
+    output_texture_ = output;
+    output_view_ = output_view;
+    converter_size_ = size;
+    qInfo() << "[rhi] 视频处理器就绪" << size;
+    return true;
+}
+
+// 把解码器的 NV12 纹理（按切片）转成自己的 RGBA 纹理，返回它的指针
+void *VideoRhiRenderer::ConvertNativeFrame()
+{
+    if (processor_ == nullptr || native_ptr_ == nullptr)
+    {
+        return nullptr;
+    }
+
+    auto *video_device = static_cast<ID3D11VideoDevice *>(video_device_);
+    auto *video_context = static_cast<ID3D11VideoContext *>(video_context_);
+    auto *texture = static_cast<ID3D11Texture2D *>(native_ptr_);
+
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC input_desc = {};
+    input_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    input_desc.Texture2D.MipSlice = 0;
+    input_desc.Texture2D.ArraySlice = static_cast<UINT>(native_slice_);
+
+    ID3D11VideoProcessorInputView *input_view = nullptr;
+    if (FAILED(video_device->CreateVideoProcessorInputView(
+            texture, static_cast<ID3D11VideoProcessorEnumerator *>(processor_enum_), &input_desc, &input_view)))
+    {
+        return nullptr;
+    }
+
+    D3D11_VIDEO_PROCESSOR_STREAM stream = {};
+    stream.Enable = TRUE;
+    stream.OutputIndex = 0;
+    stream.InputFrameOrField = 0;
+    stream.pInputSurface = input_view;
+
+    const HRESULT blt = video_context->VideoProcessorBlt(
+        static_cast<ID3D11VideoProcessor *>(processor_),
+        static_cast<ID3D11VideoProcessorOutputView *>(output_view_), 0, 1, &stream);
+    input_view->Release();
+
+    if (FAILED(blt))
+    {
+        return nullptr;
+    }
+    return output_texture_;
+}
+
+bool VideoRhiRenderer::EnsureRgbaPipeline()
+{
+    if (rgba_pipeline_ != nullptr)
+    {
+        return true;
+    }
+
+    const QString path = QCoreApplication::applicationDirPath() + QStringLiteral("/shaders/rgba.frag.qsb");
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        qWarning() << "[rhi] 打不开着色器" << path;
+        return false;
+    }
+    fragment_rgba_ = QShader::fromSerialized(file.readAll());
+
+    rgba_bindings_ = rhi_->newShaderResourceBindings();
+    rgba_bindings_->create();
+
+    rgba_pipeline_ = rhi_->newGraphicsPipeline();
+    rgba_pipeline_->setShaderStages({
+        {QRhiShaderStage::Vertex, vertex_shader_},
+        {QRhiShaderStage::Fragment, fragment_rgba_},
+    });
+    QRhiVertexInputLayout layout;
+    layout.setBindings({{4 * sizeof(float)}});
+    layout.setAttributes({
+        {0, 0, QRhiVertexInputAttribute::Float2, 0},
+        {0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float)},
+    });
+    rgba_pipeline_->setVertexInputLayout(layout);
+    rgba_pipeline_->setShaderResourceBindings(rgba_bindings_);
+    rgba_pipeline_->setRenderPassDescriptor(renderTarget()->renderPassDescriptor());
+    rgba_pipeline_->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+    rgba_pipeline_->setCullMode(QRhiGraphicsPipeline::None);
+
+    if (!rgba_pipeline_->create())
+    {
+        qWarning() << "[rhi] 直通管线创建失败";
+        delete rgba_pipeline_;
+        rgba_pipeline_ = nullptr;
+        return false;
+    }
+    return true;
+}
+
+// 拿某个解码纹理对应的 QRhiTexture：指针没变就复用，变了才新建
+QRhiTexture *VideoRhiRenderer::NativeWrapFor(void *source, const QSize &size)
+{
+    for (NativeWrap &entry : native_wraps_)
+    {
+        if (entry.source == source && entry.texture != nullptr)
+        {
+            return entry.texture;
+        }
+    }
+    for (NativeWrap &entry : native_wraps_)
+    {
+        if (entry.texture == nullptr)
+        {
+            QRhiTexture *texture = rhi_->newTexture(QRhiTexture::RGBA8, size);
+            QRhiTexture::NativeTexture native_src;
+            native_src.object = reinterpret_cast<quint64>(source);
+            native_src.layout = 0;
+            if (!texture->createFrom(native_src))
+            {
+                delete texture;
+                qWarning() << "[rhi] 原生纹理包装失败" << source;
+                return nullptr;
+            }
+            entry.source = source;
+            entry.texture = texture;
+            return texture;
+        }
+    }
+    ReleaseNativeWraps();
+    return NativeWrapFor(source, size);
+}
+
+void VideoRhiRenderer::ReleaseNativeWraps()
+{
+    for (NativeWrap &entry : native_wraps_)
+    {
+        delete entry.texture;
+        entry = {};
+    }
+}
+
 void VideoRhiRenderer::synchronize(QQuickRhiItem *)
 {
     if (source_ == nullptr)
@@ -192,9 +408,20 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *)
         return;
     }
 
+    // 原生纹理：解码器给的是 NV12 纹理 + 切片号，这里只记指针，转色在 render 里做
+    if (frame.HasNative())
+    {
+        native_ptr_ = frame.Native().texture;
+        native_slice_ = frame.Native().slice;
+        native_size_ = frame.Size();
+        has_native_ = true;
+        frame_size_ = native_size_;
+        return;
+    }
+    has_native_ = false;
+
     const QSize size = frame.Size();
 
-    // Y 平面：两种像素格式都是连续的 w×h，逐行按源步长拷成紧凑排列
     plane_y_.resize(size.width() * size.height());
     for (int row = 0; row < size.height(); ++row)
     {
@@ -202,8 +429,6 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *)
                frame.Y() + static_cast<qsizetype>(row) * frame.StrideY(), size.width());
     }
 
-    // UV 平面：着色器只认 NV12（U/V 交错），软解的 YUV420P 在这里合并成交错格式。
-    // 这一步是纯 CPU 拼接，比换一套三平面管线简单得多，代价也只是每帧一次行拷贝。
     const int chroma_height = (size.height() + 1) / 2;
     const int chroma_width = (size.width() + 1) / 2;
     plane_uv_.resize(size.width() * chroma_height);
@@ -216,7 +441,6 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *)
                    frame.U() + static_cast<qsizetype>(row) * frame.StrideU(), size.width());
         }
     }
-    // 软解：U/V 分开存，按 2 字节一组拼成交错
     else
     {
         for (int row = 0; row < chroma_height; ++row)
@@ -226,8 +450,8 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *)
             quint8 *dst = reinterpret_cast<quint8 *>(plane_uv_.data()) + row * size.width();
             for (int col = 0; col < chroma_width; ++col)
             {
-                dst[col * 2] = u_row[col];                                                      // U 在前
-                dst[col * 2 + 1] = v_row[col];                                                  // V 在后
+                dst[col * 2] = u_row[col];
+                dst[col * 2 + 1] = v_row[col];
             }
         }
     }
@@ -266,6 +490,36 @@ void VideoRhiRenderer::render(QRhiCommandBuffer *cb)
         has_frame_ = false;
     }
 
+    // 原生纹理分支：解码器给的是它池子里的 NV12 纹理，包成 QRhiTexture 后直接画
+    if (has_native_ && native_ptr_ != nullptr && EnsureRgbaPipeline())
+    {
+        // 转色在渲染线程用 VideoProcessor 做：NV12 + 切片 → 自己的 RGBA 纹理
+        void *rgba = EnsureNativeConverter(native_size_) ? ConvertNativeFrame() : nullptr;
+        QRhiTexture *wrapped = rgba != nullptr ? NativeWrapFor(rgba, native_size_) : nullptr;
+        if (wrapped != nullptr)
+        {
+            rgba_bindings_->setBindings({QRhiShaderResourceBinding::sampledTexture(
+                0, QRhiShaderResourceBinding::FragmentStage, wrapped, sampler_)});
+            rgba_bindings_->create();
+            rgba_pipeline_->setShaderResourceBindings(rgba_bindings_);
+            rgba_pipeline_->create();
+
+            const QSize native_target = renderTarget()->pixelSize();
+            cb->beginPass(renderTarget(), Qt::black, {1.0f, 0});
+            cb->setViewport({0.0f, 0.0f, static_cast<float>(native_target.width()),
+                             static_cast<float>(native_target.height())});
+            const QRhiCommandBuffer::VertexInput native_inputs[] = {{vertex_buffer_, 0}};
+            cb->setGraphicsPipeline(rgba_pipeline_);
+            cb->setShaderResources(rgba_bindings_);
+            cb->setVertexInput(0, 1, native_inputs);
+            cb->draw(4);
+            cb->endPass();
+
+            source_->NotifyRenderEnd(source_->NowUs());
+            return;
+        }
+        has_native_ = false;
+    }
     const QSize target_size = renderTarget()->pixelSize();
     cb->beginPass(renderTarget(), Qt::black, {1.0f, 0});
     cb->setViewport({0.0f, 0.0f, static_cast<float>(target_size.width()),

@@ -749,6 +749,8 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     if (rhi_device_ != 0)
     {
         decoder_->SetExternalDevice(reinterpret_cast<void *>(rhi_device_), reinterpret_cast<void *>(rhi_context_));
+        // 零拷贝仍崩，先关：见 docs/GPU渲染改造.md 的 4b 记录
+        decoder_->SetZeroCopy(false);
     }
 
     if (!decoder_->Open(&error))
