@@ -1079,7 +1079,7 @@ Window
 
         function onConnectedChanged()
         {
-            videoWindow.visible = deviceController.connected
+            videoWindow.visible = deviceController.connected || deviceController.connecting
         }
     }
 

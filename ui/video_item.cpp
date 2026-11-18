@@ -479,3 +479,13 @@ QSize VideoItem::CanvasSize() const
 {
     return size().toSize();
 }
+// 渲染线程调：投递到 GUI 线程再发信号，解码器在那边
+void VideoItem::ProvideRhiDevice(void *device, void *context)
+{
+    const quintptr device_value = reinterpret_cast<quintptr>(device);
+    const quintptr context_value = reinterpret_cast<quintptr>(context);
+    QMetaObject::invokeMethod(this, [this, device_value, context_value]()
+    {
+        emit SigRhiDeviceReady(device_value, context_value);
+    }, Qt::QueuedConnection);
+}

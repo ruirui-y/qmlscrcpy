@@ -308,6 +308,21 @@ bool DeviceController::IsConnected() const
 {
     return connected_;
 }
+bool DeviceController::IsConnecting() const
+{
+    return connecting_;
+}
+
+// 连接流程开关：开着的时候 QML 就把投屏窗显示出来（哪怕还没画面）
+void DeviceController::SetConnectingFlag(bool value)
+{
+    if (connecting_ == value)
+    {
+        return;
+    }
+    connecting_ = value;
+    emit SigConnectingChanged();
+}
 
 // 当前生效的码率（bps），界面用来显示
 int DeviceController::VideoBitRate() const
@@ -644,6 +659,8 @@ void DeviceController::RefreshDevices()
 // 同步建链并接到画布上，会阻塞一两秒
 void DeviceController::Connect(const QString &serial)
 {
+    pending_serial_ = serial;
+    SetConnectingFlag(true);                                                                    // 提前让投屏窗起来，渲染后端先拿到 D3D11 设备                                                                   // 等设备重试时还要用
     if (serial.trimmed().isEmpty())
     {
         SetStatus(QStringLiteral("先填序列号"));
@@ -694,6 +711,15 @@ void DeviceController::Connect(const QString &serial)
 // 连接结果落地：接解码器和读线程
 void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
 {
+    // 硬解要复用 Qt 的设备：渲染后端还没交上来就等一会儿再进来（投屏窗此刻已经显示，渲染器会初始化）
+    if (AppSettings().DecodeHardware() && rhi_device_ == 0 && gpu_wait_retries_ < 40)
+    {
+        ++gpu_wait_retries_;
+        QTimer::singleShot(50, this, [this, result]() { ApplyConnected(result); });
+        return;
+    }
+    gpu_wait_retries_ = 0;
+
     if (!result.ok_)
     {
         SetStatus(QStringLiteral("连接失败：%1").arg(result.error_));
@@ -707,10 +733,17 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
         return;
     }
 
+
     decoder_ = std::make_unique<qsc::stream::H264Decoder>();
     QString error;
     // 配置里 [decode] hardware 决定走硬解还是软解
     decoder_->SetHardwareAllowed(AppSettings().DecodeHardware());
+    // 渲染后端已经就绪的话，把它的 D3D11 设备交给解码器：硬解纹理要能被直接引用
+    if (rhi_device_ != 0)
+    {
+        decoder_->SetExternalDevice(reinterpret_cast<void *>(rhi_device_), reinterpret_cast<void *>(rhi_context_));
+    }
+
     if (!decoder_->Open(&error))
     {
         SetStatus(QStringLiteral("解码器打开失败：%1").arg(error));
@@ -768,6 +801,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     if (!connected_)
     {
         connected_ = true;
+    SetConnectingFlag(false);
         emit SigConnectedChanged();
     }
 
@@ -820,11 +854,23 @@ QString DeviceController::DeviceSerial() const
 void DeviceController::AttachVideoController(VideoController *video)
 {
     video_ = video;
+
+    // 渲染后端可能比解码器晚就绪：先存下来，打开解码器时再交过去
+    if (video->Surface() != nullptr)
+    {
+        QObject::connect(video->Surface(), &VideoItem::SigRhiDeviceReady, this,
+                         [this](quintptr device, quintptr context)
+        {
+            rhi_device_ = device;
+            rhi_context_ = context;
+        });
+    }
 }
 
 // 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {
+    SetConnectingFlag(false);
     // 断线了就把老板键藏起来的窗口放回去，否则用户找不到界面
     if (boss_hidden_)
     {

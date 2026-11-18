@@ -134,7 +134,16 @@ bool VideoRhiRenderer::EnsureTextures(const QSize &size)
 
 VideoRhiRenderer::VideoRhiRenderer() = default;
 
-VideoRhiRenderer::~VideoRhiRenderer() = default;
+// 渲染器析构在渲染线程：RHI 资源必须在这里删，否则退出会报 unreleased resources
+VideoRhiRenderer::~VideoRhiRenderer()
+{
+    delete texture_y_;
+    delete texture_uv_;
+    delete pipeline_;
+    delete bindings_;
+    delete sampler_;
+    delete vertex_buffer_;
+}
 
 void VideoRhiRenderer::SetSource(VideoFrameSource *source)
 {
@@ -152,6 +161,17 @@ void VideoRhiRenderer::initialize(QRhiCommandBuffer *cb)
     {
         logged = true;
         qInfo() << "[rhi] 渲染器初始化，后端" << rhi_->backendName();
+    }
+
+    // D3D11 后端才有的握手：把 Qt 的设备交给解码器，硬解纹理才能被直接引用
+    if (source_ != nullptr)
+    {
+        auto *handles = const_cast<QRhiD3D11NativeHandles *>(
+            static_cast<const QRhiD3D11NativeHandles *>(rhi_->nativeHandles()));
+        if (handles != nullptr && handles->dev != nullptr)
+        {
+            source_->ProvideRhiDevice(handles->dev, handles->context);
+        }
     }
 }
 

@@ -115,6 +115,7 @@ public:
     qint64 NowUs() const override;
     void NotifyRenderEnd(qint64 draw_start_us) override;
     bool KeepAspectEnabled() const override;
+    void ProvideRhiDevice(void *device, void *context) override;
     QSize CanvasSize() const override;
 
     FrameTracePtr last_render_trace_;                                                           // 渲染线程最近一帧的追踪记录，MarkRenderEnd 用                                                            // 已经报给渲染线程的帧尺寸
@@ -128,6 +129,7 @@ public:
     qint64 BeforeSyncUs() const { return before_sync_us_.loadRelaxed(); }                       // Qt 发出 beforeSynchronizing 的时刻
 
 signals:
+    void SigRhiDeviceReady(quintptr device, quintptr context);                                  // 渲染后端就绪，把 D3D11 设备交给解码器
     void SigFrameSizeChanged();
     void SigKeepAspectChanged();
     void SigFpsChanged();

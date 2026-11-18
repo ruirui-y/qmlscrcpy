@@ -39,6 +39,7 @@ class DeviceController : public QObject, public ControlWriter
     Q_PROPERTY(QString videoProfile READ VideoProfile NOTIFY SigVideoSettingsChanged)
     Q_PROPERTY(QObject *wifiStatus READ WifiStatusObject CONSTANT)                                   // WiFi 健康状态，只有无线连接时 available 为 true
     Q_PROPERTY(bool connected READ IsConnected NOTIFY SigConnectedChanged)
+    Q_PROPERTY(bool connecting READ IsConnecting NOTIFY SigConnectingChanged)                // 正在连：提前打开投屏窗，让渲染后端先就绪
     Q_PROPERTY(QString bossKey READ BossKey NOTIFY SigBossKeyChanged)
     Q_PROPERTY(QString shortcutBack READ ShortcutBack NOTIFY SigShortcutsChanged)
     Q_PROPERTY(QString shortcutHome READ ShortcutHome NOTIFY SigShortcutsChanged)
@@ -72,6 +73,8 @@ public:
     Q_INVOKABLE void RefreshDevices();                                                          // adb devices，刷新后填 proposedSerial
     Q_INVOKABLE void Connect(const QString &serial);                                            // 同步阻塞，连完才返回
     Q_INVOKABLE void Disconnect();
+    bool IsConnecting() const;                                                              // 连接流程是否在跑
+    void SetConnectingFlag(bool value);                                                     // 内部用：切换"正在连"状态
 
     Q_INVOKABLE void SetShowConsole(bool show);                                                 // 显示或隐藏命令行窗口，并记住
     Q_INVOKABLE void ApplyVideoSettings(int bit_rate, int max_fps);                             // 改码率/帧率并重连生效
@@ -105,6 +108,7 @@ signals:
     void SigShowConsoleChanged();
     void SigVideoSettingsChanged();
     void SigConnectedChanged();
+    void SigConnectingChanged();
     void SigBossKeyChanged();
     void SigShortcutsChanged();
     void SigUploadDirChanged();
@@ -135,6 +139,11 @@ private:
     QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
     QStringList devices_;                                                                       // 给 QML 下拉框用的设备地址
     VideoController *video_ = nullptr;                                                          // 视频模块，接帧和取画布要用
+    quintptr rhi_device_ = 0;                                                                   // Qt RHI 给的 ID3D11Device，硬解要复用它
+    quintptr rhi_context_ = 0;
+    bool connecting_ = false;                                                                   // 连接流程是否在跑
+    int gpu_wait_retries_ = 0;                                                                  // 等渲染后端设备的重试次数
+    QString pending_serial_;                                                                    // 等设备期间要重试的连接目标                                                                  // 等渲染后端设备的重试次数                                                                  // 配套的 ID3D11DeviceContext
     QTcpSocket *control_reader_ = nullptr;                                                      // 控制 socket，读设备消息用
     QByteArray control_buffer_;                                                                 // 控制 socket 的半条消息缓存
     quint64 clipboard_sequence_ = 0;                                                            // SetClipboard 的序号，设备 Ack 会带回

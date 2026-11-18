@@ -33,6 +33,9 @@ public:
     virtual qint64 NowUs() const = 0;
     virtual void NotifyRenderEnd(qint64 draw_start_us) = 0;                                     // 一帧画完
 
+    // 渲染线程拿到 RHI 设备后回调一次：画布负责转交给解码器
+    virtual void ProvideRhiDevice(void *device, void *context) = 0;
+
     // 画布属性
     virtual bool KeepAspectEnabled() const = 0;
     virtual QSize CanvasSize() const = 0;
