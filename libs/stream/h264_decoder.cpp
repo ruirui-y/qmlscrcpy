@@ -37,6 +37,19 @@ struct D3d11State
     ComPtr<ID3D11Texture2D> staging;                                                            // STAGING + CPU 可读，尺寸变了才重建
     UINT width = 0;                                                                             // 暂存纹理当前宽
     UINT height = 0;                                                                            // 暂存纹理当前高
+
+    // 零拷贝转色：VideoProcessor 在 GPU 内把 NV12 变成 BGRA，结果写进共享纹理给 OpenGL 用
+    ComPtr<ID3D11VideoDevice> video_device;                                                     // 视频处理器入口
+    ComPtr<ID3D11VideoContext> video_context;                                                   // 提交转换命令
+    ComPtr<ID3D11VideoProcessorEnumerator> processor_enum;                                      // 支持的输入/输出格式表
+    ComPtr<ID3D11VideoProcessor> processor;                                                     // 真正干活的处理器
+    UINT processor_width = 0;                                                                   // 处理器当前的尺寸，变了要重建
+    UINT processor_height = 0;
+    ComPtr<ID3D11Texture2D> bgra[2];                                                            // 双缓冲：解码线程写一张，渲染线程读另一张
+    ComPtr<ID3D11VideoProcessorOutputView> bgra_view[2];                                        // 两张 BGRA 的输出视图
+    HANDLE bgra_share[2] = {nullptr, nullptr};                                                  // 给 GL interop 用的共享句柄
+    int write_index = 0;                                                                        // 下一帧往哪张写
+    bool ready = false;                                                                         // 处理器和纹理都建好了
 };
 
 namespace
@@ -226,6 +239,11 @@ bool H264Decoder::OpenHardware(QString *error)
         auto *hw_context = reinterpret_cast<AVHWDeviceContext *>(device_ref->data);
         auto *d3d11 = static_cast<AVD3D11VADeviceContext *>(hw_context->hwctx);
         // 引用交给 FFmpeg 持有，它释放设备上下文时会 Release，这里不能再自己放
+        // 先自己留一份引用再 Detach：反过来的话 d3d_->device 拿到的是空指针
+        d3d_ = std::make_unique<D3d11State>();
+        d3d_->device = device;
+        d3d_->context = device_context;
+
         d3d11->device = device.Detach();
         d3d11->device_context = device_context.Detach();
 
@@ -235,11 +253,6 @@ bool H264Decoder::OpenHardware(QString *error)
             *error = QStringLiteral("初始化硬解设备上下文失败");
             return false;
         }
-
-        // 设备自己也留一份引用：下载时要往自己的暂存纹理里拷，GL 侧将来也要用同一个设备
-        d3d_ = std::make_unique<D3d11State>();
-        d3d_->device = device;
-        d3d_->context = device_context;
 
         hw_device_ = device_ref;
         context_->hw_device_ctx = av_buffer_ref(hw_device_);
@@ -519,6 +532,179 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
     return true;
 }
 
+// 建视频处理器和双缓冲 BGRA 纹理：NV12 → BGRA 这一步在 GPU 内完成
+bool H264Decoder::EnsureVideoProcessor(int width, int height, QString *error)
+{
+    if (!d3d_ || d3d_->device == nullptr)
+    {
+        *error = QStringLiteral("没有自己的 D3D11 设备");
+        return false;
+    }
+
+    const UINT w = static_cast<UINT>(width);
+    const UINT h = static_cast<UINT>(height);
+    if (d3d_->ready && d3d_->processor_width == w && d3d_->processor_height == h)
+    {
+        return true;
+    }
+
+    d3d_->ready = false;
+    d3d_->processor.Reset();
+    d3d_->processor_enum.Reset();
+    d3d_->video_context.Reset();
+    d3d_->video_device.Reset();
+
+    if (FAILED(d3d_->device.As(&d3d_->video_device)))
+    {
+        *error = QStringLiteral("设备不支持 ID3D11VideoDevice");
+        return false;
+    }
+    if (FAILED(d3d_->context.As(&d3d_->video_context)))
+    {
+        *error = QStringLiteral("上下文不支持 ID3D11VideoContext");
+        return false;
+    }
+
+    D3D11_VIDEO_PROCESSOR_CONTENT_DESC content = {};
+    content.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+    content.InputWidth = w;
+    content.InputHeight = h;
+    content.OutputWidth = w;
+    content.OutputHeight = h;
+    content.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
+
+    const HRESULT enum_ret = d3d_->video_device->CreateVideoProcessorEnumerator(&content, d3d_->processor_enum.GetAddressOf());
+    if (FAILED(enum_ret))
+    {
+        *error = QStringLiteral("建视频处理器枚举失败（HRESULT 0x%1）").arg(enum_ret, 8, 16, QLatin1Char('0'));
+        return false;
+    }
+
+    // 先问驱动支不支持这两组格式，不支持就别往下走
+    UINT in_flags = 0;
+    UINT out_flags = 0;
+    d3d_->processor_enum->CheckVideoProcessorFormat(DXGI_FORMAT_NV12, &in_flags);
+    d3d_->processor_enum->CheckVideoProcessorFormat(DXGI_FORMAT_B8G8R8A8_UNORM, &out_flags);
+    if ((in_flags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT) == 0
+        || (out_flags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_OUTPUT) == 0)
+    {
+        *error = QStringLiteral("驱动不支持 NV12 → BGRA 转换（输入 0x%1 / 输出 0x%2）")
+                     .arg(in_flags, 0, 16).arg(out_flags, 0, 16);
+        return false;
+    }
+
+    const HRESULT processor_ret = d3d_->video_device->CreateVideoProcessor(d3d_->processor_enum.Get(), 0, d3d_->processor.GetAddressOf());
+    if (FAILED(processor_ret))
+    {
+        *error = QStringLiteral("建视频处理器失败（HRESULT 0x%1）").arg(processor_ret, 8, 16, QLatin1Char('0'));
+        return false;
+    }
+
+    // scrcpy 用的是 BT.601 有限范围，和软解那条路径保持同一个色彩解释
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE input_space = {};
+    input_space.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235;
+    input_space.YCbCr_Matrix = 0;
+    d3d_->video_context->VideoProcessorSetStreamColorSpace(d3d_->processor.Get(), 0, &input_space);
+
+    for (int i = 0; i < 2; ++i)
+    {
+        D3D11_TEXTURE2D_DESC description = {};
+        description.Width = w;
+        description.Height = h;
+        description.MipLevels = 1;
+        description.ArraySize = 1;
+        description.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        description.SampleDesc.Count = 1;
+        description.Usage = D3D11_USAGE_DEFAULT;
+        description.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        description.MiscFlags = D3D11_RESOURCE_MISC_SHARED;                                      // GL interop 要求共享
+
+        d3d_->bgra[i].Reset();
+        d3d_->bgra_view[i].Reset();
+        const HRESULT texture_ret = d3d_->device->CreateTexture2D(&description, nullptr, d3d_->bgra[i].GetAddressOf());
+        if (FAILED(texture_ret))
+        {
+            *error = QStringLiteral("建 BGRA 纹理失败（HRESULT 0x%1）").arg(texture_ret, 8, 16, QLatin1Char('0'));
+            return false;
+        }
+
+        ComPtr<IDXGIResource> resource;
+        if (FAILED(d3d_->bgra[i].As(&resource)) || FAILED(resource->GetSharedHandle(&d3d_->bgra_share[i])))
+        {
+            *error = QStringLiteral("取共享句柄失败");
+            return false;
+        }
+
+        D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC view = {};
+        view.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+        view.Texture2D.MipSlice = 0;
+        const HRESULT view_ret = d3d_->video_device->CreateVideoProcessorOutputView(
+            d3d_->bgra[i].Get(), d3d_->processor_enum.Get(), &view, d3d_->bgra_view[i].GetAddressOf());
+        if (FAILED(view_ret))
+        {
+            *error = QStringLiteral("建输出视图失败（HRESULT 0x%1）").arg(view_ret, 8, 16, QLatin1Char('0'));
+            return false;
+        }
+    }
+
+    d3d_->processor_width = w;
+    d3d_->processor_height = h;
+    d3d_->write_index = 0;
+    d3d_->ready = true;
+    qInfo() << "[decode] 视频处理器就绪" << width << "x" << height;
+    return true;
+}
+
+// 把一帧 NV12 在 GPU 内转成 BGRA，写进双缓冲的下一张
+bool H264Decoder::ConvertToBgra(AVFrame *hardware_frame, QString *error)
+{
+    if (!EnsureVideoProcessor(hardware_frame->width, hardware_frame->height, error))
+    {
+        return false;
+    }
+
+    auto *texture = reinterpret_cast<ID3D11Texture2D *>(hardware_frame->data[0]);
+    const UINT slice = static_cast<UINT>(reinterpret_cast<quintptr>(hardware_frame->data[1]));
+
+    // 输入视图按帧创建：它绑的是解码器池里的某一张切片，不能复用
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC desc = {};
+    desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    desc.Texture2D.MipSlice = 0;
+    desc.Texture2D.ArraySlice = slice;                                                          // 解码器池里的第几张切片
+
+    ComPtr<ID3D11VideoProcessorInputView> input_view;
+    const HRESULT view_ret = d3d_->video_device->CreateVideoProcessorInputView(
+        texture, d3d_->processor_enum.Get(), &desc, input_view.GetAddressOf());
+    if (FAILED(view_ret))
+    {
+        *error = QStringLiteral("建输入视图失败（HRESULT 0x%1）").arg(view_ret, 8, 16, QLatin1Char('0'));
+        return false;
+    }
+
+    D3D11_VIDEO_PROCESSOR_STREAM stream = {};
+    stream.Enable = TRUE;
+    stream.OutputIndex = 0;
+    stream.InputFrameOrField = 0;
+    stream.pInputSurface = input_view.Get();
+
+    const int target = d3d_->write_index;
+    const HRESULT blt_ret = d3d_->video_context->VideoProcessorBlt(d3d_->processor.Get(), d3d_->bgra_view[target].Get(), 0, 1, &stream);
+    if (FAILED(blt_ret))
+    {
+        *error = QStringLiteral("视频处理器转换失败（HRESULT 0x%1）").arg(blt_ret, 8, 16, QLatin1Char('0'));
+        return false;
+    }
+
+    d3d_->write_index ^= 1;
+    if (!bgra_logged_)
+    {
+        bgra_logged_ = true;
+        qInfo() << "[decode] BGRA 转换成功，共享句柄" << d3d_->bgra_share[target]
+                << "/" << d3d_->bgra_share[target ^ 1];
+    }
+    return true;
+}
+
 // 把解码器里已经解好的帧全取出来；硬解出来的纹理当场拷进暂存再读回内存
 bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
 {
@@ -545,9 +731,27 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
             return false;
         }
 
+        static bool format_logged = false;
+        if (!format_logged)
+        {
+            format_logged = true;
+            qInfo() << "[decode] 首帧格式" << av_frame->format << "（D3D11 = " << AV_PIX_FMT_D3D11 << "）";
+        }
+
         // 硬解给的是 D3D11 纹理，留到下一帧就可能被解码器池复用，必须当场拷走
         if (av_frame->format == AV_PIX_FMT_D3D11)
         {
+            // 阶段 A1：先验证 GPU 内 NV12 → BGRA 能跑通，失败只记一次日志，不挡现有链路
+            if (d3d_ && d3d_->device)
+            {
+                QString bgra_error;
+                if (!ConvertToBgra(av_frame, &bgra_error) && !bgra_logged_)
+                {
+                    bgra_logged_ = true;
+                    qWarning() << "[decode] BGRA 转换不可用：" << bgra_error;
+                }
+            }
+
             const qint64 download_start_ns = trace_enabled_ ? timer_.nsecsElapsed() : 0;
             Frame frame;
             bool downloaded = false;

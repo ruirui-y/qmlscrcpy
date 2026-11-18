@@ -16,6 +16,17 @@ enum class PixelFormat
     Nv12,                                                                                       // Y 一个平面，UV 交错成第二个平面
 };
 
+// 原生纹理：硬解转出来的 BGRA 纹理，直接交给 GL interop，不经过系统内存。
+// 纹理归解码器所有（双缓冲复用），用之前必须先 lock，用完 unlock。
+struct NativeTexture
+{
+    void *device = nullptr;                                                                     // ID3D11Device*，GL interop 要和解码器用同一个设备
+    void *texture = nullptr;                                                                    // ID3D11Texture2D*
+    quint64 share_handle = 0;                                                                   // 共享句柄，注册前要交给 wglDXSetResourceShareHandleNV
+    int width = 0;                                                                              // 纹理宽
+    int height = 0;                                                                             // 纹理高
+};
+
 // 一帧解码后的画面：平面指针 + 每行字节跨度。
 // 平面数据归 FFmpeg 的 AVFrame 所有，这里用 shared_ptr 一起带着走，最后一个 Frame
 // 销毁时才 av_frame_free。跨线程只传这个对象，不传裸指针 —— 裸指针没人负责释放，
@@ -33,7 +44,12 @@ public:
     {
     }
 
-    bool IsValid() const { return owner_ != nullptr; }
+    // 硬解零拷贝帧：只有原生纹理，没有 CPU 平面数据
+    Frame(QSize size, const NativeTexture &native) : size_(size), native_(native) {}
+
+    bool IsValid() const { return owner_ != nullptr || native_.texture != nullptr; }
+    bool HasNative() const { return native_.texture != nullptr; }
+    const NativeTexture &Native() const { return native_; }
     QSize Size() const { return size_; }
     PixelFormat Format() const { return format_; }
 
@@ -55,6 +71,7 @@ private:
     int stride_u_ = 0;
     int stride_v_ = 0;
     std::shared_ptr<const void> owner_;                                                         // 持有 AVFrame，Frame 活着数据就有效
+    NativeTexture native_;                                                                      // 硬解零拷贝时这里是 BGRA 纹理
 };
 
 } // namespace qsc::stream

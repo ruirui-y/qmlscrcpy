@@ -191,6 +191,8 @@ public:
 
 private:
     void EnsureProgram();
+    void EnsureInterop();                                                                       // 加载 wglDX* 扩展并打开设备
+    bool RegisterNative();                                                                      // 把 D3D11 纹理注册成 GL 纹理（按指针缓存）
     void DrawQuad(QOpenGLFunctions *gl, float width, float height);
 
     QSize item_size_;                                                                           // 画布（FBO）尺寸，每次 synchronize 更新
@@ -205,13 +207,41 @@ private:
     bool nv12_ = false;                                                                         // 这一帧是不是 NV12（硬解下载的格式）
     bool dirty_ = false;                                                                        // 有没上传的新像素
 
+    // 零拷贝：解码线程转出来的 BGRA 纹理，直接注册给 GL
+    bool native_pending_ = false;                                                               // 这一轮要画原生纹理
+    void *native_device_ = nullptr;                                                             // ID3D11Device*
+    void *native_texture_ = nullptr;                                                            // ID3D11Texture2D*
+    quint64 native_share_ = 0;                                                                  // 共享句柄
+    QSize native_size_;
+
     GLuint textures_[3] = {0, 0, 0};
     QSize texture_sizes_[3];                                                                    // 每张纹理当前对应的平面尺寸，变了就重建
     QOpenGLShaderProgram program_;
     QOpenGLShaderProgram nv12_program_;
+    QOpenGLShaderProgram bgra_program_;                                                         // 原生 BGRA 纹理用：采样后交换 B/R
+    QOpenGLShaderProgram *draw_program_ = &program_;                                            // DrawQuad 当前用哪套着色器
     bool program_ready_ = false;
-};
 
+    // wglDX* 扩展函数，只在渲染线程的 GL 上下文里用
+    bool interop_ready_ = false;
+    void *interop_device_ = nullptr;                                                            // wglDXOpenDeviceNV 的返回值
+    void *dx_open_device_ = nullptr;
+    void *dx_close_device_ = nullptr;
+    void *dx_set_share_handle_ = nullptr;
+    void *dx_register_ = nullptr;
+    void *dx_unregister_ = nullptr;
+    void *dx_lock_ = nullptr;
+    void *dx_unlock_ = nullptr;
+    struct Registered
+    {
+        void *texture = nullptr;                                                                // D3D11 纹理指针，用作缓存键
+        GLuint gl_texture = 0;                                                                  // 对应的 GL 纹理名
+        void *object = nullptr;                                                                 // wglDXRegisterObjectNV 的句柄
+    };
+    Registered registered_[4];
+    int registered_count_ = 0;
+
+};
 // 同步阶段：取走最新一帧拷进渲染器缓冲，这个阶段没有 GL 上下文
 void YuvRenderer::synchronize(QQuickFramebufferObject *item)
 {
