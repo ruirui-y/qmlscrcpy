@@ -22,8 +22,9 @@ add_executable(QmlScrcpy ${qs_subsystem}
     control_writer.h
     update_checker.cpp
     update_checker.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_renderer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_renderer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_frame_source.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item_input.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item_trace.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.cpp
@@ -37,6 +38,9 @@ target_compile_definitions(QmlScrcpy PRIVATE
 )
 
 target_include_directories(QmlScrcpy PRIVATE ${PROJECT_SOURCE_DIR})
+
+# RHI 的公开头文件放在版本化目录里，Qt 的 imported target 不会自动带上
+target_include_directories(QmlScrcpy PRIVATE "${QS_QT_ROOT}/include/QtGui/${Qt6_VERSION}/QtGui")
 
 target_link_libraries(QmlScrcpy PRIVATE
     qs_options
@@ -105,6 +109,17 @@ add_custom_command(TARGET QmlScrcpy POST_BUILD
         "${PROJECT_SOURCE_DIR}/Tools/AdbWinUsbApi.dll"
         "$<TARGET_FILE_DIR:QmlScrcpy>/Tools"
     COMMENT "拷贝 Tools（adb.exe 与两个 DLL）到输出目录"
+)
+
+# RHI 版渲染器用的 QSB 着色器：随 exe 走
+add_custom_command(TARGET QmlScrcpy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:QmlScrcpy>/shaders"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/ui/shaders/quad.vert.qsb"
+        "${PROJECT_SOURCE_DIR}/ui/shaders/nv12.frag.qsb"
+        "${PROJECT_SOURCE_DIR}/ui/shaders/rgba.frag.qsb"
+        "$<TARGET_FILE_DIR:QmlScrcpy>/shaders"
+    COMMENT "拷贝 QSB 着色器"
 )
 
 qs_deploy_ffmpeg(QmlScrcpy)

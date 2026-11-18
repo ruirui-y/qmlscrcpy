@@ -23,6 +23,9 @@ struct NativeTexture
     void *device = nullptr;                                                                     // ID3D11Device*，GL interop 要和解码器用同一个设备
     void *texture = nullptr;                                                                    // ID3D11Texture2D*
     quint64 share_handle = 0;                                                                   // 共享句柄，注册前要交给 wglDXSetResourceShareHandleNV
+    int slice = 0;                                                                              // NV12 纹理的数组切片号（解码器池的第几张）
+    quint64 seq = 0;                                                                            // 解码线程写的第几帧
+    std::shared_ptr<void> keep_alive;                                                           // 保住 AVFrame，防止纹理被提前复用
     int width = 0;                                                                              // 纹理宽
     int height = 0;                                                                             // 纹理高
 };

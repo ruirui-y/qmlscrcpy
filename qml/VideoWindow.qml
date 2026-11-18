@@ -1077,9 +1077,15 @@ Window
     {
         target: deviceController
 
+        // 连接一开始就把窗口亮出来：渲染后端要在这几百毫秒里初始化，才能把 D3D11 设备交给解码器
+        function onConnectingChanged()
+        {
+            videoWindow.visible = deviceController.connected || deviceController.connecting
+        }
+
         function onConnectedChanged()
         {
-            videoWindow.visible = deviceController.connected
+            videoWindow.visible = deviceController.connected || deviceController.connecting
         }
     }
 

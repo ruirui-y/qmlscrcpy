@@ -31,7 +31,16 @@ public:
 
     bool Open(QString *error);                                                                  // 找 H.264 解码器并打开上下文
     void Close();                                                                               // 释放上下文，可以重复调
-    void SetHardwareAllowed(bool allowed) { hardware_allowed_ = allowed; }                      // 配置里关掉硬解时传 false
+    // 外部设备：Qt 用 D3D11 后端时设备是它建的，硬解必须复用同一个，否则纹理没法共享
+    void SetExternalDevice(void *d3d11_device, void *d3d11_context)
+    {
+        external_device_ = d3d11_device;
+        external_context_ = d3d11_context;
+    }
+    void SetHardwareAllowed(bool allowed) { hardware_allowed_ = allowed; }
+
+    // 零拷贝：硬解帧不读回内存，只把 NV12 纹理和切片号交出去（转色由渲染线程做）
+    void SetZeroCopy(bool enabled) { zero_copy_ = enabled; }                      // 配置里关掉硬解时传 false
     bool Hardware() const { return hardware_; }                                                 // 这轮是不是硬解（日志用）
 
     // 送一个包，解出的帧追加到 frames（通常 0 或 1 个）；失败时 error 有原因
@@ -52,6 +61,8 @@ private:
     bool hardware_allowed_ = true;                                                              // 配置开关，false 时直接走软解
     bool hardware_ = false;                                                                     // 下面 Push 的分支要看它
     QByteArray pending_config_;                                                                 // 还没拼出去的那份 SPS/PPS
+    void *external_device_ = nullptr;                                                             // 外部传入的 ID3D11Device，空表示自己建
+    void *external_context_ = nullptr;                                                            // 配套的 ID3D11DeviceContext
     std::unique_ptr<D3d11State> d3d_;                                                           // 自己建的设备 + 复用的暂存纹理
 
     // 解码耗时探针：QS_TRACE_DECODE=1 才记，按秒结算。硬解时 drain 里还含 GPU→CPU 的下载
@@ -67,6 +78,8 @@ private:
     qint64 stat_max_total_ns_ = 0;                                                              // 本秒单帧最慢
     qint64 drain_download_ns_ = 0;                                                              // 本次 Push 里下载花了多少
     qint64 drain_copy_ns_ = 0;                                                                  // 其中 GPU 内拷贝花了多少（剩下的就是读回）
+    bool zero_copy_ = false;                                                                    // 是否走原生纹理通路
+    quint64 native_seq_ = 0;                                                                    // 零拷贝出帧序号
     bool bgra_logged_ = false;                                                                  // 转换成功只打一次日志
 };
 

@@ -226,6 +226,47 @@ bool H264Decoder::Open(QString *error)
 // 建 D3D11 设备并挂到解码器上下文：建不起来就返回 false，由调用方退回软解
 bool H264Decoder::OpenHardware(QString *error)
 {
+    // 外部设备优先：Qt 用 D3D11 后端时设备是它建的，硬解必须复用同一个，纹理才能共享
+    if (external_device_ != nullptr)
+    {
+        auto *device = static_cast<ID3D11Device *>(external_device_);
+        auto *context = static_cast<ID3D11DeviceContext *>(external_context_);
+
+        AVBufferRef *device_ref = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
+        if (device_ref == nullptr)
+        {
+            *error = QStringLiteral("分配硬解设备上下文失败");
+            return false;
+        }
+
+        auto *hw_context = reinterpret_cast<AVHWDeviceContext *>(device_ref->data);
+        auto *d3d11 = static_cast<AVD3D11VADeviceContext *>(hw_context->hwctx);
+        device->AddRef();                                                                        // FFmpeg 接管一份引用
+        d3d11->device = device;
+        if (context != nullptr)
+        {
+            context->AddRef();
+            d3d11->device_context = context;
+        }
+
+        if (av_hwdevice_ctx_init(device_ref) < 0)
+        {
+            av_buffer_unref(&device_ref);
+            *error = QStringLiteral("初始化外部设备上下文失败");
+            return false;
+        }
+
+        d3d_ = std::make_unique<D3d11State>();
+        d3d_->device = device;
+        d3d_->context = context;
+
+        hw_device_ = device_ref;
+        context_->hw_device_ctx = av_buffer_ref(hw_device_);
+        context_->get_format = PickPixelFormat;
+        qInfo() << "[decode] 使用外部 D3D11 设备（Qt RHI 提供）";
+        return context_->hw_device_ctx != nullptr;
+    }
+
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> device_context;
     QString device_error;
@@ -734,7 +775,28 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
             bool downloaded = false;
             QString download_error;
 
-            if (d3d_ && d3d_->device)
+            // 零拷贝：只交 NV12 纹理和切片号，转色交给渲染线程（视频线程不碰 D3D 上下文）
+            if (zero_copy_ && external_device_ != nullptr)
+            {
+                qsc::stream::NativeTexture native;
+                native.texture = reinterpret_cast<void *>(av_frame->data[0]);
+                native.slice = static_cast<int>(reinterpret_cast<quintptr>(av_frame->data[1]));
+                native.seq = ++native_seq_;
+                native.width = av_frame->width;
+                native.height = av_frame->height;
+
+                // 保住这一帧，否则解码器会立刻复用纹理
+                AVFrame *held = av_frame_clone(av_frame);
+                native.keep_alive = std::shared_ptr<void>(held, [](void *p) {
+                    AVFrame *frame_ptr = static_cast<AVFrame *>(p);
+                    av_frame_free(&frame_ptr);
+                });
+
+                frame = Frame(QSize(av_frame->width, av_frame->height), native);
+                downloaded = true;
+            }
+
+            if (!downloaded && d3d_ && d3d_->device)
             {
                 // 快路径：复用暂存纹理，省掉每帧新建纹理的分配开销
                 downloaded = DownloadFrame(av_frame, frame, &download_error);

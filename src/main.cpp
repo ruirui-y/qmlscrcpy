@@ -72,7 +72,7 @@ void PrepareSurfaceFormat()
 
     // VideoItem 是 QQuickFramebufferObject，它的 render() 里全是裸 GL 调用，只在 OpenGL
     // 后端下会被调用。Qt6 在 Windows 上默认挑 D3D11，不指定的话这个节点直接被跳过（画面全黑）
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);                           // RHI 渲染器要 D3D11：和硬解共用设备，纹理可直接引用
 }
 
 // 任务栏和 Alt+Tab 用的图标与程序元信息
