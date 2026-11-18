@@ -165,8 +165,26 @@ target_include_directories(QmlScrcpy PRIVATE "${QS_QT_ROOT}/include/QtGui/${Qt6_
 |---|---|---|
 | **1** | 解码器支持导入外部 D3D11 设备（`SetExternalDevice`） | ✅ 已完成（提交 `44c96aa`） |
 | **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | ✅ 已完成（提交 `6f21092`） |
-| **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | ✅ 已完成，软解出画面 97 fps |
+| **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | ✅ 已完成（提交 `6f31530`），软解 97 fps、硬解 NV12 分支实测通过 |
 | **4** | 原生纹理通路：VideoProcessor 输出 RGBA8 → `createFrom` → 直接画 | 待做 |
+
+### 第三步之后的实测（NV12 分支）
+
+把 `config/config.ini` 的 `hardware` 临时改成 1 跑了一次：
+
+```
+[decode] D3D11 适配器 "NVIDIA GeForce RTX 4080 SUPER"
+[decode] 使用 D3D11VA 硬件解码
+[decode] 首帧格式 172（D3D11 = 172）
+[rhi] 渲染器初始化，后端 D3D11
+```
+
+画面正常（聊天界面截图，文字和头像颜色都对），47 fps。说明：
+
+- 硬解产物（NV12 两平面）→ 渲染器 R8/RG8 上传 → QSB 着色器 → D3D11 上屏，整条链路通
+- 现在仍然走 **CPU 中转**（`DownloadFrame` 读回），第 4 步才是把这段删掉
+
+测完已把 `hardware` 改回 0，配置没留改动。
 
 ### 第 2 步产出了什么
 
