@@ -9,14 +9,17 @@
 
 struct AVBufferRef;
 struct AVCodecContext;
+struct AVFrame;
 struct AVPacket;
 
 namespace qsc::stream
 {
 
+struct D3d11State;                                                                              // 设备、上下文和暂存纹理，定义在 cpp 里（不把 d3d11.h 带进头文件）
+
 // H.264 解码。输入是裸 Annex-B 数据：配置包（SPS/PPS）和数据包都往里送，
 // FFmpeg 自己按 in-band 参数集解析，不用我们手工拼 extradata。
-// 优先走 D3D11VA 硬解，帧下载成 NV12 交给渲染层；设备建不起来就退回软解。
+// 优先走 D3D11VA 硬解，解出的 NV12 纹理拷进自己的暂存纹理再读回内存；设备建不起来就退回软解。
 class H264Decoder
 {
 public:
@@ -37,6 +40,7 @@ public:
 private:
     bool DrainFrames(QVector<Frame> &frames, QString *error);                                   // 把解码器里积压的帧全取出来
     bool OpenHardware(QString *error);                                                          // 建 D3D11 设备并挂到上下文上
+    bool DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *error);                  // 拷进暂存纹理再读回内存，组装成 NV12 帧
     void ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_ns);                     // 每秒一行：拼包/送包/收帧/下载/合计
 
     AVCodecContext *context_ = nullptr;                                                         // 解码器上下文，Close 后置空
@@ -44,6 +48,7 @@ private:
     AVBufferRef *hw_device_ = nullptr;                                                          // D3D11 设备引用，软解时为 nullptr
     bool hardware_ = false;                                                                     // 下面 Push 的分支要看它
     QByteArray pending_config_;                                                                 // 还没拼出去的那份 SPS/PPS
+    std::unique_ptr<D3d11State> d3d_;                                                           // 自己建的设备 + 复用的暂存纹理
 
     // 解码耗时探针：QS_TRACE_DECODE=1 才记，按秒结算。硬解时 drain 里还含 GPU→CPU 的下载
     bool trace_enabled_ = false;                                                                // 环境变量开的开关
@@ -54,8 +59,10 @@ private:
     qint64 stat_send_ns_ = 0;                                                                   // 本秒送包累计
     qint64 stat_drain_ns_ = 0;                                                                  // 本秒收帧累计
     qint64 stat_download_ns_ = 0;                                                               // 本秒下载累计（只有硬解有）
+    qint64 stat_copy_ns_ = 0;                                                                   // 本秒 GPU 拷贝累计
     qint64 stat_max_total_ns_ = 0;                                                              // 本秒单帧最慢
     qint64 drain_download_ns_ = 0;                                                              // 本次 Push 里下载花了多少
+    qint64 drain_copy_ns_ = 0;                                                                  // 其中 GPU 内拷贝花了多少（剩下的就是读回）
 };
 
 } // namespace qsc::stream

@@ -26,6 +26,19 @@ using Microsoft::WRL::ComPtr;
 
 namespace qsc::stream
 {
+
+// 自己建的 D3D11 设备 + 一张复用的暂存纹理。
+// 复用是关键：FFmpeg 的 av_hwframe_transfer_data 每帧都新建一张暂存纹理，
+// 分配 + 映射 + 拷贝 + 释放一趟下来 5 ms 就没了。
+struct D3d11State
+{
+    ComPtr<ID3D11Device> device;                                                                // 和 FFmpeg 共用同一个设备
+    ComPtr<ID3D11DeviceContext> context;                                                        // 立即上下文，拷贝和映射都靠它
+    ComPtr<ID3D11Texture2D> staging;                                                            // STAGING + CPU 可读，尺寸变了才重建
+    UINT width = 0;                                                                             // 暂存纹理当前宽
+    UINT height = 0;                                                                            // 暂存纹理当前高
+};
+
 namespace
 {
 
@@ -223,6 +236,11 @@ bool H264Decoder::OpenHardware(QString *error)
             return false;
         }
 
+        // 设备自己也留一份引用：下载时要往自己的暂存纹理里拷，GL 侧将来也要用同一个设备
+        d3d_ = std::make_unique<D3d11State>();
+        d3d_->device = device;
+        d3d_->context = device_context;
+
         hw_device_ = device_ref;
         context_->hw_device_ctx = av_buffer_ref(hw_device_);
         context_->get_format = PickPixelFormat;
@@ -268,6 +286,7 @@ void H264Decoder::Close()
         hw_device_ = nullptr;
     }
     hardware_ = false;
+    d3d_.reset();
 
     // 临时探针（已关）：重连后从零开始算，别把上一条连接的数字混进来
     stat_frames_ = 0;
@@ -275,6 +294,7 @@ void H264Decoder::Close()
     stat_send_ns_ = 0;
     stat_drain_ns_ = 0;
     stat_download_ns_ = 0;
+    stat_copy_ns_ = 0;
     stat_max_total_ns_ = 0;
     window_timer_ = QElapsedTimer();
 }
@@ -346,6 +366,7 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
     const qint64 send_ns = trace_enabled_ ? timer_.nsecsElapsed() - pack_ns : 0;                 // 送包：软解是同步解，硬解只是投递
 
     drain_download_ns_ = 0;
+    drain_copy_ns_ = 0;
     if (!DrainFrames(frames, error))
     {
         return false;
@@ -366,6 +387,7 @@ void H264Decoder::ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_
     stat_send_ns_ += send_ns;
     stat_drain_ns_ += drain_ns;
     stat_download_ns_ += drain_download_ns_;
+    stat_copy_ns_ += drain_copy_ns_;
     const qint64 total_ns = pack_ns + send_ns + drain_ns;
     if (total_ns > stat_max_total_ns_)
     {
@@ -385,8 +407,8 @@ void H264Decoder::ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_
     const qint64 total_avg_ns = (stat_pack_ns_ + stat_send_ns_ + stat_drain_ns_) / n;
     qInfo().nospace() << "[decode] 秒结 " << n << " 帧" << (hardware_ ? "（硬解）" : "（软解）")
                       << "：拼包 " << stat_pack_ns_ / n / 1000 << "us / 送包 " << stat_send_ns_ / n / 1000
-                      << "us / 收帧 " << stat_drain_ns_ / n / 1000 << "us（其中下载 "
-                      << stat_download_ns_ / n / 1000 << "us）/ 合计 " << total_avg_ns / 1000
+                      << "us / 收帧 " << stat_drain_ns_ / n / 1000 << "us（其中拷贝 "
+                      << stat_copy_ns_ / n / 1000 << " + 读回 " << (stat_download_ns_ - stat_copy_ns_) / n / 1000 << "us）/ 合计 " << total_avg_ns / 1000
                       << "us / 最慢 " << stat_max_total_ns_ / 1000 << "us";
 
     stat_frames_ = 0;
@@ -394,11 +416,110 @@ void H264Decoder::ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_
     stat_send_ns_ = 0;
     stat_drain_ns_ = 0;
     stat_download_ns_ = 0;
+    stat_copy_ns_ = 0;
     stat_max_total_ns_ = 0;
     window_timer_.restart();
 }
 
-// 把解码器里已经解好的帧全取出来；硬解出来的纹理当场下载成 NV12
+// 把硬解帧拷进自己的暂存纹理再读回内存。
+// 和 av_hwframe_transfer_data 的区别只有一个：暂存纹理是复用的，不是每帧新建。
+bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *error)
+{
+    if (!d3d_ || d3d_->device == nullptr || d3d_->context == nullptr)
+    {
+        *error = QStringLiteral("没有自己的 D3D11 设备，无法下载");
+        return false;
+    }
+
+    // AV_PIX_FMT_D3D11 的约定：data[0] 是 ID3D11Texture2D，data[1] 是数组下标
+    auto *texture = reinterpret_cast<ID3D11Texture2D *>(hardware_frame->data[0]);
+    const UINT slice = static_cast<UINT>(reinterpret_cast<quintptr>(hardware_frame->data[1]));
+    const UINT width = static_cast<UINT>(hardware_frame->width);
+    const UINT height = static_cast<UINT>(hardware_frame->height);
+
+    // 尺寸变了（横竖屏切换）才重建暂存纹理，其余时候一直复用
+    if (!d3d_->staging || d3d_->width != width || d3d_->height != height)
+    {
+        D3D11_TEXTURE2D_DESC description = {};
+        description.Width = width;
+        description.Height = height;
+        description.MipLevels = 1;
+        description.ArraySize = 1;
+        description.Format = DXGI_FORMAT_NV12;
+        description.SampleDesc.Count = 1;
+        description.Usage = D3D11_USAGE_STAGING;
+        description.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+        d3d_->staging.Reset();
+        const HRESULT create_ret = d3d_->device->CreateTexture2D(&description, nullptr, d3d_->staging.GetAddressOf());
+        if (FAILED(create_ret))
+        {
+            *error = QStringLiteral("建暂存纹理失败（HRESULT 0x%1）").arg(create_ret, 8, 16, QLatin1Char('0'));
+            return false;
+        }
+        d3d_->width = width;
+        d3d_->height = height;
+    }
+
+    const qint64 copy_start_ns = trace_enabled_ ? timer_.nsecsElapsed() : 0;
+    // NV12 的 Y 和 UV 是两个子资源：下标 = 数组下标 × 2 + 平面号
+    const UINT y_subresource = slice * 2;
+    const UINT uv_subresource = slice * 2 + 1;
+    d3d_->context->CopySubresourceRegion(d3d_->staging.Get(), 0, 0, 0, 0, texture, y_subresource, nullptr);
+    d3d_->context->CopySubresourceRegion(d3d_->staging.Get(), 1, 0, 0, 0, texture, uv_subresource, nullptr);
+
+    const int chroma_height = static_cast<int>((height + 1) / 2);
+    const int y_size = static_cast<int>(width * height);
+    const int uv_size = static_cast<int>(width * chroma_height);
+    auto buffer = std::make_shared<QByteArray>(y_size + uv_size, '\0');
+
+    const qint64 map_start_ns = trace_enabled_ ? timer_.nsecsElapsed() : 0;
+    if (trace_enabled_)
+    {
+        drain_copy_ns_ += map_start_ns - copy_start_ns;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    const HRESULT map_ret = d3d_->context->Map(d3d_->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(map_ret))
+    {
+        *error = QStringLiteral("映射暂存纹理失败（HRESULT 0x%1）").arg(map_ret, 8, 16, QLatin1Char('0'));
+        return false;
+    }
+    for (UINT row = 0; row < height; ++row)
+    {
+        memcpy(buffer->data() + row * width, static_cast<const quint8 *>(mapped.pData) + row * mapped.RowPitch, width);
+    }
+    d3d_->context->Unmap(d3d_->staging.Get(), 0);
+
+    // UV 平面单独映射一次：驱动不允许一次 Map 拿到两个平面
+    D3D11_MAPPED_SUBRESOURCE mapped_uv = {};
+    if (SUCCEEDED(d3d_->context->Map(d3d_->staging.Get(), 1, D3D11_MAP_READ, 0, &mapped_uv)))
+    {
+        for (int row = 0; row < chroma_height; ++row)
+        {
+            memcpy(buffer->data() + y_size + row * width,
+                   static_cast<const quint8 *>(mapped_uv.pData) + row * mapped_uv.RowPitch, width);
+        }
+        d3d_->context->Unmap(d3d_->staging.Get(), 1);
+    }
+    else
+    {
+        // 少数驱动不支持按平面映射：退回"UV 紧跟在 Y 之后"的排布
+        for (int row = 0; row < chroma_height; ++row)
+        {
+            memcpy(buffer->data() + y_size + row * width,
+                   static_cast<const quint8 *>(mapped.pData) + (height + row) * mapped.RowPitch, width);
+        }
+    }
+
+    const quint8 *base = reinterpret_cast<const quint8 *>(buffer->constData());
+    frame = Frame(QSize(static_cast<int>(width), static_cast<int>(height)), PixelFormat::Nv12, base,
+                  base + y_size, nullptr, static_cast<int>(width), static_cast<int>(width), 0, buffer);
+    return true;
+}
+
+// 把解码器里已经解好的帧全取出来；硬解出来的纹理当场拷进暂存再读回内存
 bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
 {
     for (;;)
@@ -424,42 +545,52 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
             return false;
         }
 
-        // 硬解给的是 D3D11 纹理，留到下一帧就可能被解码器池复用，必须当场下载
+        // 硬解给的是 D3D11 纹理，留到下一帧就可能被解码器池复用，必须当场拷走
         if (av_frame->format == AV_PIX_FMT_D3D11)
         {
-            AVFrame *software = av_frame_alloc();
-            if (software == nullptr)
+            const qint64 download_start_ns = trace_enabled_ ? timer_.nsecsElapsed() : 0;
+            Frame frame;
+            bool downloaded = false;
+            QString download_error;
+
+            if (d3d_ && d3d_->device)
             {
-                av_frame_free(&av_frame);
-                *error = QStringLiteral("分配下载帧失败");
-                return false;
+                // 快路径：复用暂存纹理，省掉每帧新建纹理的分配开销
+                downloaded = DownloadFrame(av_frame, frame, &download_error);
+            }
+            else
+            {
+                // 退路：设备不是我们建的（FFmpeg 默认创建），只能用它的通用下载
+                AVFrame *software = av_frame_alloc();
+                if (software != nullptr)
+                {
+                    const int transfer_ret = av_hwframe_transfer_data(software, av_frame, 0);
+                    if (transfer_ret >= 0 && software->format == AV_PIX_FMT_NV12)
+                    {
+                        frame = WrapFrame(software);
+                        downloaded = true;
+                    }
+                    else
+                    {
+                        av_frame_free(&software);
+                        download_error = QStringLiteral("通用下载失败：%1").arg(AvErrorText(transfer_ret));
+                    }
+                }
             }
 
-            const qint64 transfer_start_ns = trace_enabled_ ? timer_.nsecsElapsed() : 0;
-            const int transfer_ret = av_hwframe_transfer_data(software, av_frame, 0);
             if (trace_enabled_)
             {
-                // 下载是硬解特有的开销：GPU 纹理拷回系统内存，零拷贝阶段就是要去掉它
-                drain_download_ns_ += timer_.nsecsElapsed() - transfer_start_ns;
+                drain_download_ns_ += timer_.nsecsElapsed() - download_start_ns;
             }
             av_frame_free(&av_frame);                                                           // 纹理交还给解码器池
-            if (transfer_ret < 0)
+
+            if (!downloaded)
             {
-                av_frame_free(&software);
-                *error = QStringLiteral("下载硬解帧失败：%1").arg(AvErrorText(transfer_ret));
+                *error = download_error;
                 return false;
             }
 
-            // D3D11 下载下来应该是 NV12；别的格式说明驱动给了非常规排布，早点报出来
-            if (software->format != AV_PIX_FMT_NV12)
-            {
-                const int format = software->format;
-                av_frame_free(&software);
-                *error = QStringLiteral("硬解帧不是 NV12，格式 = %1").arg(format);
-                return false;
-            }
-
-            frames.append(WrapFrame(software));
+            frames.append(frame);
             continue;
         }
 
