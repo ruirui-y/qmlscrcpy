@@ -12,6 +12,7 @@
 #include <QClipboard>
 #include <QKeySequence>
 #include <QRegularExpression>
+#include <QProcess>
 #include <QThread>
 #include <QTimer>
 #include <QGuiApplication>
@@ -35,6 +36,10 @@
 
 DeviceController::DeviceController(QObject *parent) : QObject(parent)
 {
+    // 后台预热 adb server：第一次调用可能要把别的版本的 server 换掉，实测 5 秒，
+    // 别让用户点"刷新"时正好卡在这一下（startDetached 不阻塞，用完自己退）
+    QProcess::startDetached(qsc::adb::AdbPath(), QStringList{QStringLiteral("start-server")});
+
     // 滚轮发法跟配置走：界面里选过的优先，没选过就用 config.ini 的默认值
     AppSettings settings;
     show_console_ = settings.ShowConsole();
@@ -579,7 +584,10 @@ void DeviceController::SetStatus(const QString &status)
 void DeviceController::RefreshDevices()
 {
     // 只是列一下设备，几十毫秒，直接在主线程做
-    const qsc::adb::AdbResult result = qsc::adb::Run(QStringList{QStringLiteral("devices")}, 5000);
+    // 冷启动或换 server 版本时这一步能到 5 秒以上，超时给足 15 秒
+    const qint64 devices_start_ms = QDateTime::currentMSecsSinceEpoch();
+    const qsc::adb::AdbResult result = qsc::adb::Run(QStringList{QStringLiteral("devices")}, 15000);
+    qInfo() << "[adb] devices 耗时" << (QDateTime::currentMSecsSinceEpoch() - devices_start_ms) << "ms";
     if (!result.Ok())
     {
         SetStatus(QStringLiteral("adb devices 失败：%1").arg(result.ErrorText()));
