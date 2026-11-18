@@ -1,4 +1,4 @@
-# 收集发布文件：把 Release 构建产物收拾成 setup/stage/QmlScrcpy
+﻿# 收集发布文件：把 Release 构建产物收拾成 setup/stage/QmlScrcpy
 #
 # 用法（在仓库根目录跑）：
 #   powershell -ExecutionPolicy Bypass -File setup\collect.ps1
@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$binRoot = Join-Path $repoRoot 'build\windows-release\bin'
+$binRoot = Join-Path $repoRoot 'build\qt6-release\bin'
 $stageRoot = Join-Path $PSScriptRoot 'stage'
 $stageDir = Join-Path $stageRoot 'QmlScrcpy'
 
@@ -51,12 +51,12 @@ function Find-ReleaseDir {
 if (-not $SkipBuild)
 {
     Write-Host '[1/5] 配置 Release ...'
-    cmake --preset windows-release
-    if ($LASTEXITCODE -ne 0) { throw 'cmake --preset windows-release 失败' }
+    cmake --preset qt6-release
+    if ($LASTEXITCODE -ne 0) { throw 'cmake --preset qt6-release 失败' }
 
     Write-Host '[2/5] 构建 Release ...'
-    cmake --build --preset build-windows-release
-    if ($LASTEXITCODE -ne 0) { throw 'cmake --build --preset build-windows-release 失败' }
+    cmake --build --preset build-qt6-release
+    if ($LASTEXITCODE -ne 0) { throw 'cmake --build --preset build-qt6-release 失败' }
 }
 else
 {
@@ -67,7 +67,7 @@ else
 $releaseDir = Find-ReleaseDir
 if (-not $releaseDir)
 {
-    throw "没在 $binRoot 下找到 QmlScrcpy.exe，先跑一次 cmake --build --preset build-windows-release"
+    throw "没在 $binRoot 下找到 QmlScrcpy.exe，先跑一次 cmake --build --preset build-qt6-release"
 }
 if (-not (Test-Path (Join-Path $releaseDir 'QmlScrcpy.exe')))
 {
