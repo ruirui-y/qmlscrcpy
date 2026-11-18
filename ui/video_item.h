@@ -116,8 +116,12 @@ public:
     void NotifyRenderEnd(qint64 draw_start_us) override;
     bool KeepAspectEnabled() const override;
     void ProvideRhiDevice(void *device, void *context) override;
+    quintptr RhiDevice() const;                                                                 // 渲染后端给过的设备（0 表示还没就绪）
+    quintptr RhiContext() const;
     QSize CanvasSize() const override;
 
+    quintptr rhi_device_value_ = 0;                                                             // 渲染后端交上来的 ID3D11Device
+    quintptr rhi_context_value_ = 0;
     FrameTracePtr last_render_trace_;                                                           // 渲染线程最近一帧的追踪记录，MarkRenderEnd 用                                                            // 已经报给渲染线程的帧尺寸
     qint64 AdvanceSyncPass();                                                                   // 记下本轮起点，返回上一轮起点（算两轮间隔用）
     qint64 SyncStartUs() const;                                                                 // 本轮 synchronize 的起始时刻

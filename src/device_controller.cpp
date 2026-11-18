@@ -738,6 +738,13 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     QString error;
     // 配置里 [decode] hardware 决定走硬解还是软解
     decoder_->SetHardwareAllowed(AppSettings().DecodeHardware());
+    // 渲染后端的设备信号可能来得更早，直接向画布要当前值
+    if (rhi_device_ == 0 && video_ != nullptr && video_->Surface() != nullptr)
+    {
+        rhi_device_ = video_->Surface()->RhiDevice();
+        rhi_context_ = video_->Surface()->RhiContext();
+    }
+
     // 渲染后端已经就绪的话，把它的 D3D11 设备交给解码器：硬解纹理要能被直接引用
     if (rhi_device_ != 0)
     {

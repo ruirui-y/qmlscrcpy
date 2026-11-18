@@ -482,10 +482,21 @@ QSize VideoItem::CanvasSize() const
 // 渲染线程调：投递到 GUI 线程再发信号，解码器在那边
 void VideoItem::ProvideRhiDevice(void *device, void *context)
 {
-    const quintptr device_value = reinterpret_cast<quintptr>(device);
+    rhi_device_value_ = reinterpret_cast<quintptr>(device);                                      // 信号可能早于控制器连接，先存住
+    rhi_context_value_ = reinterpret_cast<quintptr>(context);
+    const quintptr device_value = rhi_device_value_;
     const quintptr context_value = reinterpret_cast<quintptr>(context);
     QMetaObject::invokeMethod(this, [this, device_value, context_value]()
     {
         emit SigRhiDeviceReady(device_value, context_value);
     }, Qt::QueuedConnection);
+}
+quintptr VideoItem::RhiDevice() const
+{
+    return rhi_device_value_;
+}
+
+quintptr VideoItem::RhiContext() const
+{
+    return rhi_context_value_;
 }
