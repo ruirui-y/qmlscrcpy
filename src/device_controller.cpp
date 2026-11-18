@@ -749,7 +749,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     if (rhi_device_ != 0)
     {
         decoder_->SetExternalDevice(reinterpret_cast<void *>(rhi_device_), reinterpret_cast<void *>(rhi_context_));
-        // 零拷贝仍崩，先关：见 docs/GPU渲染改造.md 的 4b 记录
+        // 零拷贝关：VideoProcessorBlt 会插进 Qt RHI 的即时上下文，导致设备丢失（TDR）
         decoder_->SetZeroCopy(false);
     }
 

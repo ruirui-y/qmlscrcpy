@@ -5,6 +5,8 @@
 // 渲染器只依赖 VideoFrameSource 接口，换画布基类时它不用改。
 
 #include <QByteArray>
+
+#include <memory>
 #include <QSize>
 
 #include <QQuickRhiItem>
@@ -67,6 +69,7 @@ private:
     void *output_view_ = nullptr;
     QSize converter_size_;
     int native_slice_ = 0;
+    std::shared_ptr<void> native_keep_alive_;                                                   // 保住 AVFrame：render 用完之前解码器不能复用纹理
     QRhiGraphicsPipeline *rgba_pipeline_ = nullptr;
     QRhiShaderResourceBindings *rgba_bindings_ = nullptr;
     void *native_ptr_ = nullptr;

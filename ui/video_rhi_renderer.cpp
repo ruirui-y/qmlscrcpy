@@ -208,6 +208,8 @@ bool VideoRhiRenderer::EnsureNativeConverter(const QSize &size)
         return false;
     }
 
+    qInfo() << "[rhi] 视频设备 QI 完成";
+
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC content = {};
     content.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
     content.InputWidth = static_cast<UINT>(size.width());
@@ -218,12 +220,19 @@ bool VideoRhiRenderer::EnsureNativeConverter(const QSize &size)
 
     ID3D11VideoProcessorEnumerator *processor_enum = nullptr;
     ID3D11VideoProcessor *processor = nullptr;
-    if (FAILED(video_device->CreateVideoProcessorEnumerator(&content, &processor_enum))
-        || FAILED(video_device->CreateVideoProcessor(processor_enum, 0, &processor)))
+    if (FAILED(video_device->CreateVideoProcessorEnumerator(&content, &processor_enum)))
     {
+        qWarning() << "[rhi] 建枚举器失败";
         return false;
     }
+    qInfo() << "[rhi] 枚举器就绪";
 
+    if (FAILED(video_device->CreateVideoProcessor(processor_enum, 0, &processor)))
+    {
+        qWarning() << "[rhi] 建处理器失败";
+        return false;
+    }
+    qInfo() << "[rhi] 处理器就绪";
     D3D11_TEXTURE2D_DESC texture_desc = {};
     texture_desc.Width = static_cast<UINT>(size.width());
     texture_desc.Height = static_cast<UINT>(size.height());
@@ -236,6 +245,7 @@ bool VideoRhiRenderer::EnsureNativeConverter(const QSize &size)
 
     ID3D11Texture2D *output = nullptr;
     if (FAILED(device->CreateTexture2D(&texture_desc, nullptr, &output)))
+    qInfo() << "[rhi] 输出纹理就绪";
     {
         return false;
     }
@@ -413,6 +423,7 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *)
     {
         native_ptr_ = frame.Native().texture;
         native_slice_ = frame.Native().slice;
+        native_keep_alive_ = frame.Native().keep_alive;                                         // 渲染器持住，画完才放
         native_size_ = frame.Size();
         has_native_ = true;
         frame_size_ = native_size_;

@@ -485,3 +485,69 @@ if (zero_copy_ && external_device_ != nullptr)
 - 输出纹理格式必须是 `DXGI_FORMAT_R8G8B8A8_UNORM`（RHI 的 RGBA8 只认这个顺序，BGRA 会 `E_INVALIDARG`）
 - `VideoProcessorBlt` 之后建议 `context->Flush()`，让提交顺序对 RHI 的采样可见
 - 渲染器当前是**回退后的版本**（没有原生分支、没有 `rgba.frag` 管线），这两块要重新加回来
+## 4b 第三次：设备丢失（TDR），这条路走不通
+
+### 决定性证据
+
+转色搬到渲染线程之后，第一次出帧时日志变成：
+
+```
+[decode] 首帧格式 172（D3D11 = 172）
+Device loss detected in Present()
+Graphics device lost, cleaning up scenegraph and releasing RHI
+```
+
+画面永远停在第一帧，`[rhi] 视频处理器就绪` 一次都没打。
+
+用户抓到的栈：
+
+```
+nvwgf2umx.dll!00007ff8eda7ca80()   未知
+...
+kernel32.dll!00007ff9049f1fd7()    未知
+ntdll.dll!RtlUserThreadStart()     未知
+```
+
+全是驱动内部线程，说明崩在 GPU 命令流层面，不是我们代码里的空指针。
+
+### 为什么
+
+```
+Qt RHI           正在即时上下文上录制本帧的绘制命令
+我们的转换代码   也往同一个即时上下文里塞 VideoProcessorBlt
+                 ↓
+            命令顺序被打乱 → GPU 挂起 → 驱动移除设备（TDR）
+                 ↓
+            Present() 发现设备没了 → 清理场景图 → 停在第一帧
+```
+
+D3D11 一个设备只有一个即时上下文，没有"借一下"的机制。
+
+### 尝试过的（全部失败）
+
+| 尝试 | 结果 |
+|---|---|
+| 视频线程做转色 | 崩在 nvwgf2umx.dll（跨线程共用一个上下文） |
+| 渲染线程做转色 | 设备丢失（插进 RHI 的上下文） |
+| 帧序号 + 纹理缓存 | 不解决上下文冲突 |
+| 渲染器持住 keep_alive | 不解决上下文冲突 |
+
+### 结论
+
+当前架构（Qt RHI + D3D11）下零拷贝走不通。两条替代路：
+
+| 方案 | 代价 |
+|---|---|
+| RHI 换 D3D12 / Vulkan，自写 QSGRenderNode 做 NV12 双平面采样 | 渲染器全部重写 |
+| 解码器独立设备 + 共享句柄 + keyed mutex | 跨设备同步坑多、风险高 |
+
+现状保留 CPU 读回：硬解 6.2ms、软解主线程 0.08ms（但滞后 2~3 帧）。
+
+### 保留下来的东西
+
+| 成果 | 价值 |
+|---|---|
+| D3D11 RHI 后端 + QQuickRhiItem | 已稳定在用，软硬解都跑通 |
+| 设备握手（4a） | 将来换方案还要用 |
+| NativeTexture 的 slice / keep_alive | 帧结构已能承载原生纹理 |
+| 崩溃定位经验 | "Device loss" + 驱动栈，以后能立刻认出来 |
