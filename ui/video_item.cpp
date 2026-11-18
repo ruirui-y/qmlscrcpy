@@ -232,28 +232,10 @@ void VideoItem::Present(const Frame &frame)
 
     const qint64 enqueue_us = clock_.nsecsElapsed() / 1000;
 
-    // 到达间隔分档：和上屏延迟分开统计，一个看源多快、一个看我们多慢
+    // 到达间隔：和上屏延迟分开统计，一个看源多快、一个看我们多慢
     const qint64 prev_present_us = last_present_us_.fetchAndStoreRelaxed(enqueue_us);
     const qint64 gap_us = prev_present_us > 0 ? (enqueue_us - prev_present_us) : 0;
-    if (gap_us > 0 && gap_us < 1000000)
-    {
-        if (gap_us < 8500)
-        {
-            gap_lt85_.ref();
-        }
-        else if (gap_us < 17000)
-        {
-            gap_85_17_.ref();
-        }
-        else if (gap_us < 34000)
-        {
-            gap_17_34_.ref();
-        }
-        else
-        {
-            gap_gt34_.ref();
-        }
-    }
+    AccountGap(gap_us);                                                                       // 分档计数在统计文件里
 
     // 逐帧追踪才建 Trace；平时只有计数和两个时间戳，开销可以忽略
     FrameTracePtr trace;
@@ -303,7 +285,7 @@ void VideoItem::Present(const Frame &frame)
     // 被顶掉的帧当场结算：它从到达到被覆盖活了多久
     if (replaced_trace)
     {
-        PrintTrace(replaced_trace, false, replaced_alive_us);
+        ReportReplacedFrame(replaced_trace, replaced_alive_us);
     }
 
     // 到帧就排队请求一次重绘：视频线程直接调 update() 不安全，投递到 GUI 线程执行

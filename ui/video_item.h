@@ -139,6 +139,8 @@ protected:
 
 private:
     void ReportSecond();
+    void AccountGap(qint64 gap_us);                                                             // 到达间隔分档计数（统计用）
+    void ReportReplacedFrame(const FrameTracePtr &trace, qint64 alive_us);                       // 被顶掉的帧当场结算并打印
     bool PinchModifierHeld(Qt::KeyboardModifiers modifiers) const;                              // 当前修饰键是不是捏合键
     void PinchBy(int notches, const QPointF &pos);                                              // 按一格滚轮做一次捏合
     void SlotKeyMapPoll();                                                                       // 轮询物理按键，状态变化才发触摸

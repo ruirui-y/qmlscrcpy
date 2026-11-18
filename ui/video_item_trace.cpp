@@ -235,3 +235,33 @@ void VideoItem::ReportSecond()
 }
 
 // 画布尺寸变了，重绘一次让 FBO 跟上（Qt6 起钩子名是 geometryChange）
+// 到达间隔分档：只在统计里用，和上屏延迟分开看
+void VideoItem::AccountGap(qint64 gap_us)
+{
+    if (gap_us <= 0 || gap_us >= 1000000)
+    {
+        return;
+    }
+    if (gap_us < 8500)
+    {
+        gap_lt85_.ref();
+    }
+    else if (gap_us < 17000)
+    {
+        gap_85_17_.ref();
+    }
+    else if (gap_us < 34000)
+    {
+        gap_17_34_.ref();
+    }
+    else
+    {
+        gap_gt34_.ref();
+    }
+}
+
+// 被顶掉的帧当场结算：它从到达到被覆盖活了多久
+void VideoItem::ReportReplacedFrame(const FrameTracePtr &trace, qint64 alive_us)
+{
+    PrintTrace(trace, false, alive_us);
+}
