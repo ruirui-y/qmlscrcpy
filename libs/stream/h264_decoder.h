@@ -37,7 +37,10 @@ public:
         external_device_ = d3d11_device;
         external_context_ = d3d11_context;
     }
-    void SetHardwareAllowed(bool allowed) { hardware_allowed_ = allowed; }                      // 配置里关掉硬解时传 false
+    void SetHardwareAllowed(bool allowed) { hardware_allowed_ = allowed; }
+
+    // 零拷贝：硬解帧不读回内存，只把 NV12 纹理和切片号交出去（转色由渲染线程做）
+    void SetZeroCopy(bool enabled) { zero_copy_ = enabled; }                      // 配置里关掉硬解时传 false
     bool Hardware() const { return hardware_; }                                                 // 这轮是不是硬解（日志用）
 
     // 送一个包，解出的帧追加到 frames（通常 0 或 1 个）；失败时 error 有原因
@@ -75,6 +78,8 @@ private:
     qint64 stat_max_total_ns_ = 0;                                                              // 本秒单帧最慢
     qint64 drain_download_ns_ = 0;                                                              // 本次 Push 里下载花了多少
     qint64 drain_copy_ns_ = 0;                                                                  // 其中 GPU 内拷贝花了多少（剩下的就是读回）
+    bool zero_copy_ = false;                                                                    // 是否走原生纹理通路
+    quint64 native_seq_ = 0;                                                                    // 零拷贝出帧序号
     bool bgra_logged_ = false;                                                                  // 转换成功只打一次日志
 };
 

@@ -357,3 +357,131 @@ if (external_device_ != nullptr)
 - `QQuickRhiItem` 迁移后，`VideoItem` 的输入/键位/统计代码不受影响，但**渲染统计钩子**（`beforeSynchronizing` 等）要换成 RHI 等价时机
 - 软解路径上传纹理从 glTexSubImage2D 换成 `QRhiTexture::setData`
 - 第 4 步做完才能删掉 `Map` 读回那条路径
+## 4b 第一次尝试：为什么一开就崩
+
+### 现象（两份不同的证据，同一个根因）
+
+我这边（强制 `hardware=1` 跑）：
+
+```
+ExitCode = -1073741819  (0xC0000005 访问冲突)
+Windows 事件日志：
+  Faulting module: nvwgf2umx.dll        ← NVIDIA 的 D3D11 用户态驱动
+  Exception code:  0xc0000005
+  Fault offset:    0x0000000000606523
+```
+
+用户这边（VS 里跑）：
+
+```
+QThread: Destroyed while thread is still running
+（qthread.cpp:470 断言，进程终止）
+```
+
+### 排查过程
+
+1. 先怀疑"解码线程和渲染线程同时读写同一张双缓冲纹理" → 加了帧序号 `seq`、把 `QRhiTexture` 按纹理指针缓存（不再每帧 delete/create）
+2. 重测：**仍然崩**，且崩在 `nvwgf2umx.dll` 内部
+3. 结论：不是我们代码里的空指针，是**提交给驱动的 D3D11 操作本身非法**
+
+### 真正的根因：两个线程共用同一个即时上下文
+
+```
+GUI 线程    ：建 ID3D11Device + 它的 ImmediateContext
+视频线程    ：ConvertToBgra / VideoProcessorBlt 用这个上下文
+渲染线程    ：Qt RHI 也用同一设备的上下文画
+```
+
+`ID3D11DeviceContext` **不是线程安全的**，同一时刻只能被一个线程使用。两个线程同时提交命令，轻则行为未定义，重则驱动里访问冲突（`nvwgf2umx.dll`）。
+
+**为什么以前没事**：B 方案（`DownloadFrame`）也在视频线程用上下文，但那时渲染走 OpenGL，渲染线程根本不碰这个设备。换成 D3D11 RHI 后才出现并发。
+
+### 正确做法（还没做完）
+
+把 GPU 操作全部收到渲染线程：
+
+```
+视频线程：只填 Frame::Native{ NV12 纹理指针, 切片号, keep_alive(AVFrame) }
+          完全不碰 D3D 上下文
+渲染线程：用 RHI 的设备做 VideoProcessor NV12→RGBA，然后画
+```
+
+这样只有一个线程碰上下文，天然没有竞争。
+
+### 当前代码状态
+
+- `SetZeroCopy(false)`：零拷贝关闭，程序正常
+- 第一次尝试的代码（帧序号、按指针缓存纹理）**已回退**，因为改到一半时渲染器头文件被写乱、编译不过
+- 已确认可用的部分：设备握手（4a）、`QQuickRhiItem` 渲染器、RGBA 直通着色器 `ui/shaders/rgba.frag`
+
+### 学到什么
+
+1. **D3D11 的即时上下文不能跨线程共用一个设备**，这是这一轮最大的坑
+2. 崩溃表现会骗人：驱动里崩（我的机器）和 Qt 断言（用户的机器）可以是同一个根因
+3. 先做"最小可验证"再动手：如果一开始就只把 NV12 纹理丢给渲染线程，能省掉这一整轮返工
+## 4b 第二次尝试：把转色搬到渲染线程
+
+### 设计（和第一次的区别）
+
+```
+第一次（崩）：
+  视频线程  ConvertToBgra（用解码器的 D3D 上下文）
+  渲染线程  Qt RHI 用同一个设备的上下文画
+  → 两个线程抢同一个 ImmediateContext → 驱动里访问冲突
+
+第二次：
+  视频线程  只填 Frame::Native{ NV12 纹理, 切片号, keep_alive }，一行 D3D 都不碰
+  渲染线程  用 RHI 的设备建 VideoProcessor，做 NV12 → RGBA，然后画
+  → 只有渲染线程碰上下文，没有竞争
+```
+
+### 第一步：帧结构与解码器（已完成，编译通过）
+
+`frame.h` 的 `NativeTexture` 增加：
+
+| 字段 | 用途 |
+|---|---|
+| `int slice` | 解码器池里的数组切片号 |
+| `quint64 seq` | 出帧序号 |
+| `std::shared_ptr<void> keep_alive` | 保住 AVFrame，否则解码器会立刻复用纹理 |
+
+解码器零拷贝分支：
+
+```cpp
+if (zero_copy_ && external_device_ != nullptr)
+{
+    NativeTexture native;
+    native.texture = av_frame->data[0];                                    // NV12 纹理
+    native.slice   = int(reinterpret_cast<quintptr>(av_frame->data[1]));
+    native.seq     = ++native_seq_;
+
+    AVFrame *held = av_frame_clone(av_frame);
+    native.keep_alive = std::shared_ptr<void>(held, [](void *p) {
+        AVFrame *frame_ptr = static_cast<AVFrame *>(p);
+        av_frame_free(&frame_ptr);
+    });
+
+    frame = Frame(size, native);
+    downloaded = true;                                                     // 跳过 DownloadFrame
+}
+```
+
+**注意**：`ConvertToBgra` 不再参与零拷贝路径，它的存在只是给别的实验用。
+
+### 第二步：渲染器里做转色（待做）
+
+要加的东西：
+
+| 组件 | 作用 |
+|---|---|
+| `ID3D11VideoDevice` / `ID3D11VideoContext` | 从 RHI 的 device QI 出来（`rhi->nativeHandles()`） |
+| `ID3D11VideoProcessorEnumerator` + `ID3D11VideoProcessor` | 按帧尺寸建一次，尺寸变了重建 |
+| 输出 RGBA 纹理 + 输出视图 | 渲染器自己持有，只有渲染线程用 |
+| `ConvertNativeFrame()` | 输入视图按 `slice` 建 → `VideoProcessorBlt` → 返回 RGBA 纹理 |
+| 失败回退 | 转换失败就 `has_native_ = false`，走 CPU 路径（不会黑屏） |
+
+注意点：
+
+- 输出纹理格式必须是 `DXGI_FORMAT_R8G8B8A8_UNORM`（RHI 的 RGBA8 只认这个顺序，BGRA 会 `E_INVALIDARG`）
+- `VideoProcessorBlt` 之后建议 `context->Flush()`，让提交顺序对 RHI 的采样可见
+- 渲染器当前是**回退后的版本**（没有原生分支、没有 `rgba.frag` 管线），这两块要重新加回来

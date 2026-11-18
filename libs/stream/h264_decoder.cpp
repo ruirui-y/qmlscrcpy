@@ -775,7 +775,28 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
             bool downloaded = false;
             QString download_error;
 
-            if (d3d_ && d3d_->device)
+            // 零拷贝：只交 NV12 纹理和切片号，转色交给渲染线程（视频线程不碰 D3D 上下文）
+            if (zero_copy_ && external_device_ != nullptr)
+            {
+                qsc::stream::NativeTexture native;
+                native.texture = reinterpret_cast<void *>(av_frame->data[0]);
+                native.slice = static_cast<int>(reinterpret_cast<quintptr>(av_frame->data[1]));
+                native.seq = ++native_seq_;
+                native.width = av_frame->width;
+                native.height = av_frame->height;
+
+                // 保住这一帧，否则解码器会立刻复用纹理
+                AVFrame *held = av_frame_clone(av_frame);
+                native.keep_alive = std::shared_ptr<void>(held, [](void *p) {
+                    AVFrame *frame_ptr = static_cast<AVFrame *>(p);
+                    av_frame_free(&frame_ptr);
+                });
+
+                frame = Frame(QSize(av_frame->width, av_frame->height), native);
+                downloaded = true;
+            }
+
+            if (!downloaded && d3d_ && d3d_->device)
             {
                 // 快路径：复用暂存纹理，省掉每帧新建纹理的分配开销
                 downloaded = DownloadFrame(av_frame, frame, &download_error);

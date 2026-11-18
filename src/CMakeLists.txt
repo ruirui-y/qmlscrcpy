@@ -117,6 +117,7 @@ add_custom_command(TARGET QmlScrcpy POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${PROJECT_SOURCE_DIR}/ui/shaders/quad.vert.qsb"
         "${PROJECT_SOURCE_DIR}/ui/shaders/nv12.frag.qsb"
+        "${PROJECT_SOURCE_DIR}/ui/shaders/rgba.frag.qsb"
         "$<TARGET_FILE_DIR:QmlScrcpy>/shaders"
     COMMENT "拷贝 QSB 着色器"
 )
