@@ -499,6 +499,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [按键映射](docs/按键映射.md) | 游戏键位映射：三种键位类型、五层结构、七次失败的过程、16ms 轮询方案 |
 | [解码链路](docs/解码链路.md) | H.264 解码：软解基线、换 d3d11va 硬解踩的五个坑、NV12 着色器、阶段一实测（下载占 99.8%）与阶段二零拷贝计划 |
 | [开发环境](docs/开发环境.md) | VS 文件夹视图丢 Git 图标：冷启动时序竞态，含 ActivityLog 取证与桌面脚本绕过 |
+| [GPU 渲染改造](docs/GPU渲染改造.md) | RHI(D3D11) 路线：spike 验证、四个坑、四步改造计划、为什么不再做 GL/D3D 互操作 |
 | [Qt6 迁移](docs/Qt6迁移.md) | Qt5.15 → Qt6.8 全过程：断言崩溃、栈溢出、OpenGL 后端、部署布局、adb 路径 |
 | [自动更新](docs/自动更新.md) | 一键下载 + 校验 sha256 + 静默安装，为什么安装仍会弹 UAC |
 | [双仓库发版](docs/双仓库发版.md) | GitHub 放代码、Gitee 放 exe 的完整发版流程与核对方法 |
