@@ -117,6 +117,17 @@ void PrintTrace(const FrameTracePtr& trace, bool swapped, qint64 alive_us)
 }
 
 
+// WGL_NV_DX_interop2 的函数指针，Qt 不提供封装，只能自己从 GL 上下文取
+using PfnWglDXOpenDeviceNV = void *(WINAPI *)(void *);
+using PfnWglDXCloseDeviceNV = BOOL (WINAPI *)(void *);
+using PfnWglDXSetResourceShareHandleNV = BOOL (WINAPI *)(void *, HANDLE);
+using PfnWglDXRegisterObjectNV = void *(WINAPI *)(void *, void *, GLuint, GLenum, GLenum);
+using PfnWglDXUnregisterObjectNV = BOOL (WINAPI *)(void *, void *);
+using PfnWglDXLockObjectsNV = BOOL (WINAPI *)(void *, GLint, void **);
+using PfnWglDXUnlockObjectsNV = BOOL (WINAPI *)(void *, GLint, void **);
+
+constexpr GLenum kWglAccessReadOnlyNV = 0x0000;                                                 // WGL_ACCESS_READ_ONLY_NV
+
 // 顶点着色器：顶点是裁剪空间坐标，直接用
 const char *const kVertexShader = R"(
 attribute highp vec4 vertexCoords;
@@ -168,6 +179,17 @@ void main()
 }
 )";
 
+// 片段着色器：原生 BGRA 纹理。DXGI 的 B8G8R8A8 在 GL 里被当成 RGBA8 读，通道是反的
+const char *const kBgraFragmentShader = R"(
+varying highp vec2 uv;
+uniform sampler2D texBgra;
+void main()
+{
+    mediump vec4 color = texture2D(texBgra, uv);
+    gl_FragColor = vec4(color.b, color.g, color.r, 1.0);
+}
+)";
+
 void ResetGlState(QOpenGLFunctions *gl);                                                        // 画完把纹理单元和像素对齐还回默认值
 
 // 把一个平面按行拷成紧凑缓冲：源每行可能有对齐填充，目标不留
@@ -194,6 +216,7 @@ private:
     void EnsureInterop();                                                                       // 加载 wglDX* 扩展并打开设备
     bool RegisterNative();                                                                      // 把 D3D11 纹理注册成 GL 纹理（按指针缓存）
     void DrawQuad(QOpenGLFunctions *gl, float width, float height);
+    void DrawQuadRaw(QOpenGLFunctions *gl, float width, float height);                          // 原生纹理用：直接调 GL，绕开 Qt 的属性封装
 
     QSize item_size_;                                                                           // 画布（FBO）尺寸，每次 synchronize 更新
     FrameTracePtr trace_;                                                                       // 当前这一帧的事件记录，render() 回报耗时用
@@ -224,14 +247,15 @@ private:
 
     // wglDX* 扩展函数，只在渲染线程的 GL 上下文里用
     bool interop_ready_ = false;
+    bool interop_tried_ = false;                                                                // 只加载一次，失败不再刷日志
     void *interop_device_ = nullptr;                                                            // wglDXOpenDeviceNV 的返回值
-    void *dx_open_device_ = nullptr;
-    void *dx_close_device_ = nullptr;
-    void *dx_set_share_handle_ = nullptr;
-    void *dx_register_ = nullptr;
-    void *dx_unregister_ = nullptr;
-    void *dx_lock_ = nullptr;
-    void *dx_unlock_ = nullptr;
+    PfnWglDXOpenDeviceNV dx_open_device_ = nullptr;
+    PfnWglDXCloseDeviceNV dx_close_device_ = nullptr;
+    PfnWglDXSetResourceShareHandleNV dx_set_share_handle_ = nullptr;
+    PfnWglDXRegisterObjectNV dx_register_ = nullptr;
+    PfnWglDXUnregisterObjectNV dx_unregister_ = nullptr;
+    PfnWglDXLockObjectsNV dx_lock_ = nullptr;
+    PfnWglDXUnlockObjectsNV dx_unlock_ = nullptr;
     struct Registered
     {
         void *texture = nullptr;                                                                // D3D11 纹理指针，用作缓存键
@@ -266,6 +290,23 @@ void YuvRenderer::synchronize(QQuickFramebufferObject *item)
         return;
     }
     video_item->SetPassArriveUs(arrive_us);
+
+    // 零拷贝帧：只把纹理指针带到渲染线程，像素一个字节都不拷
+    if (frame.HasNative())
+    {
+        native_pending_ = true;
+        native_device_ = frame.Native().device;
+        native_texture_ = frame.Native().texture;
+        native_share_ = frame.Native().share_handle;
+        native_size_ = frame.Size();
+        frame_size_ = frame.Size();
+        dirty_ = false;
+        if (trace)
+        {
+            trace->sync_us.store(video_item->ClockUs() - pass_start_us);
+        }
+        return;
+    }
 
     // 这一帧等渲染线程等了多久：拆成 update() → 渲染线程被唤醒 → Qt 同步前准备 → synchronize
     const qint64 update_done_us = trace ? trace->update_done_us.load() : 0;
@@ -350,6 +391,22 @@ void YuvRenderer::EnsureProgram()
     {
         qWarning() << "[video] 着色器编译失败:" << program_.log();
         // 失败也标记成 ready：每帧重试编译只会刷屏
+
+    // 原生 BGRA 纹理那一套：和上面互不影响，编不过只影响零拷贝
+    if (!bgra_program_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
+        || !bgra_program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kBgraFragmentShader))
+    {
+        qWarning() << "[video] BGRA 着色器编译失败:" << bgra_program_.log();
+    }
+    else
+    {
+        bgra_program_.bindAttributeLocation("vertexCoords", 0);
+        bgra_program_.bindAttributeLocation("texCoords", 1);
+        if (!bgra_program_.link())
+        {
+            qWarning() << "[video] BGRA 着色器链接失败:" << bgra_program_.log();
+        }
+    }
         program_ready_ = true;
         return;
     }
@@ -399,6 +456,47 @@ void YuvRenderer::render()
     gl->glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     gl->glClear(GL_COLOR_BUFFER_BIT);
 
+    // 零拷贝：锁住 GL 注册对象 → 直接画 BGRA 纹理 → 解锁
+    if (native_pending_)
+    {
+        native_pending_ = false;
+        EnsureInterop();
+        if (RegisterNative())
+        {
+            int slot = -1;
+            for (int i = 0; i < registered_count_; ++i)
+            {
+                if (registered_[i].texture == native_texture_)
+                {
+                    slot = i;
+                    break;
+                }
+            }
+            if (slot >= 0)
+            {
+                void *object = registered_[slot].object;
+                if (dx_lock_(interop_device_, 1, &object))
+                {
+                    gl->glActiveTexture(GL_TEXTURE0);
+                    gl->glBindTexture(GL_TEXTURE_2D, registered_[slot].gl_texture);
+                    bgra_program_.bind();
+                    bgra_program_.setUniformValue("texBgra", 0);
+                    draw_program_ = &bgra_program_;
+                    DrawQuadRaw(gl, static_cast<float>(item_size_.width()), static_cast<float>(item_size_.height()));
+                    bgra_program_.release();
+                    dx_unlock_(interop_device_, 1, &object);
+                    draw_program_ = &program_;
+                    ResetGlState(gl);
+                    if (item_ != nullptr && draw_start_us > 0)
+                    {
+                        item_->MarkRenderEnd(draw_start_us, trace_);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
     if (frame_size_.isEmpty() || widths_[0] <= 0)
     {
         return;
@@ -446,6 +544,7 @@ void YuvRenderer::render()
         return;
     }
 
+    draw_program_ = &program_;
     active.bind();
     for (int i = 0; i < plane_count; ++i)
     {
@@ -520,6 +619,143 @@ void YuvRenderer::DrawQuad(QOpenGLFunctions *gl, float width, float height)
 
     program_.disableAttributeArray(0);
     program_.disableAttributeArray(1);
+}
+
+// 画原生纹理用的四边形：属性指针直接走 GL，不经过 QOpenGLShaderProgram 的封装
+// （Qt6 里那层封装要求内部 QOpenGLFunctions 已初始化，程序创建失败时会直接断言）
+void YuvRenderer::DrawQuadRaw(QOpenGLFunctions *gl, float width, float height)
+{
+    float left = -1.0f;
+    float right = 1.0f;
+    float top = 1.0f;
+    float bottom = -1.0f;
+
+    if (keep_aspect_ && !frame_size_.isEmpty() && width > 0.0f && height > 0.0f)
+    {
+        const float item_aspect = width / height;
+        const float frame_aspect = static_cast<float>(frame_size_.width()) / frame_size_.height();
+        if (frame_aspect > item_aspect)
+        {
+            const float scale = item_aspect / frame_aspect;
+            top = scale;
+            bottom = -scale;
+        }
+        else
+        {
+            const float scale = frame_aspect / item_aspect;
+            left = -scale;
+            right = scale;
+        }
+    }
+
+    const GLfloat coords[] = {
+        left,  top,    0.0f, 1.0f,
+        right, top,    1.0f, 1.0f,
+        left,  bottom, 0.0f, 0.0f,
+        right, bottom, 1.0f, 0.0f,
+    };
+
+    // 属性位置在 link 前用 bindAttributeLocation 固定成 0 和 1
+    gl->glEnableVertexAttribArray(0);
+    gl->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), coords);
+    gl->glEnableVertexAttribArray(1);
+    gl->glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), coords + 2);
+    gl->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    gl->glDisableVertexAttribArray(0);
+    gl->glDisableVertexAttribArray(1);
+}
+
+// 加载 wglDX* 扩展并打开 interop 设备：只在渲染线程调用
+void YuvRenderer::EnsureInterop()
+{
+    if (interop_ready_ || interop_tried_)
+    {
+        return;
+    }
+    interop_tried_ = true;
+
+    QOpenGLContext *context = QOpenGLContext::currentContext();
+    if (context == nullptr || native_device_ == nullptr)
+    {
+        return;
+    }
+
+    dx_open_device_ = reinterpret_cast<PfnWglDXOpenDeviceNV>(context->getProcAddress("wglDXOpenDeviceNV"));
+    dx_close_device_ = reinterpret_cast<PfnWglDXCloseDeviceNV>(context->getProcAddress("wglDXCloseDeviceNV"));
+    dx_set_share_handle_ = reinterpret_cast<PfnWglDXSetResourceShareHandleNV>(
+        context->getProcAddress("wglDXSetResourceShareHandleNV"));
+    dx_register_ = reinterpret_cast<PfnWglDXRegisterObjectNV>(context->getProcAddress("wglDXRegisterObjectNV"));
+    dx_unregister_ = reinterpret_cast<PfnWglDXUnregisterObjectNV>(context->getProcAddress("wglDXUnregisterObjectNV"));
+    dx_lock_ = reinterpret_cast<PfnWglDXLockObjectsNV>(context->getProcAddress("wglDXLockObjectsNV"));
+    dx_unlock_ = reinterpret_cast<PfnWglDXUnlockObjectsNV>(context->getProcAddress("wglDXUnlockObjectsNV"));
+
+    if (dx_open_device_ == nullptr || dx_register_ == nullptr || dx_lock_ == nullptr || dx_unlock_ == nullptr)
+    {
+        qWarning() << "[video] 显卡驱动没提供 WGL_NV_DX_interop2，零拷贝不可用";
+        return;
+    }
+
+    interop_device_ = dx_open_device_(native_device_);
+    if (interop_device_ == nullptr)
+    {
+        qWarning() << "[video] wglDXOpenDeviceNV 失败，零拷贝不可用";
+        return;
+    }
+
+    interop_ready_ = true;
+    qInfo() << "[video] GL interop 已打开";
+}
+
+// 把当前帧的 D3D11 纹理注册成 GL 纹理：按纹理指针缓存，双缓冲只会注册两次
+bool YuvRenderer::RegisterNative()
+{
+    if (!interop_ready_ || native_texture_ == nullptr || dx_set_share_handle_ == nullptr)
+    {
+        return false;
+    }
+    for (int i = 0; i < registered_count_; ++i)
+    {
+        if (registered_[i].texture == native_texture_)
+        {
+            return true;
+        }
+    }
+    if (registered_count_ >= 4)
+    {
+        return false;
+    }
+
+    QOpenGLFunctions *gl = QOpenGLContext::currentContext() != nullptr
+                               ? QOpenGLContext::currentContext()->functions()
+                               : nullptr;
+    if (gl == nullptr)
+    {
+        return false;
+    }
+
+    GLuint gl_texture = 0;
+    gl->glGenTextures(1, &gl_texture);
+    gl->glBindTexture(GL_TEXTURE_2D, gl_texture);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    dx_set_share_handle_(native_texture_, reinterpret_cast<HANDLE>(native_share_));
+    void *object = dx_register_(interop_device_, native_texture_, gl_texture, GL_TEXTURE_2D, 0x0000);
+    if (object == nullptr)
+    {
+        qWarning() << "[video] wglDXRegisterObjectNV 失败，纹理没法交给 GL";
+        gl->glDeleteTextures(1, &gl_texture);
+        return false;
+    }
+
+    registered_[registered_count_].texture = native_texture_;
+    registered_[registered_count_].gl_texture = gl_texture;
+    registered_[registered_count_].object = object;
+    ++registered_count_;
+    qInfo() << "[video] BGRA 纹理已注册给 GL，共" << registered_count_ << "张";
+    return true;
 }
 
 // 把动过的 GL 状态还原：

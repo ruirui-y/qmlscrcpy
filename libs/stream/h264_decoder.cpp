@@ -187,7 +187,11 @@ bool H264Decoder::Open(QString *error)
     // 硬件设备建不起来不算失败：软解还能用，只是慢
     trace_enabled_ = qEnvironmentVariableIntValue("QS_TRACE_DECODE") == 1;
     QString hardware_error;
-    if (OpenHardware(&hardware_error))
+    if (!hardware_allowed_)
+    {
+        hardware_error = QStringLiteral("配置里 [decode] hardware=0");
+    }
+    if (hardware_allowed_ && OpenHardware(&hardware_error))
     {
         hardware_ = true;
         qInfo() << "[decode] 使用 D3D11VA 硬件解码";
@@ -475,11 +479,8 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
     }
 
     const qint64 copy_start_ns = trace_enabled_ ? timer_.nsecsElapsed() : 0;
-    // NV12 的 Y 和 UV 是两个子资源：下标 = 数组下标 × 2 + 平面号
-    const UINT y_subresource = slice * 2;
-    const UINT uv_subresource = slice * 2 + 1;
-    d3d_->context->CopySubresourceRegion(d3d_->staging.Get(), 0, 0, 0, 0, texture, y_subresource, nullptr);
-    d3d_->context->CopySubresourceRegion(d3d_->staging.Get(), 1, 0, 0, 0, texture, uv_subresource, nullptr);
+    // NV12 一个数组切片就是一个子资源，Y 和 UV 都在里面：拷到暂存纹理的 0 号子资源
+    d3d_->context->CopySubresourceRegion(d3d_->staging.Get(), 0, 0, 0, 0, texture, slice, nullptr);
 
     const int chroma_height = static_cast<int>((height + 1) / 2);
     const int y_size = static_cast<int>(width * height);
@@ -505,25 +506,11 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
     }
     d3d_->context->Unmap(d3d_->staging.Get(), 0);
 
-    // UV 平面单独映射一次：驱动不允许一次 Map 拿到两个平面
-    D3D11_MAPPED_SUBRESOURCE mapped_uv = {};
-    if (SUCCEEDED(d3d_->context->Map(d3d_->staging.Get(), 1, D3D11_MAP_READ, 0, &mapped_uv)))
+    // NV12 的 UV 平面紧跟在 Y 平面之后：偏移 = 行跨度 × 高度
+    for (int row = 0; row < chroma_height; ++row)
     {
-        for (int row = 0; row < chroma_height; ++row)
-        {
-            memcpy(buffer->data() + y_size + row * width,
-                   static_cast<const quint8 *>(mapped_uv.pData) + row * mapped_uv.RowPitch, width);
-        }
-        d3d_->context->Unmap(d3d_->staging.Get(), 1);
-    }
-    else
-    {
-        // 少数驱动不支持按平面映射：退回"UV 紧跟在 Y 之后"的排布
-        for (int row = 0; row < chroma_height; ++row)
-        {
-            memcpy(buffer->data() + y_size + row * width,
-                   static_cast<const quint8 *>(mapped.pData) + (height + row) * mapped.RowPitch, width);
-        }
+        memcpy(buffer->data() + y_size + row * width,
+               static_cast<const quint8 *>(mapped.pData) + (height + row) * mapped.RowPitch, width);
     }
 
     const quint8 *base = reinterpret_cast<const quint8 *>(buffer->constData());
@@ -741,17 +728,7 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
         // 硬解给的是 D3D11 纹理，留到下一帧就可能被解码器池复用，必须当场拷走
         if (av_frame->format == AV_PIX_FMT_D3D11)
         {
-            // 阶段 A1：先验证 GPU 内 NV12 → BGRA 能跑通，失败只记一次日志，不挡现有链路
-            if (d3d_ && d3d_->device)
-            {
-                QString bgra_error;
-                if (!ConvertToBgra(av_frame, &bgra_error) && !bgra_logged_)
-                {
-                    bgra_logged_ = true;
-                    qWarning() << "[decode] BGRA 转换不可用：" << bgra_error;
-                }
-            }
-
+            // 默认走 B：硬解 + 复用暂存纹理下载；A3 的 BGRA 转换没有消费方，暂时不跑
             const qint64 download_start_ns = trace_enabled_ ? timer_.nsecsElapsed() : 0;
             Frame frame;
             bool downloaded = false;

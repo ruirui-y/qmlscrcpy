@@ -701,6 +701,8 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
 
     decoder_ = std::make_unique<qsc::stream::H264Decoder>();
     QString error;
+    // 配置里 [decode] hardware 决定走硬解还是软解
+    decoder_->SetHardwareAllowed(AppSettings().DecodeHardware());
     if (!decoder_->Open(&error))
     {
         SetStatus(QStringLiteral("解码器打开失败：%1").arg(error));

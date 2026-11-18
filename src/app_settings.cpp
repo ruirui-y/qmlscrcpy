@@ -56,6 +56,9 @@ upload_dir=/sdcard/Download/QmlScrcpy
 bit_rate=8000000
 max_fps=0
 
+[decode]
+hardware=1
+
 [video_wireless]
 bit_rate=6000000
 max_fps=0
@@ -130,6 +133,9 @@ max_fps=0
 
 # 无线连接单独一套（串号里带冒号就用这组）：6M 在局域网下够用且不排队
 # 码率同时也约束帧率：实测 2M 只出 72 帧、6M 94 帧、12M 114 帧
+[decode]
+hardware=1
+
 [video_wireless]
 bit_rate=6000000
 max_fps=0)";
@@ -546,6 +552,12 @@ void AppSettings::SaveVideoPosition(const QString &key, int x, int y)
     store.setValue(QStringLiteral("y"), y);
     store.endGroup();
     // 同上：位置保存也在拖动结束时触发，别同步落盘
+}
+
+// 是否走 GPU 硬解：1 硬解（默认），0 软解
+bool AppSettings::DecodeHardware() const
+{
+    return ConfigStore().value(QStringLiteral("decode/hardware"), 1).toInt() != 0;
 }
 
 // 连点间隔：0 表示关闭，按住空格时按这个间隔在鼠标位置连点

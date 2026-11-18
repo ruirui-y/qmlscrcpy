@@ -31,6 +31,7 @@ public:
 
     bool Open(QString *error);                                                                  // 找 H.264 解码器并打开上下文
     void Close();                                                                               // 释放上下文，可以重复调
+    void SetHardwareAllowed(bool allowed) { hardware_allowed_ = allowed; }                      // 配置里关掉硬解时传 false
     bool Hardware() const { return hardware_; }                                                 // 这轮是不是硬解（日志用）
 
     // 送一个包，解出的帧追加到 frames（通常 0 或 1 个）；失败时 error 有原因
@@ -48,6 +49,7 @@ private:
     AVCodecContext *context_ = nullptr;                                                         // 解码器上下文，Close 后置空
     AVPacket *packet_ = nullptr;                                                                // 复用一个包，避免每帧都分配
     AVBufferRef *hw_device_ = nullptr;                                                          // D3D11 设备引用，软解时为 nullptr
+    bool hardware_allowed_ = true;                                                              // 配置开关，false 时直接走软解
     bool hardware_ = false;                                                                     // 下面 Push 的分支要看它
     QByteArray pending_config_;                                                                 // 还没拼出去的那份 SPS/PPS
     std::unique_ptr<D3d11State> d3d_;                                                           // 自己建的设备 + 复用的暂存纹理
