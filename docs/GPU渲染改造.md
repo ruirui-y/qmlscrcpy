@@ -166,7 +166,74 @@ target_include_directories(QmlScrcpy PRIVATE "${QS_QT_ROOT}/include/QtGui/${Qt6_
 | **1** | 解码器支持导入外部 D3D11 设备（`SetExternalDevice`） | ✅ 已完成（提交 `44c96aa`） |
 | **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | ✅ 已完成（提交 `6f21092`） |
 | **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | ✅ 已完成（提交 `6f31530`），软解 97 fps、硬解 NV12 分支实测通过 |
-| **4** | 原生纹理通路：VideoProcessor 输出 RGBA8 → `createFrom` → 直接画 | 待做 |
+| **4** | 原生纹理通路：VideoProcessor 输出 RGBA8 → `createFrom` → 直接画 | 4a 设备握手 ✅（`f537396` + `07195af`），4b 待做 |
+
+### 第四步 4a：设备握手（已完成）
+
+目的只有一个：**让解码器和 Qt 渲染后端用同一个 `ID3D11Device`**。不同设备上的纹理，`createFrom` 一定失败。
+
+链路：
+
+```
+渲染线程 initialize()
+  └─ rhi->nativeHandles() → ID3D11Device*
+       └─ VideoItem::ProvideRhiDevice()      （存进成员 + 发信号）
+            └─ DeviceController 开解码器前取 rhi_device_
+                 └─ decoder->SetExternalDevice(device, context)
+                      └─ OpenHardware 走"外部设备"分支
+```
+
+最终日志（实测）：
+
+```
+[rhi] 渲染器初始化，后端 D3D11
+[decode] 使用外部 D3D11 设备（Qt RHI 提供）
+[decode] 使用 D3D11VA 硬件解码
+[decode] 首帧格式 172（D3D11 = 172）
+```
+
+### 4a 踩的三个坑（它们是串在一起的）
+
+**坑 13：QML 里只有 `onConnectedChanged`**
+
+原来窗口只跟着 `connected` 显示：
+
+```qml
+function onConnectedChanged()
+{
+    videoWindow.visible = deviceController.connected
+}
+```
+
+加了 `connecting` 属性后，`connecting` 变了却没人处理，窗口不出现 → 渲染后端不初始化。必须再补一个 `onConnectingChanged()`。
+
+**坑 14：信号比控制器的连接更早**
+
+渲染器在窗口首次渲染时就发 `SigRhiDeviceReady`，而控制器要等 `SetVideo(qml item)` 才 `connect` 这个信号——**信号已经发完了**。
+
+解法：画布把设备**存下来**（`rhi_device_value_` / `rhi_context_value_`），控制器开解码器前主动 `RhiDevice()` 读当前值，不依赖信号。
+
+**坑 15：解码器开得比渲染后端还早**
+
+时序是“连接 → 开解码器 → 弹窗 → 渲染器初始化”，解码器永远早一步。在 `ApplyConnected` 开头加等待：
+
+```cpp
+if (AppSettings().DecodeHardware() && rhi_device_ == 0 && gpu_wait_retries_ < 40)
+{
+    ++gpu_wait_retries_;
+    QTimer::singleShot(50, this, [this, result]() { ApplyConnected(result); });
+    return;
+}
+```
+
+窗口既然已经在 `connecting` 阶段显示，渲染器 300ms 内就会初始化，重试必然成功。
+
+**注意**：这个等待逻辑如果放在“窗口还没显示”的阶段会**死锁**——等设备，设备等窗口，窗口等连接成功。第一次尝试就死在这，表现为黑屏、日志停住、没有 `[rhi]`。必须先保证投屏窗在 `connecting` 阶段就显示。
+
+### 4a 的遗留
+
+- `gpu_wait_retries_` 只在 `ApplyConnected` 内使用，超时后退回自建设备（日志会打 warn）
+- 渲染器析构里已经删掉 RHI 资源，退出时不再报 `unreleased resources`
 
 ### 第三步之后的实测（NV12 分支）
 
