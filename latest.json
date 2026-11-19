@@ -1,10 +1,10 @@
 {
-    "latest":  "0.3.0",
-    "minimum":  "0.1.0",
-    "url":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes":  "Qt6.8 迁移 + GPU 硬解（D3D11VA），打字跟手",
-    "published_at":  "2026-11-18",
-    "exe":  "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.3.0/QmlScrcpy_Setup_0.3.0.exe",
-    "size":  63949246,
-    "sha256":  "61d3e63663b6bcdac677ee03743e5e1aaf4823e10df88eba328498b9a5d68bd9"
+    "latest": "0.3.1",
+    "minimum": "0.1.0",
+    "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
+    "notes": "解码设置进界面（硬解/软解、软解线程、读回方式），修复切回硬解红屏",
+    "published_at": "2026-11-19",
+    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.3.1/QmlScrcpy_Setup_0.3.1.exe",
+    "size": 63925048,
+    "sha256": "f4330d039cd062b842b3099ec56fb3f6568665a18af7111fff035b8791c8b025"
 }
