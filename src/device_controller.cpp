@@ -328,6 +328,112 @@ QString DeviceController::VideoProfile() const
 }
 
 // 改码率和帧率：这两个是 server 启动参数，改完必须重连才生效
+bool DeviceController::DecodeHardware() const
+{
+    return AppSettings().DecodeHardware();
+}
+
+// 硬解/软解切换：存配置，连着就重连（解码器在连接时创建）
+void DeviceController::SetDecodeHardware(bool hardware)
+{
+    if (DecodeHardware() == hardware)
+    {
+        return;
+    }
+
+    AppSettings settings;
+    settings.SetDecodeHardware(hardware);
+    emit SigDecodeSettingsChanged();
+    qInfo() << "[decode] 切到" << (hardware ? "硬解" : "软解");
+
+    if (session_ == nullptr || reader_ == nullptr)
+    {
+        SetStatus(hardware ? QStringLiteral("解码方式：硬解，下次连接生效")
+                           : QStringLiteral("解码方式：软解，下次连接生效"));
+        return;
+    }
+
+    const QString serial = device_name_;
+    SetStatus(QStringLiteral("按新的解码方式重连中（1~2 秒）…"));
+    QCoreApplication::processEvents();
+    Disconnect();
+    if (!serial.isEmpty())
+    {
+        Connect(serial);
+    }
+}
+
+int DeviceController::DecodeThreads() const
+{
+    return AppSettings().DecodeThreads();
+}
+
+// 软解线程数：只影响软解，硬解时保存即可
+void DeviceController::SetDecodeThreads(int threads)
+{
+    const int value = qBound(1, threads, 8);
+    if (DecodeThreads() == value)
+    {
+        return;
+    }
+
+    AppSettings settings;
+    settings.SetDecodeThreads(value);
+    emit SigDecodeSettingsChanged();
+    qInfo() << "[decode] 软解线程数设为" << value;
+
+    if (session_ == nullptr || reader_ == nullptr || DecodeHardware())
+    {
+        SetStatus(QStringLiteral("软解线程数：%1，下次软解时生效").arg(value));
+        return;
+    }
+
+    const QString serial = device_name_;
+    SetStatus(QStringLiteral("按新的线程数重连中（1~2 秒）…"));
+    QCoreApplication::processEvents();
+    Disconnect();
+    if (!serial.isEmpty())
+    {
+        Connect(serial);
+    }
+}
+
+bool DeviceController::AsyncReadback() const
+{
+    return AppSettings().DecodeAsyncReadback();
+}
+
+// 界面切换读回方式：先存配置；连着设备就重连一次（解码器在连接时创建）
+void DeviceController::SetAsyncReadback(bool enabled)
+{
+    if (AsyncReadback() == enabled)
+    {
+        return;
+    }
+
+    AppSettings settings;
+    settings.SetAsyncReadback(enabled);
+    emit SigAsyncReadbackChanged();
+
+    qInfo() << "[decode] 读回方式切到" << (enabled ? "异步（双 staging）" : "同步");
+
+    if (session_ == nullptr || reader_ == nullptr)
+    {
+        SetStatus(enabled ? QStringLiteral("读回方式：异步，下次连接生效")
+                          : QStringLiteral("读回方式：同步，下次连接生效"));
+        return;
+    }
+
+    const QString serial = device_name_;
+    SetStatus(QStringLiteral("按新的读回方式重连中（1~2 秒）…"));
+    QCoreApplication::processEvents();
+    Disconnect();
+    if (!serial.isEmpty())
+    {
+        Connect(serial);
+    }
+}
+
 void DeviceController::ApplyVideoSettings(int bit_rate, int max_fps)
 {
     AppSettings settings;
@@ -711,6 +817,8 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     QString error;
     // 配置里 [decode] hardware 决定走硬解还是软解
     decoder_->SetHardwareAllowed(AppSettings().DecodeHardware());
+    decoder_->SetAsyncReadback(AppSettings().DecodeAsyncReadback());
+    decoder_->SetSoftThreads(AppSettings().DecodeThreads());                                    // 软解线程数
     if (!decoder_->Open(&error))
     {
         SetStatus(QStringLiteral("解码器打开失败：%1").arg(error));

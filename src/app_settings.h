@@ -52,6 +52,11 @@ public:
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮手指移动多少像素，window.ini 里调过的优先
     void SetDragPixels(int pixels);
     bool DecodeHardware() const;                                                                // 是否走 GPU 硬解
+    void SetDecodeHardware(bool hardware);                                                       // 界面切换硬解/软解
+    bool DecodeAsyncReadback() const;                                                           // 硬解是否用异步读回（双 staging）
+    void SetAsyncReadback(bool enabled);                                                        // 界面里切换读回方式
+    int DecodeThreads() const;                                                                  // 软解线程数（1~8）
+    void SetDecodeThreads(int threads);                                                         // 界面调整软解线程数
     int ClickerInterval() const;                                                                // 连点间隔毫秒，0 = 关闭
     void SetClickerInterval(int ms);
     double DragScale() const;                                                                   // 左键拖拽倍率：鼠标拖 1 像素手指走多少像素

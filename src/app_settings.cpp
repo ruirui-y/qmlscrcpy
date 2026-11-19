@@ -57,6 +57,8 @@ bit_rate=8000000
 max_fps=0
 
 [decode]
+# 硬解读回方式：1 = 异步（双 staging，延后一帧，CPU 不等 GPU）；0 = 同步（更跟手，每次等约 2ms）
+async_readback=0
 hardware=1
 
 [video_wireless]
@@ -134,6 +136,8 @@ max_fps=0
 # 无线连接单独一套（串号里带冒号就用这组）：6M 在局域网下够用且不排队
 # 码率同时也约束帧率：实测 2M 只出 72 帧、6M 94 帧、12M 114 帧
 [decode]
+# 硬解读回方式：1 = 异步（双 staging，延后一帧，CPU 不等 GPU）；0 = 同步（更跟手，每次等约 2ms）
+async_readback=0
 hardware=1
 
 [video_wireless]
@@ -559,6 +563,36 @@ bool AppSettings::DecodeHardware() const
 {
     return ConfigStore().value(QStringLiteral("decode/hardware"), 1).toInt() != 0;
 }
+
+// 硬解读回方式：true = 异步（双 staging，延迟 +1 帧但不等 GPU）；false = 同步
+void AppSettings::SetDecodeHardware(bool hardware)
+{
+    ConfigStore().setValue(QStringLiteral("decode/hardware"), hardware ? 1 : 0);
+}
+
+// 软解线程数：1~8，默认 4（少了送包会阻塞，多了攒帧变多）
+int AppSettings::DecodeThreads() const
+{
+    const int value = ConfigStore().value(QStringLiteral("decode/threads"), 4).toInt();
+    return qBound(1, value, 8);
+}
+
+void AppSettings::SetDecodeThreads(int threads)
+{
+    ConfigStore().setValue(QStringLiteral("decode/threads"), qBound(1, threads, 8));
+}
+
+bool AppSettings::DecodeAsyncReadback() const
+{
+    return ConfigStore().value(QStringLiteral("decode/async_readback"), 0).toInt() != 0;
+}
+
+// 界面里切换读回方式：立即写进 config.ini
+void AppSettings::SetAsyncReadback(bool enabled)
+{
+    ConfigStore().setValue(QStringLiteral("decode/async_readback"), enabled ? 1 : 0);
+}
+
 
 // 连点间隔：0 表示关闭，按住空格时按这个间隔在鼠标位置连点
 int AppSettings::ClickerInterval() const

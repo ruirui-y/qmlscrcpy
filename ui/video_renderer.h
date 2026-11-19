@@ -64,6 +64,7 @@ private:
 
     GLuint textures_[3] = {0, 0, 0};
     QSize texture_sizes_[3];                                                                    // 每张纹理当前对应的平面尺寸，变了就重建
+    bool texture_is_la_[3] = {false, false, false};                                              // 每张纹理当前是不是 LUMINANCE_ALPHA，格式变了必须重建
     QOpenGLShaderProgram program_;
     QOpenGLShaderProgram nv12_program_;
     QOpenGLShaderProgram bgra_program_;                                                         // 原生 BGRA 纹理用：采样后交换 B/R

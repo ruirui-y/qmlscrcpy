@@ -34,6 +34,8 @@ public:
     bool Open(QString *error);                                                                  // 找 H.264 解码器并打开上下文
     void Close();                                                                               // 释放上下文，可以重复调
     void SetHardwareAllowed(bool allowed) { hardware_allowed_ = allowed; }                      // 配置里关掉硬解时传 false
+    void SetAsyncReadback(bool enabled) { async_readback_ = enabled; }                          // 硬解读回：异步（双 staging）还是同步
+    void SetSoftThreads(int threads) { soft_threads_ = threads; }                               // 软解线程数（1~8）
     bool Hardware() const { return hardware_; }                                                 // 这轮是不是硬解（日志用）
 
     // 送一个包，解出的帧追加到 frames（通常 0 或 1 个）；失败时 error 有原因
@@ -44,6 +46,7 @@ private:
     bool DrainFrames(QVector<Frame> &frames, QString *error);                                   // 把解码器里积压的帧全取出来
     bool OpenHardware(QString *error);                                                          // 建 D3D11 设备并挂到上下文上
     bool DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *error);                  // 拷进暂存纹理再读回内存，组装成 NV12 帧
+    bool ReadStaging(int slot, unsigned int width, unsigned int height, Frame &frame, QString *error);
 
     AVCodecContext *context_ = nullptr;                                                         // 解码器上下文，Close 后置空
     AVPacket *packet_ = nullptr;                                                                // 复用一个包，避免每帧都分配
@@ -54,6 +57,8 @@ private:
     std::unique_ptr<D3d11State> d3d_;                                                           // 自己建的设备 + 复用的暂存纹理
 
     std::shared_ptr<FrameBufferPool> pool_;                                                     // 缓冲池（跨线程引用计数归还）
+    bool async_readback_ = false;                                                               // 配置 decode/async_readback
+    int soft_threads_ = 4;                                                                      // 软解线程数，0/1 时退化成单线程
     DecodeProbe probe_;                                                                         // 解码耗时探针（拼包/送包/收帧）
 };
 

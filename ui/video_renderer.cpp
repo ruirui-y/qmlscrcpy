@@ -335,7 +335,10 @@ void YuvRenderer::render()
         for (int i = 0; i < plane_count; ++i)
         {
             // 尺寸变了（横竖屏切换）必须重建纹理，否则 glTexSubImage2D 会越界，画面直接卡住
-            const bool size_changed = texture_sizes_[i] != QSize(widths_[i], heights_[i]);
+            const GLint wanted = nv12_ && i == 1 ? GL_LUMINANCE_ALPHA : GL_LUMINANCE;
+            const bool is_la = (wanted == GL_LUMINANCE_ALPHA);
+            // 尺寸变了、或者格式变了（软解三平面 ↔ 硬解两平面），都必须重建
+            const bool size_changed = texture_sizes_[i] != QSize(widths_[i], heights_[i]) || texture_is_la_[i] != is_la;
             if (textures_[i] == 0 || size_changed)
             {
                 if (textures_[i] != 0)
@@ -353,6 +356,7 @@ void YuvRenderer::render()
                 gl->glTexImage2D(GL_TEXTURE_2D, 0, internal, widths_[i], heights_[i], 0, internal,
                                  GL_UNSIGNED_BYTE, nullptr);
                 texture_sizes_[i] = QSize(widths_[i], heights_[i]);
+                texture_is_la_[i] = is_la;
             }
             gl->glBindTexture(GL_TEXTURE_2D, textures_[i]);
             gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);

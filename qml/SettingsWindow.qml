@@ -361,6 +361,7 @@ Window
                     popup: Popup
                     {
                         width: bitrateBox.width
+                        y: bitrateBox.height
                         implicitHeight: contentItem.implicitHeight + 2
                         padding: 1
 
@@ -434,12 +435,279 @@ Window
                 }
             }
 
+            // 硬解读回方式：同步更跟手，异步不用等 GPU 但画面晚一帧
+            RowLayout
+            {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text
+                {
+                    text: qsTr("读回方式")
+                    color: "#cdd4de"
+                    font.pixelSize: 12
+                }
+
+                ComboBox
+                {
+                    id: readbackBox
+                    Layout.preferredWidth: 190
+                    Layout.preferredHeight: 28
+                    font.pixelSize: 12
+                    model: [qsTr("同步（更跟手）"), qsTr("异步（快，+1 帧）")]
+                    currentIndex: deviceController.asyncReadback ? 1 : 0
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("同步：每次等 GPU 约 2ms，画面不加延迟；异步：CPU 不等，但画面晚一帧")
+
+                    background: Rectangle
+                    {
+                        radius: 6
+                        color: "#151920"
+                        border.width: 1
+                        border.color: readbackBox.activeFocus ? "#3f8fdd" : "#2c323c"
+                    }
+
+                    contentItem: Text
+                    {
+                        leftPadding: 8
+                        text: readbackBox.displayText
+                        color: "#d8dee9"
+                        font: readbackBox.font
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+
+                    indicator: Text
+                    {
+                        x: readbackBox.width - width - 8
+                        y: (readbackBox.height - height) / 2
+                        text: "▾"
+                        color: "#7c8698"
+                        font.pixelSize: 12
+                    }
+
+
+                    delegate: ItemDelegate
+                    {
+                        width: readbackBox.width
+                        height: 28
+                        highlighted: readbackBox.highlightedIndex === index
+
+                        contentItem: Text
+                        {
+                            leftPadding: 8
+                            text: modelData
+                            color: highlighted ? "#ffffff" : "#cdd4de"
+                            font: readbackBox.font
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle
+                        {
+                            color: highlighted ? "#2a3442" : "transparent"
+                        }
+                    }
+
+                    popup: Popup
+                    {
+                        width: readbackBox.width
+                        y: readbackBox.height
+                        implicitHeight: contentItem.implicitHeight + 2
+                        padding: 1
+
+                        background: Rectangle
+                        {
+                            radius: 6
+                            color: "#1a1f27"
+                            border.width: 1
+                            border.color: "#2c323c"
+                        }
+
+                        contentItem: ListView
+                        {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: readbackBox.popup.visible ? readbackBox.delegateModel : null
+                            currentIndex: readbackBox.highlightedIndex
+                        }
+                    }
+
+                    onActivated: deviceController.AsyncReadback = (index === 1)
+                }
+
+                Text
+                {
+                    text: qsTr("改完自动重连")
+                    color: "#7c8698"
+                    font.pixelSize: 11
+                }
+
+                Item
+                {
+                    Layout.fillWidth: true
+                }
+            }
+
             Rectangle
             {
                 Layout.fillWidth: true
                 height: 1
                 color: "#262c36"
             }
+
+            // 解码：硬解（GPU）还是软解（CPU），软解时线程数可调
+            RowLayout
+            {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text
+                {
+                    text: qsTr("解码方式")
+                    color: "#cdd4de"
+                    font.pixelSize: 12
+                }
+
+                ComboBox
+                {
+                    id: decodeBox
+                    Layout.preferredWidth: 120
+                    Layout.preferredHeight: 28
+                    font.pixelSize: 12
+                    model: [qsTr("硬解（GPU）"), qsTr("软解（CPU）")]
+                    currentIndex: deviceController.decodeHardware ? 0 : 1
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("硬解：GPU 解码后拷回内存，跟手；软解：CPU 解码，占用低但画面滞后 2~3 帧")
+
+                    background: Rectangle
+                    {
+                        radius: 6
+                        color: "#151920"
+                        border.width: 1
+                        border.color: decodeBox.activeFocus ? "#3f8fdd" : "#2c323c"
+                    }
+
+                    contentItem: Text
+                    {
+                        leftPadding: 8
+                        text: decodeBox.displayText
+                        color: "#d8dee9"
+                        font: decodeBox.font
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+
+                    indicator: Text
+                    {
+                        x: decodeBox.width - width - 8
+                        y: (decodeBox.height - height) / 2
+                        text: "▾"
+                        color: "#7c8698"
+                        font.pixelSize: 12
+                    }
+
+                    delegate: ItemDelegate
+                    {
+                        width: decodeBox.width
+                        height: 28
+                        highlighted: decodeBox.highlightedIndex === index
+
+                        contentItem: Text
+                        {
+                            leftPadding: 8
+                            text: modelData
+                            color: highlighted ? "#ffffff" : "#cdd4de"
+                            font: decodeBox.font
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle
+                        {
+                            color: highlighted ? "#2a3442" : "transparent"
+                        }
+                    }
+
+                    popup: Popup
+                    {
+                        width: decodeBox.width
+                        y: decodeBox.height
+                        implicitHeight: contentItem.implicitHeight + 2
+                        padding: 1
+
+                        background: Rectangle
+                        {
+                            radius: 6
+                            color: "#1a1f27"
+                            border.width: 1
+                            border.color: "#2c323c"
+                        }
+
+                        contentItem: ListView
+                        {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: decodeBox.popup.visible ? decodeBox.delegateModel : null
+                            currentIndex: decodeBox.highlightedIndex
+                        }
+                    }
+
+                    onActivated: deviceController.decodeHardware = (index === 0)
+                }
+
+                Text
+                {
+                    text: qsTr("软解线程")
+                    color: deviceController.decodeHardware ? "#5c6675" : "#cdd4de"
+                    font.pixelSize: 12
+                }
+
+                TextField
+                {
+                    id: threadField
+                    Layout.preferredWidth: 60
+                    Layout.preferredHeight: 28
+                    enabled: !deviceController.decodeHardware
+                    text: String(deviceController.decodeThreads)
+                    color: enabled ? "#d8dee9" : "#5c6675"
+                    font.pixelSize: 12
+                    leftPadding: 8
+                    horizontalAlignment: TextInput.AlignHCenter
+                    validator: IntValidator
+                    {
+                        bottom: 1
+                        top: 8
+                    }
+                    background: Rectangle
+                    {
+                        radius: 6
+                        color: "#151920"
+                        border.width: 1
+                        border.color: threadField.activeFocus ? "#3f8fdd" : "#2c323c"
+                    }
+
+                    onEditingFinished:
+                    {
+                        const value = parseInt(text) || deviceController.decodeThreads
+                        deviceController.decodeThreads = value
+                        text = String(deviceController.decodeThreads)
+                    }
+                }
+
+                Text
+                {
+                    text: qsTr("1~8，4 是默认值；少了解码慢，多了攒帧")
+                    color: "#7c8698"
+                    font.pixelSize: 11
+                }
+
+                Item
+                {
+                    Layout.fillWidth: true
+                }
+            }
+
 
             // ── 快捷键 ──
             SectionTitle

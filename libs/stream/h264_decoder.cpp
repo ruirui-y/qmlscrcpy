@@ -46,10 +46,12 @@ struct D3d11State
 {
     ComPtr<ID3D11Device> device;                                                                // 和 FFmpeg 共用同一个设备
     ComPtr<ID3D11DeviceContext> context;                                                        // 立即上下文，拷贝和映射都靠它
-    ComPtr<ID3D11Texture2D> staging;                                                            // STAGING + CPU 可读，尺寸变了才重建
+    ComPtr<ID3D11Texture2D> staging[2];                                                         // 双缓冲：一帧在拷，另一帧在读
+    ComPtr<ID3D11Query> query[2];                                                               // 每张 staging 配一个完成事件
+    int write_slot = 0;                                                                         // 下一帧拷进哪个槽
+    int pending_slot = -1;                                                                      // 已拷好、等着读的槽
     UINT width = 0;                                                                             // 暂存纹理当前宽
     UINT height = 0;                                                                            // 暂存纹理当前高
-
 };
 
 QByteArray *FrameBufferPool::Take(int size)
@@ -238,7 +240,7 @@ bool H264Decoder::Open(QString *error)
         qInfo() << "[decode] 硬件解码不可用，改用软解：" << hardware_error;
         // 帧级多线程：解一帧能快两倍上下，代价是解码器内部要攒几帧才出第一个结果，
         // 实际端到端会多出约 (thread_count - 1) 帧的延迟，用延迟换吞吐
-        context_->thread_count = 4;
+        context_->thread_count = soft_threads_ > 0 ? soft_threads_ : 4;                             // 软解线程数由配置决定
     }
 
     const int ret = avcodec_open2(context_, codec, nullptr);
@@ -432,8 +434,8 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
     const UINT width = static_cast<UINT>(hardware_frame->width);
     const UINT height = static_cast<UINT>(hardware_frame->height);
 
-    // 尺寸变了（横竖屏切换）才重建暂存纹理，其余时候一直复用
-    if (!d3d_->staging || d3d_->width != width || d3d_->height != height)
+    // 尺寸变了（横竖屏切换）：重建两张 staging + 两个查询，丢掉在途帧
+    if (!d3d_->staging[0] || d3d_->width != width || d3d_->height != height)
     {
         D3D11_TEXTURE2D_DESC description = {};
         description.Width = width;
@@ -445,64 +447,110 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
         description.Usage = D3D11_USAGE_STAGING;
         description.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
-        d3d_->staging.Reset();
-        const HRESULT create_ret = d3d_->device->CreateTexture2D(&description, nullptr, d3d_->staging.GetAddressOf());
-        if (FAILED(create_ret))
+        D3D11_QUERY_DESC query_desc = {};
+        query_desc.Query = D3D11_QUERY_EVENT;
+
+        for (int i = 0; i < 2; ++i)
         {
-            *error = QStringLiteral("建暂存纹理失败（HRESULT 0x%1）").arg(create_ret, 8, 16, QLatin1Char('0'));
-            return false;
+            d3d_->staging[i].Reset();
+            d3d_->query[i].Reset();
+            if (FAILED(d3d_->device->CreateTexture2D(&description, nullptr, d3d_->staging[i].GetAddressOf())))
+            {
+                *error = QStringLiteral("建暂存纹理失败");
+                return false;
+            }
+            if (FAILED(d3d_->device->CreateQuery(&query_desc, d3d_->query[i].GetAddressOf())))
+            {
+                *error = QStringLiteral("建查询失败");
+                return false;
+            }
         }
+
+        d3d_->write_slot = 0;
+        d3d_->pending_slot = -1;
         d3d_->width = width;
         d3d_->height = height;
     }
-
-    const bool timing = qEnvironmentVariableIntValue("QS_TRACE_DOWNLOAD") == 1;
-    const qint64 t0 = NowUs();
-
-    const qint64 copy_start_us = probe_.Now();
-    // NV12 一个数组切片就是一个子资源，Y 和 UV 都在里面：拷到暂存纹理的 0 号子资源
-    d3d_->context->CopySubresourceRegion(d3d_->staging.Get(), 0, 0, 0, 0, texture, slice, nullptr);
-    const qint64 t1 = NowUs();
 
     const int chroma_height = static_cast<int>((height + 1) / 2);
     const int y_size = static_cast<int>(width * height);
     const int uv_size = static_cast<int>(width * chroma_height);
     const int total_size = y_size + uv_size;
 
-    auto pool = pool_;                                                                          // 捕获 shared_ptr，解码器先析构也不会悬空
+    // 同步模式：拷完立刻读同一张（更跟手，但每次等 GPU 约 2ms）
+    if (!async_readback_)
+    {
+        const qint64 s0 = NowUs();
+        d3d_->context->CopySubresourceRegion(d3d_->staging[0].Get(), 0, 0, 0, 0, texture, slice, nullptr);
+        probe_.AddPrep((NowUs() - s0) * 1000);
+        return ReadStaging(0, width, height, frame, error);
+    }
+
+    // ---- 第一步：把这一帧拷进当前槽，只提交、不等待 ----
+    const qint64 t0 = NowUs();
+    const int slot = d3d_->write_slot;
+    d3d_->context->CopySubresourceRegion(d3d_->staging[slot].Get(), 0, 0, 0, 0, texture, slice, nullptr);
+    d3d_->context->End(d3d_->query[slot].Get());
+    const qint64 t1 = NowUs();
+    probe_.AddPrep((t1 - t0) * 1000);
+
+    // ---- 第二步：读上一帧（它早就拷完了，不用等）----
+    const int read_slot = d3d_->pending_slot;
+    d3d_->pending_slot = slot;
+    d3d_->write_slot = 1 - slot;
+
+    if (read_slot < 0)
+    {
+        // 第一帧：没有上一帧可读，只能同步读当前槽
+        return ReadStaging(slot, width, height, frame, error);
+    }
+
+    // 查询完成状态：已经完成就不会阻塞，没完成才走 Map 的等待
+    const qint64 t2 = NowUs();
+    BOOL done = FALSE;
+    d3d_->context->GetData(d3d_->query[read_slot].Get(), &done, sizeof(done), 0);
+    const qint64 t3 = NowUs();
+    probe_.AddWait((t3 - t2) * 1000);
+
+    return ReadStaging(read_slot, width, height, frame, error);
+}
+
+// 把某个槽里的 staging 读成 Frame：Map → memcpy → Unmap
+bool H264Decoder::ReadStaging(int slot, UINT width, UINT height, Frame &frame, QString *error)
+{
+    const int chroma_height = static_cast<int>((height + 1) / 2);
+    const int y_size = static_cast<int>(width * height);
+    const int uv_size = static_cast<int>(width * chroma_height);
+    const int total_size = y_size + uv_size;
+
+    auto pool = pool_;
     std::shared_ptr<QByteArray> buffer(pool->Take(total_size), [pool](QByteArray *raw)
     {
         pool->Give(raw);
     });
-    const qint64 t1b = NowUs();
 
-    probe_.AddPrep(((t1 - t0) + (t1b - t1)) * 1000);
-
+    const qint64 t0 = NowUs();
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    const HRESULT map_ret = d3d_->context->Map(d3d_->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    const HRESULT map_ret = d3d_->context->Map(d3d_->staging[slot].Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(map_ret))
     {
         *error = QStringLiteral("映射暂存纹理失败（HRESULT 0x%1）").arg(map_ret, 8, 16, QLatin1Char('0'));
         return false;
     }
-    const qint64 t2 = NowUs();
-    probe_.AddWait((t2 - t1b) * 1000);
+    const qint64 t1 = NowUs();
+
     for (UINT row = 0; row < height; ++row)
     {
         memcpy(buffer->data() + row * width, static_cast<const quint8 *>(mapped.pData) + row * mapped.RowPitch, width);
     }
-    d3d_->context->Unmap(d3d_->staging.Get(), 0);
-
-    // NV12 的 UV 平面紧跟在 Y 平面之后：偏移 = 行跨度 × 高度
     for (int row = 0; row < chroma_height; ++row)
     {
         memcpy(buffer->data() + y_size + row * width,
                static_cast<const quint8 *>(mapped.pData) + (height + row) * mapped.RowPitch, width);
     }
-
-    const qint64 t3 = NowUs();
-    probe_.AddRead((t3 - t2) * 1000);
-
+    d3d_->context->Unmap(d3d_->staging[slot].Get(), 0);
+    const qint64 t2 = NowUs();
+    probe_.AddRead((t2 - t1) * 1000);
 
     const quint8 *base = reinterpret_cast<const quint8 *>(buffer->constData());
     frame = Frame(QSize(static_cast<int>(width), static_cast<int>(height)), PixelFormat::Nv12, base,
