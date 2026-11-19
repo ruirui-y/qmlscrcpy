@@ -1,0 +1,147 @@
+#include "decode_probe.h"
+
+#include <QDebug>
+#include <QtGlobal>
+
+namespace qsc::stream
+{
+
+DecodeProbe::DecodeProbe()
+{
+    enabled_ = qEnvironmentVariableIntValue("QS_TRACE_DECODE") == 1;                            // 默认关闭，探针代码不进热路径
+}
+
+void DecodeProbe::BeginPush()
+{
+    if (!enabled_)
+    {
+        return;
+    }
+    timer_.start();
+    pack_ns_ = 0;
+    send_ns_ = 0;
+    download_ns_ = 0;
+    prep_ns_ = 0;
+    wait_ns_ = 0;
+    read_ns_ = 0;
+    mark_us_ = 0;
+}
+
+void DecodeProbe::MarkPack()
+{
+    if (!enabled_)
+    {
+        return;
+    }
+    mark_us_ = timer_.nsecsElapsed();
+    pack_ns_ = mark_us_;                                                                        // 从 BeginPush 到这里的差就是拼包
+}
+
+void DecodeProbe::MarkSend()
+{
+    if (!enabled_)
+    {
+        return;
+    }
+    const qint64 now_us = timer_.nsecsElapsed();
+    send_ns_ = now_us - mark_us_;                                                               // 上一个打点到这儿的差
+    mark_us_ = now_us;
+}
+
+qint64 DecodeProbe::Now()
+{
+    return enabled_ ? timer_.nsecsElapsed() : 0;
+}
+
+void DecodeProbe::AddPrep(qint64 ns)
+{
+    if (enabled_)
+    {
+        prep_ns_ += ns;
+    }
+}
+
+void DecodeProbe::AddWait(qint64 ns)
+{
+    if (enabled_)
+    {
+        wait_ns_ += ns;
+    }
+}
+
+void DecodeProbe::AddRead(qint64 ns)
+{
+    if (enabled_)
+    {
+        read_ns_ += ns;
+    }
+}
+
+void DecodeProbe::AddDownload(qint64 ns)
+{
+    if (enabled_)
+    {
+        download_ns_ += ns;
+    }
+}
+
+void DecodeProbe::EndFrame(bool hardware)
+{
+    if (!enabled_)
+    {
+        return;
+    }
+
+    const qint64 drain_ns = timer_.nsecsElapsed() - mark_us_;                                   // 收帧：包含硬解下载
+
+    ++frames_;
+    stat_pack_ns_ += pack_ns_;
+    stat_send_ns_ += send_ns_;
+    stat_drain_ns_ += drain_ns;
+    stat_download_ns_ += download_ns_;
+    stat_prep_ns_ += prep_ns_;
+    stat_wait_ns_ += wait_ns_;
+    stat_read_ns_ += read_ns_;
+
+    const qint64 total_ns = pack_ns_ + send_ns_ + drain_ns;
+    if (total_ns > stat_max_total_ns_)
+    {
+        stat_max_total_ns_ = total_ns;
+    }
+
+    if (!window_.isValid())
+    {
+        window_.start();
+    }
+    if (window_.elapsed() < 1000)
+    {
+        return;
+    }
+
+    const int n = frames_;
+    const qint64 total_avg_ns = (stat_pack_ns_ + stat_send_ns_ + stat_drain_ns_) / n;
+    qInfo().nospace() << "[decode] 秒结 " << n << " 帧" << (hardware ? "（硬解）" : "（软解）")
+                      << "：拼包 " << stat_pack_ns_ / n / 1000 << "us / 送包 " << stat_send_ns_ / n / 1000
+                      << "us / 收帧 " << stat_drain_ns_ / n / 1000 << "us（准备 "
+                      << stat_prep_ns_ / n / 1000 << " + 等Map " << stat_wait_ns_ / n / 1000
+                      << " + 读 " << stat_read_ns_ / n / 1000 << "us）/ 合计 "
+                      << total_avg_ns / 1000 << "us / 最慢 " << stat_max_total_ns_ / 1000 << "us";
+
+    Reset();
+    window_.restart();
+}
+
+void DecodeProbe::Reset()
+{
+    frames_ = 0;
+    stat_pack_ns_ = 0;
+    stat_send_ns_ = 0;
+    stat_drain_ns_ = 0;
+    stat_download_ns_ = 0;
+    stat_prep_ns_ = 0;
+    stat_wait_ns_ = 0;
+    stat_read_ns_ = 0;
+    stat_max_total_ns_ = 0;
+}
+
+} // namespace qsc::stream

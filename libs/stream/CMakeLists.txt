@@ -1,6 +1,8 @@
 # 视频链路：读包、解码、转 RGB、帧所有权。
 # 只依赖 QtCore + Qt6::Network（读 socket）+ 协议层（包头）+ FFmpeg，不碰界面。
 add_library(qsc_stream STATIC
+    decode_probe.cpp
+    decode_probe.h
     h264_decoder.cpp
     video_reader.cpp
     video_traffic.cpp

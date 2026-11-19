@@ -5,6 +5,7 @@
 #include <QString>
 #include <QVector>
 
+#include "stream/decode_probe.h"
 #include "stream/frame.h"
 
 struct AVBufferRef;
@@ -42,9 +43,6 @@ private:
     bool DrainFrames(QVector<Frame> &frames, QString *error);                                   // 把解码器里积压的帧全取出来
     bool OpenHardware(QString *error);                                                          // 建 D3D11 设备并挂到上下文上
     bool DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *error);                  // 拷进暂存纹理再读回内存，组装成 NV12 帧
-    bool EnsureVideoProcessor(int width, int height, QString *error);                           // 建 VideoProcessor 和双缓冲 BGRA 纹理
-    bool ConvertToBgra(AVFrame *hardware_frame, QString *error);                                // GPU 内 NV12 → BGRA，写进双缓冲
-    void ReportDecodeTime(qint64 pack_ns, qint64 send_ns, qint64 drain_ns);                     // 每秒一行：拼包/送包/收帧/下载/合计
 
     AVCodecContext *context_ = nullptr;                                                         // 解码器上下文，Close 后置空
     AVPacket *packet_ = nullptr;                                                                // 复用一个包，避免每帧都分配
@@ -54,20 +52,7 @@ private:
     QByteArray pending_config_;                                                                 // 还没拼出去的那份 SPS/PPS
     std::unique_ptr<D3d11State> d3d_;                                                           // 自己建的设备 + 复用的暂存纹理
 
-    // 解码耗时探针：QS_TRACE_DECODE=1 才记，按秒结算。硬解时 drain 里还含 GPU→CPU 的下载
-    bool trace_enabled_ = false;                                                                // 环境变量开的开关
-    QElapsedTimer timer_;                                                                       // 量单次 Push
-    QElapsedTimer window_timer_;                                                                // 满一秒结算一次
-    int stat_frames_ = 0;                                                                       // 本秒解了多少帧
-    qint64 stat_pack_ns_ = 0;                                                                   // 本秒拼包累计
-    qint64 stat_send_ns_ = 0;                                                                   // 本秒送包累计
-    qint64 stat_drain_ns_ = 0;                                                                  // 本秒收帧累计
-    qint64 stat_download_ns_ = 0;                                                               // 本秒下载累计（只有硬解有）
-    qint64 stat_copy_ns_ = 0;                                                                   // 本秒 GPU 拷贝累计
-    qint64 stat_max_total_ns_ = 0;                                                              // 本秒单帧最慢
-    qint64 drain_download_ns_ = 0;                                                              // 本次 Push 里下载花了多少
-    qint64 drain_copy_ns_ = 0;                                                                  // 其中 GPU 内拷贝花了多少（剩下的就是读回）
-    bool bgra_logged_ = false;                                                                  // 转换成功只打一次日志
+    DecodeProbe probe_;                                                                         // 解码耗时探针（拼包/送包/收帧）
 };
 
 } // namespace qsc::stream
