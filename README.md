@@ -498,6 +498,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [日志与配置](docs/日志与配置.md) | config.ini / window.ini / Log 目录、日志格式、排查四步 |
 | [按键映射](docs/按键映射.md) | 游戏键位映射：三种键位类型、五层结构、七次失败的过程、16ms 轮询方案 |
 | [解码链路](docs/解码链路.md) | H.264 解码：软解基线、换 d3d11va 硬解踩的五个坑、NV12 着色器、阶段一实测（下载占 99.8%）与阶段二零拷贝计划 |
+| [GPU 渲染改造](docs/GPU渲染改造.md) | D3D11 RHI 路线：spike 验证、8 个坑、设备握手、零拷贝三次失败的完整证据 |
 | [Git 使用](docs/git使用.md) | 分支模型、回退与找回、实验分支保命顺序、draft PR、本项目踩过的 git 坑 |
 | [开发环境](docs/开发环境.md) | VS 文件夹视图丢 Git 图标：冷启动时序竞态，含 ActivityLog 取证与桌面脚本绕过 |
 | [Qt6 迁移](docs/Qt6迁移.md) | Qt5.15 → Qt6.8 全过程：断言崩溃、栈溢出、OpenGL 后端、部署布局、adb 路径 |
