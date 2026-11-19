@@ -16,7 +16,8 @@ struct AVPacket;
 namespace qsc::stream
 {
 
-struct D3d11State;                                                                              // 设备、上下文和暂存纹理，定义在 cpp 里（不把 d3d11.h 带进头文件）
+struct D3d11State;                                                                              // 设备、上下文和暂存纹理，定义在 cpp 里
+struct FrameBufferPool;                                                                         // 帧缓冲池：复用 5MB 的 QByteArray
 
 // H.264 解码。输入是裸 Annex-B 数据：配置包（SPS/PPS）和数据包都往里送，
 // FFmpeg 自己按 in-band 参数集解析，不用我们手工拼 extradata。
@@ -52,6 +53,7 @@ private:
     QByteArray pending_config_;                                                                 // 还没拼出去的那份 SPS/PPS
     std::unique_ptr<D3d11State> d3d_;                                                           // 自己建的设备 + 复用的暂存纹理
 
+    std::shared_ptr<FrameBufferPool> pool_;                                                     // 缓冲池（跨线程引用计数归还）
     DecodeProbe probe_;                                                                         // 解码耗时探针（拼包/送包/收帧）
 };
 

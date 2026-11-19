@@ -1,6 +1,8 @@
 #include "stream/h264_decoder.h"
 
 #include <QDebug>
+#include <QMutex>
+#include <QMutexLocker>
 
 #include <cstring>
 
@@ -27,6 +29,16 @@ using Microsoft::WRL::ComPtr;
 namespace qsc::stream
 {
 
+// 帧缓冲池：复用渲染器画完的 QByteArray，避免每帧分配 5MB（缺页是主要成本）
+struct FrameBufferPool
+{
+    QByteArray *Take(int size);
+    void Give(QByteArray *buffer);
+
+    QMutex mutex;                                                                               // 解码线程取、渲染线程还，必须加锁
+    QVector<QByteArray *> free_list;                                                            // 空闲缓冲，最多留 3 个
+};
+
 // 自己建的 D3D11 设备 + 一张复用的暂存纹理。
 // 复用是关键：FFmpeg 的 av_hwframe_transfer_data 每帧都新建一张暂存纹理，
 // 分配 + 映射 + 拷贝 + 释放一趟下来 5 ms 就没了。
@@ -39,6 +51,33 @@ struct D3d11State
     UINT height = 0;                                                                            // 暂存纹理当前高
 
 };
+
+QByteArray *FrameBufferPool::Take(int size)
+{
+    QMutexLocker lock(&mutex);
+    if (!free_list.isEmpty())
+    {
+        QByteArray *buffer = free_list.takeLast();
+        if (buffer->capacity() >= size)
+        {
+            return buffer;
+        }
+        delete buffer;
+    }
+    return new QByteArray(size, Qt::Uninitialized);
+}
+
+// 渲染线程画完那一帧时调用：引用计数归零 → 缓冲回到池子
+void FrameBufferPool::Give(QByteArray *buffer)
+{
+    QMutexLocker lock(&mutex);
+    if (free_list.size() < 3)
+    {
+        free_list.append(buffer);
+        return;
+    }
+    delete buffer;
+}
 
 namespace
 {
@@ -150,7 +189,10 @@ Frame WrapFrame(AVFrame *av_frame)
 
 } // namespace
 
-H264Decoder::H264Decoder() = default;
+H264Decoder::H264Decoder()
+    : pool_(std::make_shared<FrameBufferPool>())
+{
+}
 
 H264Decoder::~H264Decoder()
 {
@@ -425,12 +467,17 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
     const int chroma_height = static_cast<int>((height + 1) / 2);
     const int y_size = static_cast<int>(width * height);
     const int uv_size = static_cast<int>(width * chroma_height);
-    auto buffer = std::make_shared<QByteArray>(y_size + uv_size, Qt::Uninitialized);   // 马上被 memcpy 覆盖，不清零省 1.2ms
+    const int total_size = y_size + uv_size;
+
+    auto pool = pool_;                                                                          // 捕获 shared_ptr，解码器先析构也不会悬空
+    std::shared_ptr<QByteArray> buffer(pool->Take(total_size), [pool](QByteArray *raw)
+    {
+        pool->Give(raw);
+    });
     const qint64 t1b = NowUs();
 
     probe_.AddPrep(((t1 - t0) + (t1b - t1)) * 1000);
 
-    d3d_->context->Flush();                                                                     // 把拷贝命令立刻推给 GPU，别攒在驱动里
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     const HRESULT map_ret = d3d_->context->Map(d3d_->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(map_ret))
