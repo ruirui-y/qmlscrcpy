@@ -217,21 +217,21 @@ void YuvRenderer::EnsureProgram()
         qWarning() << "[video] 着色器编译失败:" << program_.log();
         // 失败也标记成 ready：每帧重试编译只会刷屏
 
-    // 原生 BGRA 纹理那一套：和上面互不影响，编不过只影响零拷贝
-    if (!bgra_program_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
-        || !bgra_program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kBgraFragmentShader))
-    {
-        qWarning() << "[video] BGRA 着色器编译失败:" << bgra_program_.log();
-    }
-    else
-    {
-        bgra_program_.bindAttributeLocation("vertexCoords", 0);
-        bgra_program_.bindAttributeLocation("texCoords", 1);
-        if (!bgra_program_.link())
+        // 原生 BGRA 纹理那一套：和上面互不影响，编不过只影响零拷贝
+        if (!bgra_program_.addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
+            || !bgra_program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kBgraFragmentShader))
         {
-            qWarning() << "[video] BGRA 着色器链接失败:" << bgra_program_.log();
+            qWarning() << "[video] BGRA 着色器编译失败:" << bgra_program_.log();
         }
-    }
+        else
+        {
+            bgra_program_.bindAttributeLocation("vertexCoords", 0);
+            bgra_program_.bindAttributeLocation("texCoords", 1);
+            if (!bgra_program_.link())
+            {
+                qWarning() << "[video] BGRA 着色器链接失败:" << bgra_program_.log();
+            }
+        }
         program_ready_ = true;
         return;
     }
@@ -326,7 +326,6 @@ void YuvRenderer::render()
     {
         return;
     }
-
 
     // 建纹理 + 上传：只在有像素时才做。NV12 两平面，YUV420P 三平面
     const int plane_count = nv12_ ? 2 : 3;

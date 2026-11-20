@@ -1,6 +1,8 @@
 #include "device_controller.h"
 
 #include "app_settings.h"
+#include "playback_settings.h"
+#include "playback_settings.h"
 #include "base/hotkey.h"
 #include "base/task_runner.h"
 #include "boss_key.h"
@@ -44,6 +46,12 @@ DeviceController::DeviceController(QObject *parent) : QObject(parent)
     AppSettings settings;
     show_console_ = settings.ShowConsole();
     status_ = QStringLiteral("未连接");
+
+    settings_ = new qsc::app::PlaybackSettings(this);
+    QObject::connect(settings_, &qsc::app::PlaybackSettings::SigVideoChanged, this,
+                     [this]() { emit SigVideoSettingsChanged(); });
+    QObject::connect(settings_, &qsc::app::PlaybackSettings::SigDecodeChanged, this,
+                     [this]() { emit SigDecodeSettingsChanged(); emit SigAsyncReadbackChanged(); });
 }
 
 DeviceController::~DeviceController()
@@ -312,13 +320,13 @@ bool DeviceController::IsConnected() const
 // 当前生效的码率（bps），界面用来显示
 int DeviceController::VideoBitRate() const
 {
-    return AppSettings().VideoBitRate(video_profile_);
+    return settings_->BitRate();
 }
 
 // 当前生效的帧率上限，0 表示不限
 int DeviceController::VideoMaxFps() const
 {
-    return AppSettings().VideoMaxFps(video_profile_);
+    return settings_->MaxFps();
 }
 
 // 当前用的是哪一档画质参数：有线还是无线
@@ -330,7 +338,7 @@ QString DeviceController::VideoProfile() const
 // 改码率和帧率：这两个是 server 启动参数，改完必须重连才生效
 bool DeviceController::DecodeHardware() const
 {
-    return AppSettings().DecodeHardware();
+    return settings_->Hardware();
 }
 
 // 硬解/软解切换：存配置，连着就重连（解码器在连接时创建）
@@ -341,9 +349,7 @@ void DeviceController::SetDecodeHardware(bool hardware)
         return;
     }
 
-    AppSettings settings;
-    settings.SetDecodeHardware(hardware);
-    emit SigDecodeSettingsChanged();
+    settings_->SetHardware(hardware);
     qInfo() << "[decode] 切到" << (hardware ? "硬解" : "软解");
 
     if (session_ == nullptr || reader_ == nullptr)
@@ -365,7 +371,7 @@ void DeviceController::SetDecodeHardware(bool hardware)
 
 int DeviceController::DecodeThreads() const
 {
-    return AppSettings().DecodeThreads();
+    return settings_->Threads();
 }
 
 // 软解线程数：只影响软解，硬解时保存即可
@@ -377,9 +383,7 @@ void DeviceController::SetDecodeThreads(int threads)
         return;
     }
 
-    AppSettings settings;
-    settings.SetDecodeThreads(value);
-    emit SigDecodeSettingsChanged();
+    settings_->SetThreads(value);
     qInfo() << "[decode] 软解线程数设为" << value;
 
     if (session_ == nullptr || reader_ == nullptr || DecodeHardware())
@@ -400,7 +404,7 @@ void DeviceController::SetDecodeThreads(int threads)
 
 bool DeviceController::AsyncReadback() const
 {
-    return AppSettings().DecodeAsyncReadback();
+    return settings_->AsyncReadback();
 }
 
 // 界面切换读回方式：先存配置；连着设备就重连一次（解码器在连接时创建）
@@ -411,9 +415,7 @@ void DeviceController::SetAsyncReadback(bool enabled)
         return;
     }
 
-    AppSettings settings;
-    settings.SetAsyncReadback(enabled);
-    emit SigAsyncReadbackChanged();
+    settings_->SetAsyncReadback(enabled);
 
     qInfo() << "[decode] 读回方式切到" << (enabled ? "异步（双 staging）" : "同步");
 
@@ -436,9 +438,8 @@ void DeviceController::SetAsyncReadback(bool enabled)
 
 void DeviceController::ApplyVideoSettings(int bit_rate, int max_fps)
 {
-    AppSettings settings;
-    settings.SetVideoBitRate(bit_rate, video_profile_);
-    settings.SetVideoMaxFps(max_fps, video_profile_);
+    settings_->SetProfile(video_profile_);
+    settings_->ApplyVideo(bit_rate, max_fps);
     emit SigVideoSettingsChanged();
 
     qInfo() << "[video] 应用画质：码率" << (bit_rate / 1000000.0) << "Mbps，帧率" << max_fps << "档位"

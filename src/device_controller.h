@@ -1,5 +1,8 @@
 #pragma once
 
+namespace qsc::app { class PlaybackSettings; }
+
+
 #include <QObject>
 #include <QSize>
 #include <QPointer>
@@ -156,6 +159,7 @@ private:
     QList<QPointer<QWindow>> hidden_windows_;                                                   // 藏起来的窗口，恢复时逐个 show
     QMetaObject::Connection clipboard_connection_;                                              // 自动同步的剪贴板信号连接
     bool connected_ = false;                                                                    // 会话活着就是 true
+    qsc::app::PlaybackSettings *settings_ = nullptr;                                             // 画质与解码设置（自己 new，父子关系挂着本对象）
     QString video_profile_ = QStringLiteral("wired");                                           // 当前连接方式的画质档位
     qsc::app::WifiStatus wifi_status_;                                                          // 无线时每 3 秒采一次信号/速率/重传
     bool show_console_ = false;                                                                 // 控制台窗口显示状态
