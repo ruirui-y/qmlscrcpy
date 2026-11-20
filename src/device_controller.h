@@ -1,6 +1,6 @@
 #pragma once
 
-namespace qsc::app { class PlaybackSettings; class DeviceScanner; }
+namespace qsc::app { class PlaybackSettings; class DeviceScanner; struct WifiSwitchResult; }
 
 
 #include <QObject>
@@ -128,12 +128,7 @@ private:
     void OnLocalClipboardChanged();                                                             // 电脑剪贴板变了（开了自动同步才接）
 
     // 切无线三步的结果，工作线程算完交回给主线程
-    struct WifiSwitchResult
-    {
-        bool ok_ = false;                                                                       // 整条流程成没成
-        QString endpoint_;                                                                      // 成功时的 IP:端口
-        QString message_;                                                                       // 失败时给界面看的原因
-    };
+    using WifiSwitchResult = qsc::app::WifiSwitchResult;                                        // 切无线三步的结果，定义在 WifiBridge
 
     static WifiSwitchResult SwitchToWifiBlocking(const QString &serial);                        // 工作线程：跑完整条切无线流程
     void ApplyWifiResult(const WifiSwitchResult &result);                                       // 主线程：刷新列表、更新状态
