@@ -9,6 +9,8 @@ endif()
 add_executable(QmlScrcpy ${qs_subsystem}
     main.cpp
     ${PROJECT_SOURCE_DIR}/resources/app.rc
+    device_scanner.cpp
+    device_scanner.h
     playback_settings.cpp
     playback_settings.h
     app_settings.cpp

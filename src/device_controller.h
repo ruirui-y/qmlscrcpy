@@ -1,6 +1,6 @@
 #pragma once
 
-namespace qsc::app { class PlaybackSettings; }
+namespace qsc::app { class PlaybackSettings; class DeviceScanner; }
 
 
 #include <QObject>
@@ -143,11 +143,8 @@ private:
     void SetStatus(const QString &status);
 
     QString status_;                                                                            // 给界面绑定的状态文字
-    QString proposed_serial_;                                                                   // 刷新出来的第一台设备序列号
     bool wifi_busy_ = false;                                                                    // 正在后台切无线，期间不接受第二次点击
     QString device_name_;                                                                       // 当前连着的设备串号
-    QStringList online_serials_;                                                                // 上一次 adb devices 拿到的在线设备
-    QStringList devices_;                                                                       // 给 QML 下拉框用的设备地址
     VideoController *video_ = nullptr;                                                          // 视频模块，接帧和取画布要用
     QTcpSocket *control_reader_ = nullptr;                                                      // 控制 socket，读设备消息用
     QByteArray control_buffer_;                                                                 // 控制 socket 的半条消息缓存
@@ -160,10 +157,10 @@ private:
     QMetaObject::Connection clipboard_connection_;                                              // 自动同步的剪贴板信号连接
     bool connected_ = false;                                                                    // 会话活着就是 true
     qsc::app::PlaybackSettings *settings_ = nullptr;                                             // 画质与解码设置（自己 new，父子关系挂着本对象）
+    qsc::app::DeviceScanner *scanner_ = nullptr;                                                 // 设备扫描（自己 new，父子关系挂着本对象）
     QString video_profile_ = QStringLiteral("wired");                                           // 当前连接方式的画质档位
     qsc::app::WifiStatus wifi_status_;                                                          // 无线时每 3 秒采一次信号/速率/重传
     bool show_console_ = false;                                                                 // 控制台窗口显示状态
-    QStringList device_labels_;                                                                 // 下拉框显示文字，和 devices_ 下标对应
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
     std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应

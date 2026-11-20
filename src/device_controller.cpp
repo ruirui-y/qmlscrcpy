@@ -2,7 +2,7 @@
 
 #include "app_settings.h"
 #include "playback_settings.h"
-#include "playback_settings.h"
+#include "device_scanner.h"
 #include "base/hotkey.h"
 #include "base/task_runner.h"
 #include "boss_key.h"
@@ -47,6 +47,14 @@ DeviceController::DeviceController(QObject *parent) : QObject(parent)
     show_console_ = settings.ShowConsole();
     status_ = QStringLiteral("未连接");
 
+    scanner_ = new qsc::app::DeviceScanner(this);
+    QObject::connect(scanner_, &qsc::app::DeviceScanner::SigDevicesChanged, this,
+                     [this]() { emit SigDevicesChanged(); });
+    QObject::connect(scanner_, &qsc::app::DeviceScanner::SigProposedSerialChanged, this,
+                     [this]() { emit SigProposedSerialChanged(); });
+    QObject::connect(scanner_, &qsc::app::DeviceScanner::SigStatus, this,
+                     [this](const QString &text) { SetStatus(text); });
+
     settings_ = new qsc::app::PlaybackSettings(this);
     QObject::connect(settings_, &qsc::app::PlaybackSettings::SigVideoChanged, this,
                      [this]() { emit SigVideoSettingsChanged(); });
@@ -66,7 +74,7 @@ QString DeviceController::Status() const
 
 QString DeviceController::ProposedSerial() const
 {
-    return proposed_serial_;
+    return scanner_->ProposedSerial();
 }
 
 // 拖文件上传的目标目录
@@ -490,13 +498,13 @@ void DeviceController::SetShowConsole(bool show)
 // 设备地址列表，和 deviceLabels 下标一一对应
 QStringList DeviceController::Devices() const
 {
-    return devices_;
+    return scanner_->Devices();
 }
 
 // 下拉框显示文字
 QStringList DeviceController::DeviceLabels() const
 {
-    return device_labels_;
+    return scanner_->Labels();
 }
 
 // 从 "ip route" 的输出里抠出本机 wifi 地址，例如 "src 192.168.31.115"
@@ -611,7 +619,7 @@ void DeviceController::EnableWifi()
     }
 
     const QString serial = !device_name_.isEmpty() ? device_name_
-                                                   : (online_serials_.isEmpty() ? QString() : online_serials_.first());
+                                                   : scanner_->FirstOnline();
     if (serial.isEmpty())
     {
         SetStatus(QStringLiteral("先插线连一台设备，才能切无线"));
@@ -649,7 +657,7 @@ void DeviceController::ApplyWifiResult(const WifiSwitchResult &result)
         return;
     }
 
-    proposed_serial_ = result.endpoint_;
+    scanner_->SetProposedSerial(result.endpoint_);
     emit SigProposedSerialChanged();
     SetStatus(QStringLiteral("无线已就绪：%1，可以拔线了，点「连接」").arg(result.endpoint_));
 }
@@ -663,17 +671,7 @@ QString DeviceController::DeviceName() const
 // 启动时挑串号：上次连过的 > 环境变量给的；两个都得在在线列表里，省得白等一次失败连接
 QString DeviceController::PickStartupSerial(const QString &fallback) const
 {
-    AppSettings settings;
-    const QString last = settings.LastSerial();
-    if (!last.isEmpty() && online_serials_.contains(last))
-    {
-        return last;
-    }
-    if (!fallback.isEmpty() && online_serials_.contains(fallback))
-    {
-        return fallback;
-    }
-    return QString();
+    return scanner_->PickStartupSerial(fallback);
 }
 
 // 改状态文字，值没变就不发信号
@@ -690,62 +688,7 @@ void DeviceController::SetStatus(const QString &status)
 // 跑 adb devices，把第一台在线设备填进建议值
 void DeviceController::RefreshDevices()
 {
-    // 只是列一下设备，几十毫秒，直接在主线程做
-    // 冷启动或换 server 版本时这一步能到 5 秒以上，超时给足 15 秒
-    const qint64 devices_start_ms = QDateTime::currentMSecsSinceEpoch();
-    const qsc::adb::AdbResult result = qsc::adb::Run(QStringList{QStringLiteral("devices")}, 15000);
-    qInfo() << "[adb] devices 耗时" << (QDateTime::currentMSecsSinceEpoch() - devices_start_ms) << "ms";
-    if (!result.Ok())
-    {
-        SetStatus(QStringLiteral("adb devices 失败：%1").arg(result.ErrorText()));
-        return;
-    }
-
-    QStringList serials;
-    const QList<qsc::adb::AdbDevice> devices = qsc::adb::ParseDevices(result.std_out_);
-    for (const qsc::adb::AdbDevice &device : devices)
-    {
-        if (device.state_ == QStringLiteral("device"))
-        {
-            serials << device.serial_;
-        }
-    }
-
-    // 再扫一遍无线调试广播的设备：已经连过的和刚发现的一起给用户选
-    const qsc::adb::AdbResult mdns = qsc::adb::Run(QStringList() << QStringLiteral("mdns") << QStringLiteral("services"), 4000);
-    const QStringList mdns_lines = QString::fromUtf8(mdns.std_out_).split(QLatin1Char('\n'));
-    for (const QString &line : mdns_lines)
-    {
-        if (!line.contains(QStringLiteral("_adb-tls-connect._tcp")))
-        {
-            continue;
-        }
-        const QStringList parts = line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
-        if (parts.size() < 3)
-        {
-            continue;
-        }
-        const QString endpoint = parts.last();
-        if (!serials.contains(endpoint))
-        {
-            serials.append(endpoint);
-        }
-    }
-
-    online_serials_ = serials;
-    devices_ = serials;
-    device_labels_.clear();
-    for (const QString &serial : serials)
-    {
-        device_labels_.append(serial.contains(QLatin1Char(':')) ? QStringLiteral("无线  %1").arg(serial)
-                                                                : QStringLiteral("USB   %1").arg(serial));
-    }
-    proposed_serial_ = serials.isEmpty() ? QString() : serials.first();
-    emit SigDevicesChanged();
-    emit SigProposedSerialChanged();
-
-    SetStatus(serials.isEmpty() ? QStringLiteral("没找到在线设备")
-                                : QStringLiteral("找到 %1 台设备").arg(serials.size()));
+    scanner_->Refresh();
 }
 
 // 同步建链并接到画布上，会阻塞一两秒
