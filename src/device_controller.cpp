@@ -4,6 +4,7 @@
 #include "playback_settings.h"
 #include "device_scanner.h"
 #include "wifi_bridge.h"
+#include "window_keeper.h"
 #include "base/hotkey.h"
 #include "base/task_runner.h"
 #include "boss_key.h"
@@ -47,6 +48,14 @@ DeviceController::DeviceController(QObject *parent) : QObject(parent)
     AppSettings settings;
     show_console_ = settings.ShowConsole();
     status_ = QStringLiteral("未连接");
+
+    keeper_ = new qsc::app::WindowKeeper(this);
+    QObject::connect(keeper_, &qsc::app::WindowKeeper::SigBossKeyChanged, this,
+                     [this]() { emit SigBossKeyChanged(); });
+    QObject::connect(keeper_, &qsc::app::WindowKeeper::SigShortcutsChanged, this,
+                     [this]() { emit SigShortcutsChanged(); });
+    QObject::connect(keeper_, &qsc::app::WindowKeeper::SigStatus, this,
+                     [this](const QString &text) { SetStatus(text); });
 
     scanner_ = new qsc::app::DeviceScanner(this);
     QObject::connect(scanner_, &qsc::app::DeviceScanner::SigDevicesChanged, this,
@@ -103,155 +112,59 @@ bool DeviceController::SetUploadDir(const QString &dir)
 // 四个窗口快捷键的当前值
 QString DeviceController::ShortcutBack() const
 {
-    return AppSettings().Shortcut(QStringLiteral("back"));
+    return keeper_->Shortcut(QStringLiteral("back"));
 }
 
 QString DeviceController::ShortcutHome() const
 {
-    return AppSettings().Shortcut(QStringLiteral("home"));
+    return keeper_->Shortcut(QStringLiteral("home"));
 }
 
 QString DeviceController::ShortcutScreenshot() const
 {
-    return AppSettings().Shortcut(QStringLiteral("screenshot"));
+    return keeper_->Shortcut(QStringLiteral("screenshot"));
 }
 
 QString DeviceController::ShortcutFullscreen() const
 {
-    return AppSettings().Shortcut(QStringLiteral("fullscreen"));
+    return keeper_->Shortcut(QStringLiteral("fullscreen"));
 }
 
 // 改某个窗口快捷键：空串表示禁用，非空必须是合法的 QKeySequence
 bool DeviceController::SetShortcut(const QString &name, const QString &sequence)
 {
-    const QString trimmed = sequence.trimmed();
-    if (!trimmed.isEmpty() && QKeySequence(trimmed).isEmpty())
-    {
-        SetStatus(QStringLiteral("快捷键格式不对：%1").arg(sequence));
-        return false;
-    }
-
-    AppSettings().SetShortcut(name, trimmed);
-    emit SigShortcutsChanged();
-    SetStatus(trimmed.isEmpty() ? QStringLiteral("已禁用该快捷键")
-                                : QStringLiteral("快捷键已改为 %1").arg(trimmed));
-    return true;
+    return keeper_->SetShortcut(name, sequence);
 }
 
 // 当前老板键文本，界面显示用
 QString DeviceController::BossKey() const
 {
-    return AppSettings().BossKeyText();
+    return keeper_->BossKey();
 }
 
 // main 把 BossKey 对象交进来，之后改键要靠它重新注册
 void DeviceController::SetBossKeyHost(QObject *host)
 {
-    boss_key_host_ = host;
+    keeper_->SetBossKeyHost(host);
 }
 
 // 界面改老板键：解析成功就重新注册并写进 window.ini，失败给出提示
 bool DeviceController::SetBossKey(const QString &text)
 {
-    qsc::base::HotkeySpec spec;
-    if (!qsc::base::ParseHotkey(text, &spec))
-    {
-        SetStatus(QStringLiteral("老板键格式不对：%1（示例 Ctrl+Alt+B）").arg(text));
-        return false;
-    }
-
-    auto *host = qobject_cast<qsc::BossKey *>(boss_key_host_.data());
-    if (host == nullptr)
-    {
-        SetStatus(QStringLiteral("老板键组件没就绪，重启程序再试"));
-        return false;
-    }
-
-    // Bind 会先摘掉旧热键：新键注册失败时要把旧键装回去，否则用户会失去老板键
-    const QString previous = AppSettings().BossKeyText();
-    qsc::base::HotkeySpec previous_spec;
-    if (!host->Bind(spec))
-    {
-        if (qsc::base::ParseHotkey(previous, &previous_spec))
-        {
-            host->Bind(previous_spec);
-        }
-        SetStatus(QStringLiteral("%1 可能被别的程序占用，已保留 %2")
-                      .arg(qsc::base::HotkeyText(spec), previous));
-        return false;
-    }
-
-    AppSettings().SetBossKeyText(qsc::base::HotkeyText(spec));
-    emit SigBossKeyChanged();
-    SetStatus(QStringLiteral("老板键已改为 %1").arg(qsc::base::HotkeyText(spec)));
-    return true;
+    return keeper_->SetBossKey(text);
 }
 
 // QML 把窗口登记进来：投屏窗在 QML 里声明在主窗内部，QWindow::parent 非空，
 // 不在 topLevelWindows() 里，只能让它们自己报到
 void DeviceController::RegisterWindow(QObject *window)
 {
-    QWindow *raw = qobject_cast<QWindow *>(window);
-    if (raw == nullptr)
-    {
-        return;
-    }
-    for (const QPointer<QWindow> &existing : app_windows_)
-    {
-        if (existing == raw)
-        {
-            return;
-        }
-    }
-    app_windows_.append(raw);
+    keeper_->Register(window);
 }
 
 // 老板键：第一次按藏起所有登记过的窗口，再按恢复
 void DeviceController::ToggleBossKey()
 {
-    if (!boss_hidden_)
-    {
-        hidden_windows_.clear();
-        for (const QPointer<QWindow> &window : app_windows_)
-        {
-            if (!window.isNull() && window->isVisible())
-            {
-                hidden_windows_.append(window);
-                window->hide();
-            }
-        }
-        boss_hidden_ = true;
-        SetStatus(QStringLiteral("已隐藏 %1 个窗口，再按一次老板键恢复").arg(hidden_windows_.size()));
-
-        // Qt 会在窗口隐藏后因为激活/曝光事件把它重新显示一次（投屏窗实测必现），
-        // 这里等下一轮事件循环再补一刀，之后就稳住了
-        QTimer::singleShot(0, this, [this]()
-        {
-            if (!boss_hidden_)
-            {
-                return;
-            }
-            for (const QPointer<QWindow> &window : hidden_windows_)
-            {
-                if (!window.isNull() && window->isVisible())
-                {
-                    window->hide();
-                }
-            }
-        });
-        return;
-    }
-
-    for (const QPointer<QWindow> &window : hidden_windows_)
-    {
-        if (!window.isNull())
-        {
-            window->show();
-        }
-    }
-    hidden_windows_.clear();
-    boss_hidden_ = false;
-    SetStatus(QStringLiteral("窗口已恢复"));
+    keeper_->ToggleBossKey();
 }
 
 // 控制 socket 有数据：按协议切出设备消息，剪贴板推过来就写进电脑剪贴板
@@ -816,19 +729,7 @@ void DeviceController::AttachVideoController(VideoController *video)
 // 停线程、清画布、关解码器、拆隧道
 void DeviceController::TearDown()
 {
-    // 断线了就把老板键藏起来的窗口放回去，否则用户找不到界面
-    if (boss_hidden_)
-    {
-        for (const QPointer<QWindow> &window : hidden_windows_)
-        {
-            if (!window.isNull())
-            {
-                window->show();
-            }
-        }
-        hidden_windows_.clear();
-        boss_hidden_ = false;
-    }
+    keeper_->RestoreIfHidden();
 
     // 控制 socket 的读连接跟着会话走，这里断干净
     if (control_reader_ != nullptr)

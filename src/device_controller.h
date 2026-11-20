@@ -1,6 +1,6 @@
 #pragma once
 
-namespace qsc::app { class PlaybackSettings; class DeviceScanner; struct WifiSwitchResult; }
+namespace qsc::app { class PlaybackSettings; class DeviceScanner; class WindowKeeper; struct WifiSwitchResult; }
 
 
 #include <QObject>
@@ -145,14 +145,12 @@ private:
     QByteArray control_buffer_;                                                                 // 控制 socket 的半条消息缓存
     quint64 clipboard_sequence_ = 0;                                                            // SetClipboard 的序号，设备 Ack 会带回
     bool suppress_clipboard_ = false;                                                           // 正在写电脑剪贴板，别把它再推回设备
-    bool boss_hidden_ = false;                                                                  // 老板键是否已经把窗口藏起来了
-    QPointer<QObject> boss_key_host_;                                                           // BossKey 对象，改键时要重新注册
-    QList<QPointer<QWindow>> app_windows_;                                                      // QML 登记进来的窗口，老板键只藏这些
     QList<QPointer<QWindow>> hidden_windows_;                                                   // 藏起来的窗口，恢复时逐个 show
     QMetaObject::Connection clipboard_connection_;                                              // 自动同步的剪贴板信号连接
     bool connected_ = false;                                                                    // 会话活着就是 true
     qsc::app::PlaybackSettings *settings_ = nullptr;                                             // 画质与解码设置（自己 new，父子关系挂着本对象）
     qsc::app::DeviceScanner *scanner_ = nullptr;                                                 // 设备扫描（自己 new，父子关系挂着本对象）
+    qsc::app::WindowKeeper *keeper_ = nullptr;                                                   // 窗口与热键（自己 new，父子关系挂着本对象）
     QString video_profile_ = QStringLiteral("wired");                                           // 当前连接方式的画质档位
     qsc::app::WifiStatus wifi_status_;                                                          // 无线时每 3 秒采一次信号/速率/重传
     bool show_console_ = false;                                                                 // 控制台窗口显示状态
