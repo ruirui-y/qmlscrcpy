@@ -47,7 +47,6 @@ struct D3d11State
     ComPtr<ID3D11Device> device;                                                                // 和 FFmpeg 共用同一个设备
     ComPtr<ID3D11DeviceContext> context;                                                        // 立即上下文，拷贝和映射都靠它
     ComPtr<ID3D11Texture2D> staging[2];                                                         // 双缓冲：一帧在拷，另一帧在读
-    ComPtr<ID3D11Query> query[2];                                                               // 每张 staging 配一个完成事件
     int write_slot = 0;                                                                         // 下一帧拷进哪个槽
     int pending_slot = -1;                                                                      // 已拷好、等着读的槽
     UINT width = 0;                                                                             // 暂存纹理当前宽
@@ -447,21 +446,12 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
         description.Usage = D3D11_USAGE_STAGING;
         description.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
-        D3D11_QUERY_DESC query_desc = {};
-        query_desc.Query = D3D11_QUERY_EVENT;
-
         for (int i = 0; i < 2; ++i)
         {
             d3d_->staging[i].Reset();
-            d3d_->query[i].Reset();
             if (FAILED(d3d_->device->CreateTexture2D(&description, nullptr, d3d_->staging[i].GetAddressOf())))
             {
                 *error = QStringLiteral("建暂存纹理失败");
-                return false;
-            }
-            if (FAILED(d3d_->device->CreateQuery(&query_desc, d3d_->query[i].GetAddressOf())))
-            {
-                *error = QStringLiteral("建查询失败");
                 return false;
             }
         }
@@ -490,11 +480,10 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
     const qint64 t0 = NowUs();
     const int slot = d3d_->write_slot;
     d3d_->context->CopySubresourceRegion(d3d_->staging[slot].Get(), 0, 0, 0, 0, texture, slice, nullptr);
-    d3d_->context->End(d3d_->query[slot].Get());
     const qint64 t1 = NowUs();
     probe_.AddPrep((t1 - t0) * 1000);
 
-    // ---- 第二步：读上一帧（它早就拷完了，不用等）----
+    // ---- 第二步：读上一帧（它早就拷完了，Map 不会等）----
     const int read_slot = d3d_->pending_slot;
     d3d_->pending_slot = slot;
     d3d_->write_slot = 1 - slot;
@@ -504,13 +493,6 @@ bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *
         // 第一帧：没有上一帧可读，只能同步读当前槽
         return ReadStaging(slot, width, height, frame, error);
     }
-
-    // 查询完成状态：已经完成就不会阻塞，没完成才走 Map 的等待
-    const qint64 t2 = NowUs();
-    BOOL done = FALSE;
-    d3d_->context->GetData(d3d_->query[read_slot].Get(), &done, sizeof(done), 0);
-    const qint64 t3 = NowUs();
-    probe_.AddWait((t3 - t2) * 1000);
 
     return ReadStaging(read_slot, width, height, frame, error);
 }
@@ -538,6 +520,7 @@ bool H264Decoder::ReadStaging(int slot, UINT width, UINT height, Frame &frame, Q
         return false;
     }
     const qint64 t1 = NowUs();
+    probe_.AddWait((t1 - t0) * 1000);                                                           // Map 等 GPU 的时间
 
     for (UINT row = 0; row < height; ++row)
     {
