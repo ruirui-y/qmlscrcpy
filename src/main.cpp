@@ -1,5 +1,6 @@
 #include <QDebug>
 #include <QGuiApplication>
+#include <QQuickStyle>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -244,6 +245,9 @@ int main(int argc, char *argv[])
     PrepareSurfaceFormat();
 
     QGuiApplication app(argc, argv);
+
+    // 用 Basic 样式：QML 里改了大量 contentItem/background，原生样式不支持定制会一路告警
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
     ConfigureApplication(app);
     RegisterTypes();
 
