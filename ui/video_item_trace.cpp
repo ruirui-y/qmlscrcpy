@@ -235,3 +235,51 @@ void VideoItem::ReportSecond()
 }
 
 // 画布尺寸变了，重绘一次让 FBO 跟上（Qt6 起钩子名是 geometryChange）
+
+// 建这一帧的追踪记录：没开逐帧追踪时返回空，调用方不用判断
+FrameTracePtr VideoItem::MakeTrace(qint64 arrive_us, qint64 gap_us)
+{
+    if (!trace_enabled_)
+    {
+        return FrameTracePtr();
+    }
+    auto trace = std::make_shared<FrameTrace>();
+    trace->id = ++next_frame_id_;
+    trace->arrive_us = arrive_us;
+    trace->gap_us = gap_us;
+    return trace;
+}
+
+// 被顶掉的帧当场结算：它从到达到被覆盖活了多久
+void VideoItem::OnReplaced(const FrameTracePtr &trace, qint64 alive_us)
+{
+    if (trace)
+    {
+        PrintTrace(trace, false, alive_us);
+    }
+}
+
+// 到达间隔分档：和上屏延迟分开统计（一个看源多快、一个看我们多慢）
+void VideoItem::AccountGap(qint64 gap_us)
+{
+    if (gap_us <= 0 || gap_us >= 1000000)
+    {
+        return;
+    }
+    if (gap_us < 8500)
+    {
+        gap_lt85_.ref();
+    }
+    else if (gap_us < 17000)
+    {
+        gap_85_17_.ref();
+    }
+    else if (gap_us < 34000)
+    {
+        gap_17_34_.ref();
+    }
+    else
+    {
+        gap_gt34_.ref();
+    }
+}

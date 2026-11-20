@@ -139,6 +139,9 @@ protected:
 
 private:
     void ReportSecond();
+    FrameTracePtr MakeTrace(qint64 arrive_us, qint64 gap_us);
+    void OnReplaced(const FrameTracePtr &trace, qint64 alive_us);
+    void AccountGap(qint64 gap_us);
     bool PinchModifierHeld(Qt::KeyboardModifiers modifiers) const;                              // 当前修饰键是不是捏合键
     void PinchBy(int notches, const QPointF &pos);                                              // 按一格滚轮做一次捏合
     void SlotKeyMapPoll();                                                                       // 轮询物理按键，状态变化才发触摸
