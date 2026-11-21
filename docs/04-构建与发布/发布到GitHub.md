@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File setup\collect.ps1
 setup\build_installer.bat
 ```
 
-产物：`setup\Output\QmlScrcpy_Setup_0.1.0.exe`（同时 `setup\Output\pdb\<时间戳>` 里留了符号，见 [打包发布](打包发布.md)）。
+产物：`setup\Output\QmlScrcpy_Setup_0.1.0.exe`（同时 `setup\Output\pdb\<时间戳>` 里留了符号，见 [打包发布]()）。
 
 ### ③ 提交 + 打 tag
 
@@ -175,4 +175,4 @@ powershell -ExecutionPolicy Bypass -File setup\release_gitee.ps1 -Version 0.1.5
 | 用 `/releases/tags/{tag}` 查发行版 | 返回 `null`，脚本当成"已存在"，附件传到空 id | Gitee 没这个端点，改拉列表按 `tag_name` 匹配，并校验 `id` 非空 |
 | `Set-Content -Encoding UTF8` 写 latest.json | 带 BOM，客户端 JSON 解析失败 | 改 `[IO.File]::WriteAllText` + `UTF8Encoding($false)` |
 
-> **现在的主流程见 [双仓库发版](双仓库发版.md)**：代码 GitHub、安装包 Gitee，这篇留作历史参考。
+> **现在的主流程见 [双仓库发版]()**：代码 GitHub、安装包 Gitee，这篇留作历史参考。
