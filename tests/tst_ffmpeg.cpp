@@ -22,8 +22,6 @@ private slots:
     void VersionIsUsable();
     void H264DecoderIsAvailable();
     void DecoderContextOpens();
-    void SwscaleConvertsSyntheticFrame();
-    void SwscaleHandlesPaddedStrides();
 };
 
 // FFmpeg 版本要够我们用到的 API

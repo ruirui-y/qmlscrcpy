@@ -84,7 +84,7 @@ Copy-Item (Join-Path $releaseDir '*') $stageDir -Recurse -Force
 # 4. 先把 pdb 和 exe 留一份到 Output\pdb，再清掉安装包里的
 # 3b. 去掉用不到的：只解码裸 H.264，容器/滤镜/设备库都不需要；
 #     opengl32sw 是纯软件 GL 兜底、dxcompiler 是 D3D12 后端，qmltooling 是调试器插件
-$unneededFiles = @('avfilter-*.dll', 'avformat-*.dll', 'avdevice-*.dll', 'opengl32sw.dll', 'dxcompiler.dll')
+$unneededFiles = @('avfilter-*.dll', 'avformat-*.dll', 'avdevice-*.dll', 'swscale-*.dll', 'opengl32sw.dll', 'dxcompiler.dll')
 foreach ($pattern in $unneededFiles)
 {
     Get-ChildItem $stageDir -Filter $pattern -File -ErrorAction SilentlyContinue | Remove-Item -Force
