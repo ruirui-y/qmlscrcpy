@@ -1,10 +1,10 @@
 {
-    "latest": "0.4.0",
+    "latest": "0.4.1",
     "minimum": "0.1.0",
     "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes": "渲染换成 D3D12 + 零拷贝：上屏 76→110 帧，每帧少搬 10.5MB；设置合并进 config.ini",
+    "notes": "修复 0.4.0 画面发灰（转色漏了 1.164）；上屏延迟再降 1ms，中位 1.5~2.5ms",
     "published_at": "2026-11-23",
-    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.4.0/QmlScrcpy_Setup_0.4.0.exe",
-    "size": 50021336,
-    "sha256": "99bd6f903ed879c953e8d8f8b39626e2ae07d78d2c04e873788e761c6478d989"
+    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.4.1/QmlScrcpy_Setup_0.4.1.exe",
+    "size": 50022809,
+    "sha256": "265fc1c84969466eb9ec6d0564a9b40552cd636f157758ee55bdab8122db7602"
 }
