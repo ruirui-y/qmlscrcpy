@@ -30,6 +30,8 @@ add_executable(QmlScrcpy ${qs_subsystem}
     control_writer.h
     update_checker.cpp
     update_checker.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/d3d12_nv12_convert.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/d3d12_nv12_convert.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_input.cpp
@@ -58,6 +60,8 @@ target_link_libraries(QmlScrcpy PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Network
+    d3dcompiler                                                                                  # 运行时编 NV12 转色的 HLSL
+    d3d12                                                                                        # 转色要用 ID3D12Device 等接口
     Qt6::GuiPrivate                                                                              # QQuickRhiItem 的 QRhi 类型在私有头里
 )
 
@@ -125,5 +129,6 @@ add_custom_command(TARGET QmlScrcpy POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${PROJECT_SOURCE_DIR}/ui/shaders/quad.vert.qsb"
         "${PROJECT_SOURCE_DIR}/ui/shaders/nv12.frag.qsb"
+        "${PROJECT_SOURCE_DIR}/ui/shaders/rgba.frag.qsb"
         "$<TARGET_FILE_DIR:QmlScrcpy>/shaders"
     COMMENT "拷贝 QSB 着色器到输出目录")

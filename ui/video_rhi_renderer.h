@@ -11,6 +11,9 @@
 #include <QQuickRhiItem>
 #include <QtGui/private/qrhi_p.h>
 
+#include "stream/frame.h"
+#include "ui/d3d12_nv12_convert.h"
+
 class VideoItem;
 struct FrameTrace;
 using FrameTracePtr = std::shared_ptr<FrameTrace>;
@@ -28,6 +31,8 @@ public:
 private:
     bool EnsureShaders();
     bool EnsurePipeline(const QSize &size);
+    bool EnsureRgbaPipeline(const QSize &size);                                                 // 零拷贝：采样转色后的 RGBA 纹理
+    void RenderNativeFrame(QRhiCommandBuffer *cb);                                                   // 零拷贝那一趟：转色 + 画
     void ReleaseResources();
 
     VideoItem *item_ = nullptr;                                                                 // 画布，render 里回报埋点用
@@ -40,6 +45,15 @@ private:
     QRhiShaderResourceBindings *bindings_ = nullptr;
     QRhiTexture *texture_y_ = nullptr;                                                          // R8
     QRhiTexture *texture_uv_ = nullptr;                                                         // RG8
+
+    // 零拷贝路径：我们自己把 NV12 转成 RGBA 写进这张 RHI 纹理，再用 rgba 管线采样它
+    qsc::ui::D3d12Nv12Convert convert_;
+    QRhiTexture *rgba_texture_ = nullptr;
+    QRhiGraphicsPipeline *rgba_pipeline_ = nullptr;
+    QRhiShaderResourceBindings *rgba_bindings_ = nullptr;
+    QShader rgba_fragment_shader_;
+    bool frame_has_native_ = false;
+    qsc::stream::Frame native_frame_;                                                        // 本轮的零拷贝帧，owner 撑着纹理
 
     QShader vertex_shader_;
     QShader fragment_shader_;

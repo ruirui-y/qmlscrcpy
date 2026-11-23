@@ -609,54 +609,43 @@ bool H264Decoder::ReadStaging(int slot, UINT width, UINT height, Frame &frame, Q
 
 // d3d12va 的读回：让 FFmpeg 把硬解帧转成 NV12 的软件帧（它内部有自己的暂存纹理和围栏），
 // 再按行拷进缓冲池。这一步是第 2 步的过渡方案，第 3 步零拷贝做完整个删掉
+// d3d12va 的零拷贝：不读回内存，只把纹理和围栏交出去。
+// owner 持有 AVFrame 的一份引用，保证渲染期间这张纹理不会被解码器拿去解下一帧
 bool H264Decoder::DownloadD3d12(AVFrame *hardware_frame, Frame &frame, QString *error)
 {
-    AVFrame *software = av_frame_alloc();
-    if (software == nullptr)
+    // AV_PIX_FMT_D3D12 的约定：data[0] 指向 AVD3D12VAFrame
+    auto *native = static_cast<AVD3D12VAFrame *>(reinterpret_cast<void *>(hardware_frame->data[0]));
+    if (native == nullptr || native->texture == nullptr)
     {
-        *error = QStringLiteral("分配软件帧失败");
+        *error = QStringLiteral("d3d12va 帧没有纹理");
         return false;
     }
-    software->format = AV_PIX_FMT_NV12;                                                        // 跟 d3d12va 的原生格式一致，不做额外转换
 
-    const qint64 t0 = NowUs();
-    const int transfer_ret = av_hwframe_transfer_data(software, hardware_frame, 0);
-    if (transfer_ret < 0)
+    AVFrame *keep = av_frame_alloc();
+    if (keep == nullptr || av_frame_ref(keep, hardware_frame) < 0)
     {
-        av_frame_free(&software);
-        *error = QStringLiteral("d3d12va 帧读回失败：%1").arg(AvErrorText(transfer_ret));
+        if (keep != nullptr)
+        {
+            av_frame_free(&keep);
+        }
+        *error = QStringLiteral("引用 d3d12va 帧失败");
         return false;
     }
-    probe_.AddWait((NowUs() - t0) * 1000);                                                      // transfer 内部要等 GPU
-
-    const int width = software->width;
-    const int height = software->height;
-    const int chroma_height = (height + 1) / 2;
-    const int y_size = width * height;
-    const int uv_size = width * chroma_height;
-    const int total_size = y_size + uv_size;
-
-    auto pool = pool_;
-    std::shared_ptr<QByteArray> buffer(pool->Take(total_size), [pool](QByteArray *raw)
+    std::shared_ptr<const void> owner(keep, [](const void *raw)
     {
-        pool->Give(raw);
+        AVFrame *frame_to_free = const_cast<AVFrame *>(static_cast<const AVFrame *>(raw));
+        av_frame_free(&frame_to_free);
     });
 
-    // NV12 两块：Y 在 data[0]，UV 交错在 data[1]，各自按自己的 linesize 走
-    const qint64 t1 = NowUs();
-    for (int row = 0; row < height; ++row)
-    {
-        memcpy(buffer->data() + row * width, software->data[0] + row * software->linesize[0], width);
-    }
-    for (int row = 0; row < chroma_height; ++row)
-    {
-        memcpy(buffer->data() + y_size + row * width, software->data[1] + row * software->linesize[1], width);
-    }
-    probe_.AddRead((NowUs() - t1) * 1000);
-    av_frame_free(&software);
+    NativeTexture texture;
+    texture.texture = native->texture;                                                          // ID3D12Resource*
+    texture.subresource = native->subresource_index;
+    texture.fence = native->sync_ctx.fence;                                                     // 解码写完了没，渲染线程拿它等
+    texture.fence_value = native->sync_ctx.fence_value;
+    texture.width = hardware_frame->width;
+    texture.height = hardware_frame->height;
 
-    const quint8 *base = reinterpret_cast<const quint8 *>(buffer->constData());
-    frame = Frame(QSize(width, height), PixelFormat::Nv12, base, base + y_size, nullptr, width, width, 0, buffer);
+    frame = Frame(QSize(texture.width, texture.height), texture, owner);
     return true;
 }
 
