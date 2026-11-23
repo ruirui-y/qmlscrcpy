@@ -612,7 +612,6 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     decoder_ = std::make_unique<qsc::stream::H264Decoder>();
     // 配置里 [decode] hardware 决定走硬解还是软解
     decoder_->SetHardwareAllowed(AppSettings().DecodeHardware());
-    decoder_->SetAsyncReadback(AppSettings().DecodeAsyncReadback());
     decoder_->SetSoftThreads(AppSettings().DecodeThreads());                                    // 软解线程数
 
     QTcpSocket *video = session_->TakeVideoSocket();
