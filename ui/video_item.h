@@ -16,6 +16,11 @@
 
 #include "stream/frame.h"
 
+namespace qsc::stream
+{
+class H264Decoder;
+}
+
 
 class QTimer;
 
@@ -96,6 +101,10 @@ public:
     void ProvideDevice(void *device);
     void *D3dDevice() const;                                                                     // 渲染线程与解码线程共用：没就绪返回空
 
+    // 解码器归画布：一个窗口一条视频管线，窗口没了解码器才没
+    qsc::stream::H264Decoder *Decoder(bool hardware, int soft_threads);                          // 懒创建，参数由控制器传，不负责 Open
+    void CloseDecoder();                                                                        // 断开连接时关掉，画布还在
+
 signals:
     void SigFrameSizeChanged();
     void SigKeepAspectChanged();
@@ -134,6 +143,8 @@ private:
     std::atomic<bool> keep_aspect_{false};                                                      // true 保持宽高比居中，false 拉满
     FrameProbe *probe_ = nullptr;                                                                // 埋点：帧序号、分档、每秒统计
     VideoInput *input_ = nullptr;                                                                // 输入：鼠标/键盘/键位映射/连点
+
+    std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                          // 本窗口的解码器
 
     mutable QMutex device_mutex_;                                                                // d3d_device_ 跨线程读写
     void *d3d_device_ = nullptr;                                                                 // Qt RHI 的 D3D12 设备，我们自己持有一份引用

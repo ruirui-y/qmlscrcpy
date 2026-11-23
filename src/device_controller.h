@@ -156,6 +156,5 @@ private:
     bool show_console_ = false;                                                                 // 控制台窗口显示状态
 
     std::unique_ptr<qsc::session::ServerSession> session_;                                      // 连接成功后一直持有
-    std::unique_ptr<qsc::stream::H264Decoder> decoder_;                                         // 解码器，和读线程一一对应
     qsc::stream::VideoReader *reader_ = nullptr;                                                // 读线程，连着的时候存在
 };

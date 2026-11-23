@@ -1,6 +1,7 @@
 #include "ui/video_item.h"
 
 #include "stream/video_traffic.h"
+#include "stream/h264_decoder.h"
 #include "ui/video_input.h"
 #include "ui/video_rhi_renderer.h"
 
@@ -300,6 +301,29 @@ void *VideoItem::D3dDevice() const
 {
     QMutexLocker locker(&device_mutex_);
     return d3d_device_;
+}
+
+// 解码器归画布：第一次取就按配置建好参数，Open 交给读线程（那边才知道设备就绪没有）
+qsc::stream::H264Decoder *VideoItem::Decoder(bool hardware, int soft_threads)
+{
+    QMutexLocker locker(&device_mutex_);
+    if (decoder_ == nullptr)
+    {
+        decoder_ = std::make_unique<qsc::stream::H264Decoder>();
+        decoder_->SetHardwareAllowed(hardware);
+        decoder_->SetSoftThreads(soft_threads);
+    }
+    return decoder_.get();
+}
+
+// 断开连接时关掉解码器，但画布还在（重连时要能再开）
+void VideoItem::CloseDecoder()
+{
+    QMutexLocker locker(&device_mutex_);
+    if (decoder_ != nullptr)
+    {
+        decoder_->Close();
+    }
 }
 
 void VideoItem::Clear()

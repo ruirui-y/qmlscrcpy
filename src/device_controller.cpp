@@ -609,10 +609,14 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
         return;
     }
 
-    decoder_ = std::make_unique<qsc::stream::H264Decoder>();
-    // 配置里 [decode] hardware 决定走硬解还是软解
-    decoder_->SetHardwareAllowed(AppSettings().DecodeHardware());
-    decoder_->SetSoftThreads(AppSettings().DecodeThreads());                                    // 软解线程数
+    // 解码器归画布：一个窗口一条视频管线，这里只借用指针
+    qsc::stream::H264Decoder *decoder = video_->Surface()->Decoder(AppSettings().DecodeHardware(), AppSettings().DecodeThreads());
+    if (decoder == nullptr)
+    {
+        SetStatus(QStringLiteral("画布里建不出解码器"));
+        TearDown();
+        return;
+    }
 
     QTcpSocket *video = session_->TakeVideoSocket();
     if (video == nullptr)
@@ -623,7 +627,7 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     }
 
     // 设备要等 RHI 初始化才有，把"取设备"的回调交给读线程，由它等到就绪再开硬解
-    reader_ = new qsc::stream::VideoReader(video, decoder_.get(), [this]() { return video_->Surface()->D3dDevice(); });
+    reader_ = new qsc::stream::VideoReader(video, decoder, [this]() { return video_->Surface()->D3dDevice(); });
     // socket 在主线程建、却在视频线程读：先摘 parent 再搬过去
     video->setParent(nullptr);
     video->moveToThread(reader_);
@@ -752,10 +756,9 @@ void DeviceController::TearDown()
         delete reader_;
         reader_ = nullptr;
     }
-    if (decoder_)
+    if (video_ != nullptr && video_->Surface() != nullptr)
     {
-        decoder_->Close();
-        decoder_.reset();
+        video_->Surface()->CloseDecoder();
     }
     if (session_)
     {
