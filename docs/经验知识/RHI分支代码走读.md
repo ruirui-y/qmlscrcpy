@@ -1,13 +1,15 @@
 # RHI 分支代码走读（exp/zero-copy）
 
+## 一、现象
+
 这篇是给"想自己慢慢读代码"用的地图：**先看结构和顺序，再钻细节**。
 
 分支：`exp/zero-copy` @ `f45e16d`
 对照：`master`（FBO + OpenGL，读回内存）
 
----
+结果一句话：**能解出帧，一渲染就 TDR**。
 
-## 一、这个分支到底改了什么
+### 这个分支到底改了什么
 
 | 维度 | master | exp/zero-copy |
 |---|---|---|
@@ -21,7 +23,9 @@
 
 ---
 
-## 二、启动时定生死的一行
+## 二、实录
+
+### 启动时定生死的一行
 
 ```cpp
 // main.cpp:75
@@ -39,9 +43,7 @@ rhi->nativeHandles() 能拿到 ID3D11Device / ID3D11DeviceContext
 我们才能把 D3D11 解码纹理包成 QRhiTexture
 ```
 
----
-
-## 三、文件职责
+### 文件职责
 
 | 文件 | 干什么 |
 |---|---|
@@ -53,9 +55,7 @@ rhi->nativeHandles() 能拿到 ID3D11Device / ID3D11DeviceContext
 | `ui/shaders/rgba.frag` | 已经转好的 RGBA（原生路径用） |
 | `libs/stream/h264_decoder.*` | 多出「零拷贝帧」：纹理指针 + 切片 + keep_alive |
 
----
-
-## 四、一帧的完整路径
+### 一帧的完整路径
 
 ```
 socket 线程
@@ -85,9 +85,7 @@ GUI 线程  synchronize(QQuickRhiItem *item)
 Qt 把 render target 合成到窗口
 ```
 
----
-
-## 四之二、补全后的完整链路（含前提与卡点）
+### 补全后的完整链路（含前提与卡点）
 
 上面那张图省略了五个必要前提，这里一次补齐。
 
@@ -135,7 +133,7 @@ Qt 把 render target 合成到窗口
    （此时我们画的矩形已经是 RGB，Qt 不做任何转色）
 ```
 
-### 逐环节的坑
+#### 逐环节的坑
 
 | 环节 | 容易漏的前提 |
 |---|---|
@@ -146,7 +144,7 @@ Qt 把 render target 合成到窗口
 | ③b 两平面上传 | 必须 beginPass 之前；`QRhiTexture::R8/RG8` 要按 plane 尺寸建 |
 | ④ 绘制 | BGRA8 要用正确 swizzle；颜色范围（limited/full）不一致会发灰或过饱和 |
 
-### 卡点（唯一一个真正的拦路虎）
+#### 卡点（唯一一个真正的拦路虎）
 
 ```
 ②a 的 VideoProcessorBlt 执行时，会改 D3D11 的渲染目标、视口、管线状态。
@@ -161,7 +159,7 @@ Qt 把 render target 合成到窗口
 
 状态为什么会被改坏、缓存为什么救不了，见 [场景图绘制与D3D11状态](场景图绘制与D3D11状态.md)。
 
-### 备选方案
+#### 备选方案
 
 | 方案 | 做法 | 代价 | 可行性 |
 |---|---|---|---|
@@ -170,17 +168,15 @@ Qt 把 render target 合成到窗口
 | **C 换 D3D12/Vulkan** | 多平面格式直接采样，不用 VideoProcessor | FFmpeg 要 7.0+、渲染器重写、D3D12 样板 ×2~3 | 能根治，成本 1~2 周 |
 | **D 独立设备 + 共享句柄** | 解码用另一设备，共享纹理给 RHI | Qt RHI 缺导入接口，要自己调原生 D3D | 理论可行，实操最难 |
 
----
+### 七个关键函数
 
-## 五、七个关键函数
-
-### 1. `initialize(QRhiCommandBuffer *cb)`（`video_rhi_renderer.cpp`）
+#### 1. `initialize(QRhiCommandBuffer *cb)`（`video_rhi_renderer.cpp`）
 
 首次初始化：确认后端是 D3D11、加载 QSB 着色器、建管线 / 采样器 / 顶点缓冲。
 
 **坑**：RHI 头文件不在默认 include 路径里，`QRhi*` 要单独加。
 
-### 2. `synchronize(QQuickRhiItem *item)`
+#### 2. `synchronize(QQuickRhiItem *item)`
 
 GUI 线程执行，**没有 GPU 上下文**。所以只能做内存拷贝和状态记录：
 
@@ -193,7 +189,7 @@ native_ptr_ = frame.Texture();     // ID3D11Texture2D*
 native_slice_ = frame.Slice();     // 数组层号
 ```
 
-### 3. `render(QRhiCommandBuffer *cb)`（第 474 行）
+#### 3. `render(QRhiCommandBuffer *cb)`（第 474 行）
 
 三类分支按顺序走：
 
@@ -228,11 +224,11 @@ rgba_bindings_->setBindings({QRhiShaderResourceBinding::sampledTexture(
     0, QRhiShaderResourceBinding::FragmentStage, wrapped, sampler_)});
 ```
 
-### 4. `EnsureTextures(const QSize &size)`
+#### 4. `EnsureTextures(const QSize &size)`
 
 建/重建两平面纹理：`texture_y_`（R8）、`texture_uv_`（RG8）。尺寸变了才重建。
 
-### 5. `EnsureNativeConverter(const QSize &size)`（第 186 行）
+#### 5. `EnsureNativeConverter(const QSize &size)`（第 186 行）
 
 用 **Qt 的设备**建 VideoProcessor：
 
@@ -247,7 +243,7 @@ context->QueryInterface(__uuidof(ID3D11VideoContext), ...);
 
 **注意**：这里拿到的 `context` 就是 Qt RHI 正在使用的那个即时上下文。
 
-### 6. `ConvertNativeFrame()`（第 275 行）
+#### 6. `ConvertNativeFrame()`（第 275 行）
 
 **崩溃点就在这个函数里。**
 
@@ -263,7 +259,7 @@ video_context->VideoProcessorBlt(processor, output_view, 0, 1, &stream);   // �
 
 `VideoProcessorBlt` 会改渲染目标、视口、状态，而这些资源正被 Qt RHI 使用。
 
-### 7. `NativeWrapFor(void *source, const QSize &size)`（第 363 行）
+#### 7. `NativeWrapFor(void *source, const QSize &size)`（第 363 行）
 
 把原生纹理包成 `QRhiTexture`，按源指针缓存：
 
@@ -278,9 +274,7 @@ texture->createFrom(native_src);                          // ← Qt 的导入接
 **更正一处旧说法**：我之前说"Qt 6.6 不能导入外部纹理"，不准确。
 `QRhiTexture::createFrom(NativeTexture)` 确实存在，但要求 **纹理在 RHI 自己的设备上**。
 
----
-
-## 六、崩溃点定位
+### 崩溃点定位
 
 日志原文：
 
@@ -304,9 +298,11 @@ video_context->VideoProcessorBlt(...)        ← 抢 Qt RHI 的即时上下文
 
 ---
 
-## 七、两条可行的改造路径
+## 三、结论
 
-### 路径 A：解码用独立设备 + 共享句柄
+### 两条可行的改造路径
+
+#### 路径 A：解码用独立设备 + 共享句柄
 
 ```
 解码设备 D1（我们建）
@@ -321,7 +317,7 @@ video_context->VideoProcessorBlt(...)        ← 抢 Qt RHI 的即时上下文
 **卡点**：`QRhiTexture::createFrom(NativeTexture)` 不能打开别设备的句柄；
 要自己做就得直接调原生 D3D11 → 又回到抢上下文。
 
-### 路径 B：多一次 GPU 拷贝
+#### 路径 B：多一次 GPU 拷贝
 
 ```
 FFmpeg 解码（自己的设备 / 或 Qt 的设备）
@@ -336,7 +332,7 @@ RHI 正常采样，不插原生命令
 
 代价：GPU 内多一次 5MB 拷贝（比读回内存的 3.3ms 便宜很多）。
 
-### 路径 B 的变体（你的单线程思路）
+#### 路径 B 的变体（你的单线程思路）
 
 把解码也挪进渲染线程：
 
@@ -351,9 +347,7 @@ render() 里：
 好处：没有跨线程，顺序天然正确。
 风险：解码慢帧会拖累渲染节拍；FFmpeg 内部仍会向同一个上下文提交命令。
 
----
-
-## 八、遗留问题清单
+### 遗留问题清单
 
 | # | 问题 | 状态 |
 |---|---|---|
@@ -363,9 +357,7 @@ render() 里：
 | 4 | QSB 着色器要随 exe 打包 | collect.ps1 要带上 `shaders/` |
 | 5 | 设备和上下文归属 | FFmpeg 用 `SetExternalDevice` 拿 Qt 的（提交 `44c96aa`） |
 
----
-
-## 九、master 和这个分支怎么选
+### master 和这个分支怎么选
 
 ```
 master（FBO + GL + 读回）
@@ -378,10 +370,6 @@ exp/zero-copy（RHI + D3D11 + 零拷贝）
 ```
 
 **现在 master 是主线**，这个分支当资料保留。
-
----
-
-## 十、一句话总结
 
 ```
 这个分支做了三件事：

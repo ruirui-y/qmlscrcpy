@@ -2,7 +2,7 @@
 
 记录「把渲染从 OpenGL 换成 Qt RHI（D3D11）」这一轮改造：为什么换、spike 验了什么、分几步走、踩到哪些坑。
 
-## 一、这一阶段要做什么
+## 一、背景
 
 ### 起点
 
@@ -28,7 +28,28 @@ D3D11 解码纹理 →（GPU 内转 RGBA）→ QRhiTexture 直接引用 → 画
 - 不碰 OpenGL 与 D3D11 的 interop（`wglDX*`）——上一轮崩在 `wglDXUnlockObjectsNV`，且需要跨线程纹理同步
 - 不改解码协议、不改输入层
 
-## 二、怎么做的（先看参考项目）
+## 二、计划
+
+方向不是拍脑袋定的：先看同类项目怎么绕，再定技术路线，然后花最小的代价把唯一的未知数验掉，最后才动手改。
+
+1. 看参考项目（`H:\YJJ\Project\Player\Player\Client\Core`）怎么做，确认"不做 interop 也能到 GPU 直通"这条路。
+2. 用 120 行的 spike 验唯一的技术未知数：**RHI 能不能包住外部创建的 D3D11 纹理**。
+3. 四步改造，每步可回退：
+
+| 步 | 内容 | 状态 |
+|---|---|---|
+| **1** | 解码器支持导入外部 D3D11 设备（`SetExternalDevice`） | ✅ 已完成（提交 `44c96aa`） |
+| **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | ✅ 已完成（提交 `6f21092`） |
+| **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | ✅ 已完成（提交 `6f31530`），软解 97 fps、硬解 NV12 分支实测通过 |
+| **4** | 原生纹理通路：VideoProcessor 输出 RGBA8 → `createFrom` → 直接画 | 4a 设备握手 ✅（`f537396` + `07195af`），4b 待做 |
+
+验证标准：每步编译通过 + 能出完整画面 + 日志里后端名字对。
+
+**为什么 2 在 3 之前**：渲染器先能画 CPU 帧，切后端时才有画面可验证；否则一切换就是黑屏，分不清问题在哪。
+
+## 三、实录
+
+### 1. 先看参考项目：它压根没做 interop
 
 `H:\YJJ\Project\Player\Player\Client\Core` 里的做法直接点醒了方向：
 
@@ -49,7 +70,9 @@ Qt 用 D3D11 后端 → rhi->nativeHandles() 拿 device/context
                  → QSGRenderNode / QQuickRhiItem 里画
 ```
 
-## 三、spike：先验证唯一的技术未知数
+这一条是整个改造能绕开 interop 的原因：**卡住的时候先看同类项目怎么绕**。
+
+### 2. 写 120 行 spike，先定死 createFrom
 
 未知数只有一个：**RHI 能不能包住外部创建的 D3D11 纹理**（不是 RHI 分配的）。
 
@@ -81,9 +104,9 @@ wrapped->createFrom(native);                                  // ✅ true
 
 抓图是一整块纯色——**外部纹理真的被画到屏幕上了**。
 
-## 四、踩的坑（全部实测）
+spike 的价值就在这：`createFrom` 这个唯一未知数用 120 行、两次运行就定死了，避免直接重构 450 行渲染器之后才发现走不通。
 
-### 坑 1：格式必须是 RGBA，不能是 BGRA
+### 3. 格式必须是 RGBA，不能是 BGRA
 
 ```
 Failed to create srv: COM error 0x80070057 (E_INVALIDARG)
@@ -94,7 +117,9 @@ Failed to create srv: COM error 0x80070057 (E_INVALIDARG)
 
 → 现在解码侧 `VideoProcessor` 输出的是 BGRA，接 RHI 前**必须改成 RGBA 顺序**。
 
-### 坑 2：`QQuickRhiItem` 不会替你开 render pass
+所以"RHI 包外部纹理"这件事是可行的，但**格式必须严格对齐**。
+
+### 4. `QQuickRhiItem` 不会替你开 render pass
 
 ```
 ASSERT: "cbD->recordingPass == QD3D11CommandBuffer::RenderPass" (qrhid3d11.cpp:925)
@@ -108,7 +133,7 @@ cb->beginPass(renderTarget(), Qt::black, {1.0f, 0});
 cb->endPass();
 ```
 
-### 坑 3：不设视口就是全黑
+### 5. 不设视口就是全黑
 
 第一次抓图全黑，日志一切正常。原因是 `beginPass` 之后视口是空的：
 
@@ -117,15 +142,19 @@ const QSize size = renderTarget()->pixelSize();
 cb->setViewport({0.0f, 0.0f, float(size.width()), float(size.height())});
 ```
 
-### 坑 4：顶点缓冲要在 `initialize(cb)` 里上传
+**黑屏先查视口和 pass**：spike 两次黑屏都不是着色器问题。
+
+### 6. 顶点缓冲：建了不等于传了
 
 `render()` 里已经在 pass 中，`cb->resourceUpdate()` 会失败。资源上传放到 `initialize(QRhiCommandBuffer *cb)`，那里可以安全用 `cb->resourceUpdate(batch)`。
 
-### 坑 5：QSB 着色器要随 exe 走
+`QRhiBuffer::create()` 只是分配，数据要用 `uploadStaticBuffer`。而且**必须放在 `beginPass` 之前**（`render()` 开头、还没进 pass 时），否则就是上面那个断言。
+
+### 7. QSB 着色器要随 exe 走
 
 `qsb.exe` 编译出来的是 `quad.vert.qsb` / `quad.frag.qsb`，运行时按相对路径加载。构建时用 `copy_if_different` 拷到输出目录，否则运行时打不开、管线创建失败、画出来全黑。
 
-### 坑 6：`uploadTexture(tex, QByteArray)` 这个重载不存在
+### 8. `uploadTexture(tex, QByteArray)` 这个重载不存在
 
 第一次写成了：
 
@@ -141,11 +170,7 @@ const QRhiTextureUploadDescription desc(QRhiTextureUploadEntry(
 batch->uploadTexture(texture_y_, desc);
 ```
 
-### 坑 7：顶点缓冲建了不等于传了
-
-`QRhiBuffer::create()` 只是分配，数据要用 `uploadStaticBuffer`。而且**必须放在 `beginPass` 之前**（`render()` 开头、还没进 pass 时），否则就是坑 4 那个断言。
-
-### 坑 8：RHI 头文件不在默认 include 路径里
+### 9. RHI 头文件不在默认 include 路径里
 
 `#include <rhi/qrhi.h>` 编译不过，因为它在版本化目录：
 
@@ -159,16 +184,114 @@ Qt 的 imported target 不会带上，要手动加：
 target_include_directories(QmlScrcpy PRIVATE "${QS_QT_ROOT}/include/QtGui/${Qt6_VERSION}/QtGui")
 ```
 
-## 五、四步改造计划（每步可回退）
+### 10. 第 1 步：给解码器加"导入外部设备"
 
-| 步 | 内容 | 状态 |
-|---|---|---|
-| **1** | 解码器支持导入外部 D3D11 设备（`SetExternalDevice`） | ✅ 已完成（提交 `44c96aa`） |
-| **2** | 重写 `video_renderer.*` 为 QRhi 版，先接现有 CPU 帧（YUV420P / NV12 上传） | ✅ 已完成（提交 `6f21092`） |
-| **3** | `VideoItem` 基类换 `QQuickRhiItem`，`main.cpp` 切 D3D11 后端 | ✅ 已完成（提交 `6f31530`），软解 97 fps、硬解 NV12 分支实测通过 |
-| **4** | 原生纹理通路：VideoProcessor 输出 RGBA8 → `createFrom` → 直接画 | 4a 设备握手 ✅（`f537396` + `07195af`），4b 待做 |
+```cpp
+// h264_decoder.h
+void SetExternalDevice(void *d3d11_device, void *d3d11_context);
 
-### 第四步 4a：设备握手（已完成）
+// OpenHardware() 开头：外部设备优先
+if (external_device_ != nullptr)
+{
+    device->AddRef();                    // FFmpeg 接管一份
+    d3d11->device = device;
+    ...
+    qInfo() << "[decode] 使用外部 D3D11 设备（Qt RHI 提供）";
+}
+```
+
+未接线时行为完全不变，属于纯增量。
+
+### 11. 第 2 步：把渲染器重写成 QRhi 版
+
+| 文件 | 作用 |
+|---|---|
+| `ui/video_frame_source.h` | 渲染器与画布的接口：`TakePendingFrame` / `NotifySyncPass` / `NotifyRenderEnd` / `KeepAspectEnabled` / `CanvasSize`。换基类时渲染器不用改 |
+| `ui/video_rhi_renderer.{h,cpp}` | `QQuickRhiItemRenderer` 子类：加载 QSB、建 R8/RG8 两张平面纹理、上传、画全屏四边形 |
+| `ui/shaders/quad.vert` + `nv12.frag` | YUV→RGB（BT.601）的 QSB 着色器，系数和 GL 版一致 |
+| `src/CMakeLists.txt` | 登记文件 + 构建后拷贝 `shaders/*.qsb` + 加 RHI 头文件路径 |
+
+编译结果：`QmlScrcpy.exe` 生成成功，`bin/Debug/shaders/` 里两个 qsb 都在。因为 `VideoItem` 还是 `QQuickFramebufferObject`，渲染器**还没被实例化**，运行行为不变。
+
+### 12. 第 3 步：换基类 QQuickRhiItem
+
+| 文件 | 变化 |
+|---|---|
+| `ui/video_item.h` | 基类换成 `QQuickRhiItem`，同时实现 `VideoFrameSource`；`createRenderer()` 不再 `const` |
+| `ui/video_item.cpp` | `createRenderer()` 返回 `VideoRhiRenderer` 并 `SetSource(this)`；实现 6 个接口方法；删掉 GL 渲染器引用 |
+| `ui/video_item_input.cpp` | 基类事件转发改名（`QQuickRhiItem::mousePressEvent` 等） |
+| `src/main.cpp` | `setGraphicsApi(QSGRendererInterface::Direct3D11)` |
+| `ui/video_renderer.{h,cpp}` | **删除**（GL 版渲染器作废，代码在 git 历史里） |
+
+换基类时撞的第一下：`createRenderer()` 不是 const。
+
+`QQuickFramebufferObject::createRenderer() const` 到 `QQuickRhiItem::createRenderer()` 少了 `const`，原样照抄会报：
+
+```
+error C3668: 包含重写说明符 override 的方法没有重写任何基类方法
+```
+
+顺带记一句：**`QQuickRhiItem` 就是 RHI 版的 FBO**，`initialize/synchronize/render` 三个回调与 `QQuickFramebufferObject` 一一对应，迁移成本比预想低。
+
+### 13. 接口方法名和画布已有方法撞了
+
+画布本来就有 `AdvanceSyncPass()`（返回 qint64）、`ClockUs()`、`MarkRenderEnd(qint64, trace)`。接口里再声明同名不同签名的纯虚函数，直接编译失败：
+
+```
+error C2555: 重写虚函数返回类型有差异
+error C2535: 已经定义或声明成员函数
+```
+
+解决办法是接口用另一套名字：`NotifySyncPass` / `SyncPassStartUs` / `NowUs` / `NotifyRenderEnd`，实现里转调已有方法。
+
+### 14. 删了 GL 渲染器要连带清三处
+
+- `video_item.cpp` 的 `#include "ui/video_renderer.h"`
+- `src/CMakeLists.txt` 里的源文件条目
+- `video_item_input.cpp` 里 `QQuickFramebufferObject::xxxEvent` 的基类调用
+
+漏任何一处都是编译错误。
+
+### 15. 日志刷屏
+
+`QQuickRhiItem` 在窗口缩放/场景图重建时会重新 `createRenderer()`，初始化日志打了几百行。改成函数内 `static bool` 只打第一次。
+
+### 16. 软解 YUV420P 拼成 NV12，省掉一整套管线
+
+软解 `YUV420P` 没有单独做三平面管线，而是在 `synchronize()` 里把 U/V 拼成 NV12 交错：
+
+```
+YUV420P：U 平面 + V 平面        → 逐行拼成 U0 V0 U1 V1 …  → 同一套 NV12 着色器
+NV12   ：UV 已经是交错的         → 直接按行拷
+```
+
+代价是每帧一次行拷贝，换掉整整一套着色器 + 三张纹理 + 第二套管线，划算。
+
+### 17. 第 3 步跑起来：NV12 分支 47 fps
+
+把 `config/config.ini` 的 `hardware` 临时改成 1 跑了一次：
+
+```
+[decode] D3D11 适配器 "NVIDIA GeForce RTX 4080 SUPER"
+[decode] 使用 D3D11VA 硬件解码
+[decode] 首帧格式 172（D3D11 = 172）
+[rhi] 渲染器初始化，后端 D3D11
+```
+
+画面正常（聊天界面截图，文字和头像颜色都对），47 fps。说明：
+
+- 硬解产物（NV12 两平面）→ 渲染器 R8/RG8 上传 → QSB 着色器 → D3D11 上屏，整条链路通
+- 现在仍然走 **CPU 中转**（`DownloadFrame` 读回），第 4 步才是把这段删掉
+
+测完已把 `hardware` 改回 0，配置没留改动。
+
+### 18. 第 3 步之后：主工程还是 GL + B
+
+- 主工程**仍是 GL + B 方案**，可正常使用（软解 4.65ms / 硬解 B 6.2ms，配置可切）
+- 解码器已具备"导入外部设备"能力，但没人调用
+- spike 代码在 `.refs/spike_rhi_d3d11/`，不入库
+
+### 19. 第 4 步 4a：让解码器和 Qt 用同一个 ID3D11Device
 
 目的只有一个：**让解码器和 Qt 渲染后端用同一个 `ID3D11Device`**。不同设备上的纹理，`createFrom` 一定失败。
 
@@ -192,9 +315,7 @@ target_include_directories(QmlScrcpy PRIVATE "${QS_QT_ROOT}/include/QtGui/${Qt6_
 [decode] 首帧格式 172（D3D11 = 172）
 ```
 
-### 4a 踩的三个坑（它们是串在一起的）
-
-**坑 13：QML 里只有 `onConnectedChanged`**
+### 20. QML 里只有 `onConnectedChanged`
 
 原来窗口只跟着 `connected` 显示：
 
@@ -207,15 +328,15 @@ function onConnectedChanged()
 
 加了 `connecting` 属性后，`connecting` 变了却没人处理，窗口不出现 → 渲染后端不初始化。必须再补一个 `onConnectingChanged()`。
 
-**坑 14：信号比控制器的连接更早**
+### 21. 信号比控制器的连接更早
 
 渲染器在窗口首次渲染时就发 `SigRhiDeviceReady`，而控制器要等 `SetVideo(qml item)` 才 `connect` 这个信号——**信号已经发完了**。
 
 解法：画布把设备**存下来**（`rhi_device_value_` / `rhi_context_value_`），控制器开解码器前主动 `RhiDevice()` 读当前值，不依赖信号。
 
-**坑 15：解码器开得比渲染后端还早**
+### 22. 解码器开得比渲染后端还早
 
-时序是“连接 → 开解码器 → 弹窗 → 渲染器初始化”，解码器永远早一步。在 `ApplyConnected` 开头加等待：
+时序是"连接 → 开解码器 → 弹窗 → 渲染器初始化"，解码器永远早一步。在 `ApplyConnected` 开头加等待：
 
 ```cpp
 if (AppSettings().DecodeHardware() && rhi_device_ == 0 && gpu_wait_retries_ < 40)
@@ -228,138 +349,11 @@ if (AppSettings().DecodeHardware() && rhi_device_ == 0 && gpu_wait_retries_ < 40
 
 窗口既然已经在 `connecting` 阶段显示，渲染器 300ms 内就会初始化，重试必然成功。
 
-**注意**：这个等待逻辑如果放在“窗口还没显示”的阶段会**死锁**——等设备，设备等窗口，窗口等连接成功。第一次尝试就死在这，表现为黑屏、日志停住、没有 `[rhi]`。必须先保证投屏窗在 `connecting` 阶段就显示。
+**注意**：这个等待逻辑如果放在"窗口还没显示"的阶段会**死锁**——等设备，设备等窗口，窗口等连接成功。第一次尝试就死在这，表现为黑屏、日志停住、没有 `[rhi]`。必须先保证投屏窗在 `connecting` 阶段就显示。
 
-### 4a 的遗留
+### 23. 4b 第一次：一开就崩在 nvwgf2umx.dll
 
-- `gpu_wait_retries_` 只在 `ApplyConnected` 内使用，超时后退回自建设备（日志会打 warn）
-- 渲染器析构里已经删掉 RHI 资源，退出时不再报 `unreleased resources`
-
-### 第三步之后的实测（NV12 分支）
-
-把 `config/config.ini` 的 `hardware` 临时改成 1 跑了一次：
-
-```
-[decode] D3D11 适配器 "NVIDIA GeForce RTX 4080 SUPER"
-[decode] 使用 D3D11VA 硬件解码
-[decode] 首帧格式 172（D3D11 = 172）
-[rhi] 渲染器初始化，后端 D3D11
-```
-
-画面正常（聊天界面截图，文字和头像颜色都对），47 fps。说明：
-
-- 硬解产物（NV12 两平面）→ 渲染器 R8/RG8 上传 → QSB 着色器 → D3D11 上屏，整条链路通
-- 现在仍然走 **CPU 中转**（`DownloadFrame` 读回），第 4 步才是把这段删掉
-
-测完已把 `hardware` 改回 0，配置没留改动。
-
-### 第 2 步产出了什么
-
-| 文件 | 作用 |
-|---|---|
-| `ui/video_frame_source.h` | 渲染器与画布的接口：`TakePendingFrame` / `NotifySyncPass` / `NotifyRenderEnd` / `KeepAspectEnabled` / `CanvasSize`。换基类时渲染器不用改 |
-| `ui/video_rhi_renderer.{h,cpp}` | `QQuickRhiItemRenderer` 子类：加载 QSB、建 R8/RG8 两张平面纹理、上传、画全屏四边形 |
-| `ui/shaders/quad.vert` + `nv12.frag` | YUV→RGB（BT.601）的 QSB 着色器，系数和 GL 版一致 |
-| `src/CMakeLists.txt` | 登记文件 + 构建后拷贝 `shaders/*.qsb` + 加 RHI 头文件路径 |
-
-编译结果：`QmlScrcpy.exe` 生成成功，`bin/Debug/shaders/` 里两个 qsb 都在。因为 `VideoItem` 还是 `QQuickFramebufferObject`，渲染器**还没被实例化**，运行行为不变。
-
-### 第 3 步产出了什么
-
-| 文件 | 变化 |
-|---|---|
-| `ui/video_item.h` | 基类换成 `QQuickRhiItem`，同时实现 `VideoFrameSource`；`createRenderer()` 不再 `const` |
-| `ui/video_item.cpp` | `createRenderer()` 返回 `VideoRhiRenderer` 并 `SetSource(this)`；实现 6 个接口方法；删掉 GL 渲染器引用 |
-| `ui/video_item_input.cpp` | 基类事件转发改名（`QQuickRhiItem::mousePressEvent` 等） |
-| `src/main.cpp` | `setGraphicsApi(QSGRendererInterface::Direct3D11)` |
-| `ui/video_renderer.{h,cpp}` | **删除**（GL 版渲染器作废，代码在 git 历史里） |
-
-软解 `YUV420P` 没有单独做三平面管线，而是在 `synchronize()` 里把 U/V 拼成 NV12 交错：
-
-```
-YUV420P：U 平面 + V 平面        → 逐行拼成 U0 V0 U1 V1 …  → 同一套 NV12 着色器
-NV12   ：UV 已经是交错的         → 直接按行拷
-```
-
-代价是每帧一次行拷贝，换掉整整一套着色器 + 三张纹理 + 第二套管线，划算。
-
-### 第 3 步的坑
-
-**坑 9：`createRenderer()` 不是 const**
-
-`QQuickFramebufferObject::createRenderer() const` 到 `QQuickRhiItem::createRenderer()` 少了 `const`，原样照抄会报：
-
-```
-error C3668: 包含重写说明符 override 的方法没有重写任何基类方法
-```
-
-**坑 10：接口方法名和画布已有方法撞了**
-
-画布本来就有 `AdvanceSyncPass()`（返回 qint64）、`ClockUs()`、`MarkRenderEnd(qint64, trace)`。接口里再声明同名不同签名的纯虚函数，直接编译失败：
-
-```
-error C2555: 重写虚函数返回类型有差异
-error C2535: 已经定义或声明成员函数
-```
-
-解决办法是接口用另一套名字：`NotifySyncPass` / `SyncPassStartUs` / `NowUs` / `NotifyRenderEnd`，实现里转调已有方法。
-
-**坑 11：删了 GL 渲染器要连带清三处**
-
-- `video_item.cpp` 的 `#include "ui/video_renderer.h"`
-- `src/CMakeLists.txt` 里的源文件条目
-- `video_item_input.cpp` 里 `QQuickFramebufferObject::xxxEvent` 的基类调用
-
-漏任何一处都是编译错误。
-
-**坑 12：日志刷屏**
-
-`QQuickRhiItem` 在窗口缩放/场景图重建时会重新 `createRenderer()`，初始化日志打了几百行。改成函数内 `static bool` 只打第一次。
-
-**为什么 2 在 3 之前**：渲染器先能画 CPU 帧，切后端时才有画面可验证；否则一切换就是黑屏，分不清问题在哪。
-
-### 第 1 步做了什么
-
-```cpp
-// h264_decoder.h
-void SetExternalDevice(void *d3d11_device, void *d3d11_context);
-
-// OpenHardware() 开头：外部设备优先
-if (external_device_ != nullptr)
-{
-    device->AddRef();                    // FFmpeg 接管一份
-    d3d11->device = device;
-    ...
-    qInfo() << "[decode] 使用外部 D3D11 设备（Qt RHI 提供）";
-}
-```
-
-未接线时行为完全不变，属于纯增量。
-
-## 六、现状与收获
-
-### 现状
-
-- 主工程**仍是 GL + B 方案**，可正常使用（软解 4.65ms / 硬解 B 6.2ms，配置可切）
-- 解码器已具备"导入外部设备"能力，但没人调用
-- spike 代码在 `.refs/spike_rhi_d3d11/`，不入库
-
-### 学到什么
-
-1. **卡住的时候先看同类项目怎么绕**：参考项目根本没做 interop，而是统一到一套图形 API
-2. **RHI 包外部纹理是可行的**，但格式必须严格对齐（RGBA8 ↔ R8G8B8A8_UNORM）
-3. **`QQuickRhiItem` 是 RHI 版的 FBO**：`initialize/synchronize/render` 三个回调与 `QQuickFramebufferObject` 一一对应，迁移成本比预想低
-4. **黑屏先查视口和 pass**：spike 两次黑屏都不是着色器问题
-5. **spike 的价值**：`createFrom` 这个唯一未知数用 120 行、两次运行就定死了，避免直接重构 450 行渲染器后才发现走不通
-
-### 还没解决的
-
-- `QQuickRhiItem` 迁移后，`VideoItem` 的输入/键位/统计代码不受影响，但**渲染统计钩子**（`beforeSynchronizing` 等）要换成 RHI 等价时机
-- 软解路径上传纹理从 glTexSubImage2D 换成 `QRhiTexture::setData`
-- 第 4 步做完才能删掉 `Map` 读回那条路径
-## 4b 第一次尝试：为什么一开就崩
-
-### 现象（两份不同的证据，同一个根因）
+两份不同的证据，同一个根因。
 
 我这边（强制 `hardware=1` 跑）：
 
@@ -378,13 +372,13 @@ QThread: Destroyed while thread is still running
 （qthread.cpp:470 断言，进程终止）
 ```
 
-### 排查过程
+排查顺序：
 
 1. 先怀疑"解码线程和渲染线程同时读写同一张双缓冲纹理" → 加了帧序号 `seq`、把 `QRhiTexture` 按纹理指针缓存（不再每帧 delete/create）
 2. 重测：**仍然崩**，且崩在 `nvwgf2umx.dll` 内部
 3. 结论：不是我们代码里的空指针，是**提交给驱动的 D3D11 操作本身非法**
 
-### 真正的根因：两个线程共用同一个即时上下文
+真正的根因：两个线程共用同一个即时上下文。
 
 ```
 GUI 线程    ：建 ID3D11Device + 它的 ImmediateContext
@@ -396,9 +390,7 @@ GUI 线程    ：建 ID3D11Device + 它的 ImmediateContext
 
 **为什么以前没事**：B 方案（`DownloadFrame`）也在视频线程用上下文，但那时渲染走 OpenGL，渲染线程根本不碰这个设备。换成 D3D11 RHI 后才出现并发。
 
-### 正确做法（还没做完）
-
-把 GPU 操作全部收到渲染线程：
+正确做法（还没做完）：把 GPU 操作全部收到渲染线程。
 
 ```
 视频线程：只填 Frame::Native{ NV12 纹理指针, 切片号, keep_alive(AVFrame) }
@@ -408,20 +400,21 @@ GUI 线程    ：建 ID3D11Device + 它的 ImmediateContext
 
 这样只有一个线程碰上下文，天然没有竞争。
 
-### 当前代码状态
+当前代码状态：
 
 - `SetZeroCopy(false)`：零拷贝关闭，程序正常
 - 第一次尝试的代码（帧序号、按指针缓存纹理）**已回退**，因为改到一半时渲染器头文件被写乱、编译不过
 - 已确认可用的部分：设备握手（4a）、`QQuickRhiItem` 渲染器、RGBA 直通着色器 `ui/shaders/rgba.frag`
 
-### 学到什么
+这一步的教训：
 
 1. **D3D11 的即时上下文不能跨线程共用一个设备**，这是这一轮最大的坑
 2. 崩溃表现会骗人：驱动里崩（我的机器）和 Qt 断言（用户的机器）可以是同一个根因
 3. 先做"最小可验证"再动手：如果一开始就只把 NV12 纹理丢给渲染线程，能省掉这一整轮返工
-## 4b 第二次尝试：把转色搬到渲染线程
 
-### 设计（和第一次的区别）
+### 24. 4b 第二次：把转色搬到渲染线程
+
+设计（和第一次的区别）：
 
 ```
 第一次（崩）：
@@ -435,7 +428,7 @@ GUI 线程    ：建 ID3D11Device + 它的 ImmediateContext
   → 只有渲染线程碰上下文，没有竞争
 ```
 
-### 第一步：帧结构与解码器（已完成，编译通过）
+**第一步：帧结构与解码器（已完成，编译通过）**
 
 `frame.h` 的 `NativeTexture` 增加：
 
@@ -468,7 +461,7 @@ if (zero_copy_ && external_device_ != nullptr)
 
 **注意**：`ConvertToBgra` 不再参与零拷贝路径，它的存在只是给别的实验用。
 
-### 第二步：渲染器里做转色（待做）
+**第二步：渲染器里做转色（待做）**
 
 要加的东西：
 
@@ -485,11 +478,10 @@ if (zero_copy_ && external_device_ != nullptr)
 - 输出纹理格式必须是 `DXGI_FORMAT_R8G8B8A8_UNORM`（RHI 的 RGBA8 只认这个顺序，BGRA 会 `E_INVALIDARG`）
 - `VideoProcessorBlt` 之后建议 `context->Flush()`，让提交顺序对 RHI 的采样可见
 - 渲染器当前是**回退后的版本**（没有原生分支、没有 `rgba.frag` 管线），这两块要重新加回来
-## 4b 第三次：设备丢失（TDR），这条路走不通
 
-### 决定性证据
+### 25. 4b 第三次：设备丢失（TDR），这条路走不通
 
-转色搬到渲染线程之后，第一次出帧时日志变成：
+决定性证据：转色搬到渲染线程之后，第一次出帧时日志变成：
 
 ```
 [decode] 首帧格式 172（D3D11 = 172）
@@ -510,7 +502,7 @@ ntdll.dll!RtlUserThreadStart()     未知
 
 全是驱动内部线程，说明崩在 GPU 命令流层面，不是我们代码里的空指针。
 
-### 为什么
+为什么：
 
 ```
 Qt RHI           正在即时上下文上录制本帧的绘制命令
@@ -523,7 +515,7 @@ Qt RHI           正在即时上下文上录制本帧的绘制命令
 
 D3D11 一个设备只有一个即时上下文，没有"借一下"的机制。
 
-### 尝试过的（全部失败）
+尝试过的（全部失败）：
 
 | 尝试 | 结果 |
 |---|---|
@@ -532,9 +524,7 @@ D3D11 一个设备只有一个即时上下文，没有"借一下"的机制。
 | 帧序号 + 纹理缓存 | 不解决上下文冲突 |
 | 渲染器持住 keep_alive | 不解决上下文冲突 |
 
-### 结论
-
-当前架构（Qt RHI + D3D11）下零拷贝走不通。两条替代路：
+结论：当前架构（Qt RHI + D3D11）下零拷贝走不通。两条替代路：
 
 | 方案 | 代价 |
 |---|---|
@@ -543,7 +533,7 @@ D3D11 一个设备只有一个即时上下文，没有"借一下"的机制。
 
 现状保留 CPU 读回：硬解 6.2ms、软解主线程 0.08ms（但滞后 2~3 帧）。
 
-### 保留下来的东西
+保留下来的东西：
 
 | 成果 | 价值 |
 |---|---|
@@ -551,3 +541,11 @@ D3D11 一个设备只有一个即时上下文，没有"借一下"的机制。
 | 设备握手（4a） | 将来换方案还要用 |
 | NativeTexture 的 slice / keep_alive | 帧结构已能承载原生纹理 |
 | 崩溃定位经验 | "Device loss" + 驱动栈，以后能立刻认出来 |
+
+## 四、留的坑
+
+- `QQuickRhiItem` 迁移后，`VideoItem` 的输入/键位/统计代码不受影响，但**渲染统计钩子**（`beforeSynchronizing` 等）要换成 RHI 等价时机
+- 软解路径上传纹理从 glTexSubImage2D 换成 `QRhiTexture::setData`
+- 第 4 步做完才能删掉 `Map` 读回那条路径
+- `gpu_wait_retries_` 只在 `ApplyConnected` 内使用，超时后退回自建设备（日志会打 warn）
+- 渲染器析构里已经删掉 RHI 资源，退出时不再报 `unreleased resources`

@@ -1,5 +1,20 @@
 # Qt 渲染插口演进：从场景图到 RHI
 
+## 一、背景
+
+> 这篇写于换 D3D12 之前。文中「我们项目 = master 现在用它」说的是当时的选择，
+> 现在 master 用的是 `QQuickRhiItem` + D3D12，见 [D3D12迁移](../03-视频与解码/D3D12迁移.md)。
+
+Qt6 迁移那会儿，画视频的插口从 `QQuickFramebufferObject` 换成 `QQuickRhiItem`，代码看着差不多，跑起来却是黑屏、白屏、错色轮着来。
+
+真正要搞清的不是 API 怎么调，而是 Qt 到底把什么交给了我们：一块画布？一个上下文？还是只给一张命令清单？
+
+这篇先讲 QML 怎么变成像素（场景图），再讲两代插口各自的所有权边界，最后落到我们为什么又退回 FBO。
+
+---
+
+## 二、正文
+
 这篇讲清楚三件事：
 
 ```
@@ -12,7 +27,7 @@
 
 ---
 
-## 一、Qt Quick 怎么把 QML 画出来
+## 三、Qt Quick 怎么把 QML 画出来
 
 ### 两遍：先建对象，再发射
 
@@ -54,7 +69,7 @@ Qt 的场景图遍历到"自定义条目"时
 
 ---
 
-## 二、第一代插口：`QQuickFramebufferObject`（Qt5）
+## 四、第一代插口：`QQuickFramebufferObject`（Qt5）
 
 ### FBO 是什么
 
@@ -109,7 +124,7 @@ FBO        = 后台画布
 
 ---
 
-## 三、Qt6 的方案：RHI
+## 五、Qt6 的方案：RHI
 
 ### RHI 是什么
 
@@ -185,7 +200,7 @@ Renderer::render()                    Renderer::render(QRhiCommandBuffer *cb)
 
 ---
 
-## 四、两代插口对照
+## 六、两代插口对照
 
 | 维度 | `QQuickFramebufferObject` | `QQuickRhiItem` |
 |---|---|---|
@@ -198,7 +213,7 @@ Renderer::render()                    Renderer::render(QRhiCommandBuffer *cb)
 
 ---
 
-## 五、纠正两个说法
+## 七、纠正两个说法
 
 ### ① "Qt6 不给画布了"
 
@@ -217,7 +232,7 @@ Renderer::render()                    Renderer::render(QRhiCommandBuffer *cb)
 
 ---
 
-## 六、为什么我们最后回到 FBO
+## 八、为什么我们最后回到 FBO
 
 ```
 exp/zero-copy 的目标：把 D3D11 解码纹理直接给 RHI 用（零拷贝）
@@ -234,7 +249,7 @@ exp/zero-copy 的目标：把 D3D11 解码纹理直接给 RHI 用（零拷贝）
 
 ---
 
-## 七、自测三问
+## 九、自测三问
 
 **Q1** `synchronize()` 里能调 `glTexImage2D` 吗？
 
@@ -258,8 +273,6 @@ A：RHI 的 D3D11 后端不肯让出即时上下文的控制权，
 ```
 
 ---
-
-## 八、一句话总结
 
 ```
 Qt5：给你一块 OpenGL 画布（简单、绑死 GL）
