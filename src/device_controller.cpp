@@ -69,7 +69,7 @@ DeviceController::DeviceController(QObject *parent) : QObject(parent)
     QObject::connect(settings_, &qsc::app::PlaybackSettings::SigVideoChanged, this,
                      [this]() { emit SigVideoSettingsChanged(); });
     QObject::connect(settings_, &qsc::app::PlaybackSettings::SigDecodeChanged, this,
-                     [this]() { emit SigDecodeSettingsChanged(); emit SigAsyncReadbackChanged(); });
+                     [this]() { emit SigDecodeSettingsChanged(); });
 }
 
 DeviceController::~DeviceController()
@@ -316,40 +316,6 @@ void DeviceController::SetDecodeThreads(int threads)
 
     const QString serial = device_name_;
     SetStatus(QStringLiteral("按新的线程数重连中（1~2 秒）…"));
-    QCoreApplication::processEvents();
-    Disconnect();
-    if (!serial.isEmpty())
-    {
-        Connect(serial);
-    }
-}
-
-bool DeviceController::AsyncReadback() const
-{
-    return settings_->AsyncReadback();
-}
-
-// 界面切换读回方式：先存配置；连着设备就重连一次（解码器在连接时创建）
-void DeviceController::SetAsyncReadback(bool enabled)
-{
-    if (AsyncReadback() == enabled)
-    {
-        return;
-    }
-
-    settings_->SetAsyncReadback(enabled);
-
-    qInfo() << "[decode] 读回方式切到" << (enabled ? "异步（双 staging）" : "同步");
-
-    if (session_ == nullptr || reader_ == nullptr)
-    {
-        SetStatus(enabled ? QStringLiteral("读回方式：异步，下次连接生效")
-                          : QStringLiteral("读回方式：同步，下次连接生效"));
-        return;
-    }
-
-    const QString serial = device_name_;
-    SetStatus(QStringLiteral("按新的读回方式重连中（1~2 秒）…"));
     QCoreApplication::processEvents();
     Disconnect();
     if (!serial.isEmpty())

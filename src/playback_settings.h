@@ -1,6 +1,6 @@
 #pragma once
 
-// 播放参数：画质（码率/帧率）和解码方式（硬解/软解、软解线程数、读回方式）。
+// 播放参数：画质（码率/帧率）和解码方式（硬解/软解、软解线程数）。
 // 只负责"读写配置 + 记住当前档位"，不碰连接、不碰 QML —— 重连由 DeviceController 做。
 
 #include <QObject>
@@ -27,12 +27,10 @@ public:
     void SetHardware(bool hardware);
     int Threads() const;                                                                        // 软解线程数 1~8
     void SetThreads(int threads);
-    bool AsyncReadback() const;                                                                 // 异步读回？
-    void SetAsyncReadback(bool enabled);
 
 signals:
     void SigVideoChanged();                                                                     // 画质变了
-    void SigDecodeChanged();                                                                    // 解码方式/线程/读回方式变了
+    void SigDecodeChanged();                                                                    // 解码方式/线程变了
 
 private:
     QString profile_ = QStringLiteral("wired");                                                 // 当前码率档位

@@ -41,7 +41,6 @@ class DeviceController : public QObject, public ControlWriter
     Q_PROPERTY(int videoMaxFps READ VideoMaxFps NOTIFY SigVideoSettingsChanged)
     Q_PROPERTY(QString videoProfile READ VideoProfile NOTIFY SigVideoSettingsChanged)
     Q_PROPERTY(QObject *wifiStatus READ WifiStatusObject CONSTANT)                                   // WiFi 健康状态，只有无线连接时 available 为 true
-    Q_PROPERTY(bool asyncReadback READ AsyncReadback WRITE SetAsyncReadback NOTIFY SigAsyncReadbackChanged)  // 硬解读回方式
     Q_PROPERTY(bool decodeHardware READ DecodeHardware WRITE SetDecodeHardware NOTIFY SigDecodeSettingsChanged)  // 硬解/软解
     Q_PROPERTY(int decodeThreads READ DecodeThreads WRITE SetDecodeThreads NOTIFY SigDecodeSettingsChanged)         // 软解线程数
     Q_PROPERTY(bool connected READ IsConnected NOTIFY SigConnectedChanged)
@@ -67,12 +66,10 @@ public:
     QString VideoProfile() const;
     QObject *WifiStatusObject() { return &wifi_status_; }                                       // WiFi 状态对象，QML 通过它读 summary / level
     bool IsConnected() const override;                                                          // 会话建起来没有，投屏窗靠它决定要不要显示
-    bool AsyncReadback() const;                                                                 // 界面用：是否异步读回
     bool DecodeHardware() const;                                                                // 界面用：是否硬解
     void SetDecodeHardware(bool hardware);                                                      // 界面用：切换并重连
     int DecodeThreads() const;                                                                  // 界面用：软解线程数
     void SetDecodeThreads(int threads);                                                         // 界面用：设置并重连
-    void SetAsyncReadback(bool enabled);                                                        // 界面用：切换并（连接中时）重连
     QString BossKey() const;                                                                    // 当前老板键文本，例如 Ctrl+Alt+B
     QString ShortcutBack() const;                                                               // 返回键的快捷键
     QString ShortcutHome() const;                                                               // 回桌面的快捷键
@@ -117,7 +114,6 @@ signals:
     void SigShowConsoleChanged();
     void SigVideoSettingsChanged();
     void SigConnectedChanged();
-    void SigAsyncReadbackChanged();
     void SigDecodeSettingsChanged();                                                            // 硬解开关或线程数变了
     void SigBossKeyChanged();
     void SigShortcutsChanged();

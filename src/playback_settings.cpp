@@ -70,19 +70,4 @@ void PlaybackSettings::SetThreads(int threads)
     emit SigDecodeChanged();
 }
 
-bool PlaybackSettings::AsyncReadback() const
-{
-    return AppSettings().DecodeAsyncReadback();
-}
-
-void PlaybackSettings::SetAsyncReadback(bool enabled)
-{
-    if (AsyncReadback() == enabled)
-    {
-        return;
-    }
-    AppSettings().SetAsyncReadback(enabled);
-    emit SigDecodeChanged();
-}
-
 } // namespace qsc::app
