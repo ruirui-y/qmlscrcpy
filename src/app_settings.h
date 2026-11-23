@@ -90,4 +90,5 @@ public:
 private:
     void EnsureDefaultConfig();
     void EnsureDefaultWindow();                                                                 // 第一次运行写一份带注释的模板，免得用户对着空文件猜
+    void MigrateLegacyKeys();                                                                   // 老版本写在 window.ini 的设置搬到 config.ini
 };

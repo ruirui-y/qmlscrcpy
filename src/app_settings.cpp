@@ -37,40 +37,9 @@ QSettings &WindowStore()
     return settings;
 }
 
-// window.ini 的模板：所有键先摆好，-1 表示"还没记录过"
+// window.ini 的模板：只放"这台机器上的状态"，所有用户设置都在 config.ini
 // QSettings 只认分号注释，而且每次 sync 都会重写整个文件，所以这里不放注释
-const char *const kDefaultWindow = R"([ui]
-show_console=false
-boss_key=Ctrl+Alt+B
-
-[keys]
-back=Esc
-home=Home
-screenshot=Ctrl+Shift+S
-fullscreen=F11
-
-[transfer]
-upload_dir=/sdcard/Download/QmlScrcpy
-
-[video_wired]
-bit_rate=8000000
-max_fps=0
-
-[decode]
-hardware=1
-
-[video_wireless]
-bit_rate=6000000
-max_fps=0
-
-[input]
-wheel_mode=scroll
-drag_pixels=60
-drag_scale=1.0
-click_interval=0
-pinch_modifier=ctrl
-
-[device]
+const char *const kDefaultWindow = R"([device]
 last_serial=
 
 [control_window]
@@ -100,7 +69,7 @@ x=-1
 y=-1
 )";
 
-// 默认配置模板，带注释；只在文件不存在时写一次
+// 默认配置模板，带注释；只在文件不存在时写一次。所有用户设置都在这里
 const char *const kDefaultConfig = R"(# QmlScrcpy 配置，改完重启生效
 # 日志级别：debug / info / warning / critical
 [log]
@@ -120,11 +89,24 @@ pinch_modifier=ctrl
 clipboard_autosync=false
 
 # 老板键：一键隐藏/恢复所有窗口，格式 Ctrl+Alt+B
+# 控制台开关：1 = 显示命令行窗口
 [ui]
 boss_key=Ctrl+Alt+B
+show_console=false
 
-# 视频采集：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
-[video]
+# 窗口快捷键（空值表示禁用这个键）
+[keys]
+back=Esc
+home=Home
+screenshot=Ctrl+Shift+S
+fullscreen=F11
+
+# 拖文件传到设备上的哪个目录
+[transfer]
+upload_dir=/sdcard/Download/QmlScrcpy
+
+# 视频采集（有线）：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
+[video_wired]
 max_size=0
 bit_rate=8000000
 # 帧率上限：0 = 不限。它只是上限，能不能跑到看应用自己：
@@ -133,12 +115,13 @@ max_fps=0
 
 # 无线连接单独一套（串号里带冒号就用这组）：6M 在局域网下够用且不排队
 # 码率同时也约束帧率：实测 2M 只出 72 帧、6M 94 帧、12M 114 帧
-[decode]
-hardware=1
-
 [video_wireless]
 bit_rate=6000000
-max_fps=0)";
+max_fps=0
+
+# 硬解：1 = d3d12va 硬解，0 = 软解
+[decode]
+hardware=1)";
 
 } // namespace
 
@@ -148,6 +131,7 @@ AppSettings::AppSettings(QObject *parent) : QObject(parent)
     QDir().mkpath(ConfigDirPath());
     EnsureDefaultConfig();
     EnsureDefaultWindow();
+    MigrateLegacyKeys();
 }
 
 // config.ini 不存在时写一份带注释的模板
@@ -187,6 +171,88 @@ void AppSettings::EnsureDefaultWindow()
     file.close();
 }
 
+// 一次性迁移：老版本把"界面改过的设置"写在 window.ini 里，现在统一放 config.ini。
+// 规则：config.ini 里没有这个键才搬（别覆盖用户手改的值），搬完从 window.ini 删掉
+void AppSettings::MigrateLegacyKeys()
+{
+    // 这些前缀属于"设置"，应该待在 config.ini；其余（device、几何）本来就是状态，留在 window.ini
+    // decode/ 只删不搬：老 window.ini 里的 hardware 是死键，config.ini 里的那份才是真的
+    static const char *const kSettingPrefixes[] = {
+        "input/", "keys/", "transfer/", "ui/boss_key", "ui/show_console", "video_wired/", "video_wireless/",
+    };
+    static const char *const kDroppedPrefixes[] = {"decode/"};
+
+    QSettings &window = WindowStore();
+    QSettings &config = ConfigStore();
+    bool moved = false;
+
+    // 先把 window.ini 里的设置搬走
+    const QStringList window_keys = window.allKeys();
+    for (const QString &key : window_keys)
+    {
+        bool is_setting = false;
+        for (const char *prefix : kSettingPrefixes)
+        {
+            if (key.startsWith(QLatin1String(prefix)))
+            {
+                is_setting = true;
+                break;
+            }
+        }
+        if (!is_setting)
+        {
+            continue;
+        }
+
+        const QVariant value = window.value(key);
+        const QString existing = config.value(key).toString();
+        if (existing.isEmpty())
+        {
+            config.setValue(key, value);
+        }
+        window.remove(key);
+        moved = true;
+    }
+
+    // 死键直接删掉（config.ini 里那份才是生效的）
+    for (const QString &key : window.allKeys())
+    {
+        for (const char *prefix : kDroppedPrefixes)
+        {
+            if (key.startsWith(QLatin1String(prefix)))
+            {
+                window.remove(key);
+                moved = true;
+                break;
+            }
+        }
+    }
+
+    // 老的 [video] 段改名成 [video_wired]，和 wireless 那套对齐
+    const QStringList config_keys = config.allKeys();
+    for (const QString &key : config_keys)
+    {
+        if (!key.startsWith(QLatin1String("video/")))
+        {
+            continue;
+        }
+        const QString renamed = QStringLiteral("video_wired/") + key.mid(6);
+        if (!config.contains(renamed))
+        {
+            config.setValue(renamed, config.value(key));
+        }
+        config.remove(key);
+        moved = true;
+    }
+
+    if (moved)
+    {
+        config.sync();
+        window.sync();
+        qInfo() << "[app] 配置已迁移：设置集中到 config.ini，window.ini 只留窗口状态";
+    }
+}
+
 QString AppSettings::ConfigPath() const
 {
     return FilePathInConfigDir("config.ini");
@@ -213,21 +279,15 @@ int AppSettings::LogKeepDays() const
     return ConfigStore().value(QStringLiteral("log/keep_days"), 15).toInt();
 }
 
-// 滚轮模式：界面里选过的写 window.ini，没选过就用 config.ini 的默认值
+// 滚轮模式：只在 config.ini，界面改过就直接覆盖默认值
 QString AppSettings::WheelMode() const
 {
-    const QString chosen = WindowStore().value(QStringLiteral("input/wheel_mode")).toString();
-    if (!chosen.isEmpty())
-    {
-        return chosen;
-    }
     return ConfigStore().value(QStringLiteral("input/wheel_mode"), QStringLiteral("scroll")).toString();
 }
 
-// 记下用户选的滚轮模式，写 window.ini
 void AppSettings::SetWheelMode(const QString &mode)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("input/wheel_mode"), mode);
     store.sync();
 }
@@ -235,44 +295,42 @@ void AppSettings::SetWheelMode(const QString &mode)
 // 拖动模式一格滚轮拖多少像素：太小会被当点击，太大一下翻过头
 int AppSettings::DragPixels() const
 {
-    // 界面里调过的写 window.ini，没调过就用 config.ini 的默认值
-    int pixels = WindowStore().value(QStringLiteral("input/drag_pixels"), 0).toInt();
-    if (pixels <= 0)
-    {
-        pixels = ConfigStore().value(QStringLiteral("input/drag_pixels"), 60).toInt();
-    }
+    const int pixels = ConfigStore().value(QStringLiteral("input/drag_pixels"), 60).toInt();
     return pixels > 0 ? pixels : 60;
 }
 
 // 记下界面里调过的滑动像素
 void AppSettings::SetDragPixels(int pixels)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("input/drag_pixels"), pixels);
     store.sync();
 }
-// 左键拖拽倍率：窗口里调过的优先，没有就用 1.0（保持 1:1 手感）
+
+// 左键拖拽倍率：1.0 = 保持 1:1 手感
 double AppSettings::DragScale() const
 {
-    return WindowStore().value(QStringLiteral("input/drag_scale"), 1.0).toDouble();
+    return ConfigStore().value(QStringLiteral("input/drag_scale"), 1.0).toDouble();
 }
 
 // 记下拖拽倍率，改完立即生效
 void AppSettings::SetDragScale(double scale)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("input/drag_scale"), scale);
     store.sync();
 }
+
 // 捏合修饰键：Ctrl 默认；填 none 关掉这个功能
 QString AppSettings::PinchModifier() const
 {
-    return WindowStore().value(QStringLiteral("input/pinch_modifier"), QStringLiteral("ctrl")).toString();
+    return ConfigStore().value(QStringLiteral("input/pinch_modifier"), QStringLiteral("ctrl")).toString();
 }
+
 // 记下捏合修饰键，立即生效
 void AppSettings::SetPinchModifier(const QString &modifier)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("input/pinch_modifier"), modifier);
     store.sync();
 }
@@ -288,66 +346,45 @@ QString AppSettings::UpdateUrl() const
 {
     return ConfigStore().value(QStringLiteral("update/url")).toString();
 }
-// 拖文件上传的目标目录：界面里改过的优先，其次 config.ini，默认 Download/QmlScrcpy
+// 拖文件上传的目标目录：默认 Download/QmlScrcpy
 QString AppSettings::UploadDir() const
 {
-    const QString override_value = WindowStore().value(QStringLiteral("transfer/upload_dir")).toString();
-    if (!override_value.isEmpty())
-    {
-        return override_value;
-    }
-
-    return ConfigStore().value(QStringLiteral("transfer/upload_dir")).toString();
+    const QString value = ConfigStore().value(QStringLiteral("transfer/upload_dir")).toString();
+    return value.isEmpty() ? QStringLiteral("/sdcard/Download/QmlScrcpy") : value;
 }
 
 // 记下界面里改的上传目录
 void AppSettings::SetUploadDir(const QString &dir)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("transfer/upload_dir"), dir);
     store.sync();
 }
-// 窗口快捷键：window.ini 里为界面改过的值，config.ini 里可手改默认值；两处都空表示禁用
+
+// 窗口快捷键：空字符串表示禁用这个键
 QString AppSettings::Shortcut(const QString &name) const
 {
-    const QString from_window = WindowStore().value(QStringLiteral("keys/%1").arg(name)).toString();
-    if (!from_window.isEmpty())
-    {
-        return from_window;
-    }
-
     return ConfigStore().value(QStringLiteral("keys/%1").arg(name)).toString();
 }
 
 // 记下界面里改的快捷键（空字符串表示禁用）
 void AppSettings::SetShortcut(const QString &name, const QString &sequence)
 {
-    QSettings &store = WindowStore();
-    if (sequence.isEmpty())
-    {
-        store.setValue(QStringLiteral("keys/%1").arg(name), QString());
-    }
-    else
-    {
-        store.setValue(QStringLiteral("keys/%1").arg(name), sequence);
-    }
+    QSettings &store = ConfigStore();
+    store.setValue(QStringLiteral("keys/%1").arg(name), sequence);
     store.sync();
 }
-// 老板键的组合：界面里改过的（window.ini）优先，其次 config.ini
+
+// 老板键的组合：只在 config.ini
 QString AppSettings::BossKeyText() const
 {
-    const QString override_value = WindowStore().value(QStringLiteral("ui/boss_key")).toString();
-    if (!override_value.isEmpty())
-    {
-        return override_value;
-    }
     return ConfigStore().value(QStringLiteral("ui/boss_key")).toString();
 }
 
 // 记下界面里改的老板键
 void AppSettings::SetBossKeyText(const QString &text)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("ui/boss_key"), text);
     store.sync();
 }
@@ -355,7 +392,7 @@ void AppSettings::SetBossKeyText(const QString &text)
 // 控制台窗口要不要显示：默认不显示，只有用户在界面上打开过才显示
 bool AppSettings::ShowConsole() const
 {
-    return WindowStore().value(QStringLiteral("ui/show_console")).toBool();
+    return ConfigStore().value(QStringLiteral("ui/show_console")).toBool();
 }
 
 // 记下用户的选择，下次启动照这个来
@@ -382,7 +419,7 @@ void AppSettings::SetLastSerial(const QString &serial)
 // 采集长边上限：0 表示不缩放
 int AppSettings::VideoMaxSize() const
 {
-    return ConfigStore().value(QStringLiteral("video/max_size"), 0).toInt();
+    return ConfigStore().value(QStringLiteral("video_wired/max_size"), 0).toInt();
 }
 
 // 串号里带冒号（IP:端口）就算无线连接，用来选哪一套画质参数
@@ -391,51 +428,39 @@ QString AppSettings::VideoProfile(const QString &serial)
     return serial.contains(QLatin1Char(':')) ? QStringLiteral("wireless") : QStringLiteral("wired");
 }
 
-// 界面里调过的（window.ini 的 [video_<profile>]）优先，其次 config.ini 的同名段，最后兜底
+// 码率只在 config.ini，界面改过就直接覆盖默认值
 int AppSettings::VideoBitRate(const QString &profile) const
 {
     const QString key = QStringLiteral("video_%1/bit_rate").arg(profile.isEmpty() ? QStringLiteral("wired") : profile);
-    const int override_value = WindowStore().value(key, -1).toInt();
-    if (override_value > 0)
-    {
-        return override_value;
-    }
-
-
-    // config.ini 里没写 [video_wireless] 时退回到 [video]
     const int configured = ConfigStore().value(key, -1).toInt();
-    if (configured > 0)
-    {
-        return configured;
-    }
-    return ConfigStore().value(QStringLiteral("video/bit_rate"), 8000000).toInt();
+    return configured > 0 ? configured : ConfigStore().value(QStringLiteral("video_wired/bit_rate"), 8000000).toInt();
 }
 
-// 记下界面里调的码率；-1 表示没调过（回落到 config.ini）
+// 记下界面里调的码率
 void AppSettings::SetVideoBitRate(int bit_rate, const QString &profile)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("video_%1/bit_rate").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), bit_rate);
     store.sync();
 }
 
-// 采集帧率上限：界面里调过的优先；0 表示不限，120Hz 屏设备能跑到 120fps
+// 采集帧率上限：0 表示不限，120Hz 屏设备能跑到 120fps
 int AppSettings::VideoMaxFps(const QString &profile) const
 {
     const QString key = QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile);
     // 用 -1 当"没调过"的哨兵：0 是合法值（不限帧），不能拿 0 当默认
-    const int override_value = WindowStore().value(key, -1).toInt();
-    if (override_value >= 0)
+    const int configured = ConfigStore().value(key, -1).toInt();
+    if (configured >= 0)
     {
-        return override_value;
+        return configured;
     }
-    return ConfigStore().value(key, ConfigStore().value(QStringLiteral("video/max_fps"), 0)).toInt();
+    return ConfigStore().value(QStringLiteral("video_wired/max_fps"), 0).toInt();
 }
 
 // 记下界面里调的帧率上限
 void AppSettings::SetVideoMaxFps(int max_fps, const QString &profile)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), max_fps);
     store.sync();
 }
@@ -582,12 +607,12 @@ void AppSettings::SetDecodeThreads(int threads)
 // 连点间隔：0 表示关闭，按住空格时按这个间隔在鼠标位置连点
 int AppSettings::ClickerInterval() const
 {
-    return WindowStore().value(QStringLiteral("input/click_interval"), 0).toInt();
+    return ConfigStore().value(QStringLiteral("input/click_interval"), 0).toInt();
 }
 
 void AppSettings::SetClickerInterval(int ms)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();
     store.setValue(QStringLiteral("input/click_interval"), ms);
     store.sync();
 }
