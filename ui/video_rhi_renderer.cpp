@@ -117,12 +117,12 @@ void VideoRhiRenderer::initialize(QRhiCommandBuffer *cb)
             void *queue = iface->getResource(item_->window(), QSGRendererInterface::CommandQueueResource);
             qInfo() << "[rhi] 原生句柄 设备" << device << "队列" << queue;
             item_->ProvideDevice(device);
-    // 转色也要用同一个设备，早点建好，少一次首帧卡顿
-    QString convert_error;
-    if (!convert_.Initialize(device, &convert_error))
-    {
-        qWarning() << "[rhi] 转色初始化失败" << convert_error;
-    }
+            // 转色也要用同一个设备，早点建好，少一次首帧卡顿
+            QString convert_error;
+            if (!convert_.Initialize(device, &convert_error))
+            {
+                qWarning() << "[rhi] 转色初始化失败" << convert_error;
+            }
         }
     }
 }

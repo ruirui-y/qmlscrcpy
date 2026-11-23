@@ -65,7 +65,8 @@ void ServerArgsTest::DefaultArgs_shape()
     QCOMPARE(args.at(1), QStringLiteral("app_process"));
     QCOMPARE(args.at(2), QStringLiteral("/"));
     QCOMPARE(args.at(3), QStringLiteral("com.genymobile.scrcpy.Server"));
-    QCOMPARE(args.at(4), QStringLiteral("3.3.3"));
+    // 版本号跟着 jar 走：比对结构体里的值，换服务端时不会因为这里写死而过期
+    QCOMPARE(args.at(4), params.server_version_);
 
     QVERIFY(args.contains(QStringLiteral("video_bit_rate=8000000")));
     QVERIFY(args.contains(QStringLiteral("audio=false")));

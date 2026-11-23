@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QStandardPaths>
 
 namespace qsc::adb
 {
@@ -65,10 +66,16 @@ QList<AdbDevice> ParseDevices(const QByteArray &std_out)
     return devices;
 }
 
-// 取 adb 路径：只认程序目录下的 Tools\adb.exe
+// 取 adb 路径：先看程序目录下的 Tools\adb.exe，没有就用 PATH 里的（安装包会带 Tools，源码跑就靠 PATH）
 QString AdbPath()
 {
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/Tools/adb.exe");
+    const QString bundled = QCoreApplication::applicationDirPath() + QStringLiteral("/Tools/adb.exe");
+    if (QFileInfo::exists(bundled))
+    {
+        return bundled;
+    }
+    const QString on_path = QStandardPaths::findExecutable(QStringLiteral("adb"));
+    return on_path.isEmpty() ? bundled : on_path;
 }
 
 // 跑一条 adb 命令并等它结束，超时就杀进程

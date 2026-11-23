@@ -1,8 +1,10 @@
 ﻿# Gitee 发版脚本：建/更新发行版 + 上传安装包 + 更新 latest.json
 #
 # 用法：
-#   $env:GITEE_TOKEN = '你的私人令牌'      # Gitee → 设置 → 私人令牌 → 勾 projects
-#   powershell -ExecutionPolicy Bypass -File setup\release_gitee.ps1 -Version 0.1.5
+#   powershell -ExecutionPolicy Bypass -File setup\release_gitee.ps1 -Version 0.4.0
+#
+# 令牌来源（按顺序找）：-Token 参数 → $env:GITEE_TOKEN → setup\gitee_token.txt
+#   setup\*_token.txt 已被 .gitignore 排除，令牌不会进仓库
 #
 # 前置条件：本地已打 tag 并推到 Gitee（git push gitee --tags）。
 # 为什么用 curl 而不是 Invoke-RestMethod：PowerShell 5.1 发中文 JSON 时编码会被改成
@@ -18,6 +20,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo_root = Split-Path -Parent $PSScriptRoot
+
+# 令牌没通过参数或环境变量传进来时，读 setup\gitee_token.txt（这个文件被 .gitignore 排除）
+if ([string]::IsNullOrWhiteSpace($Token)) {
+    $token_file = Join-Path $PSScriptRoot 'gitee_token.txt'
+    if (Test-Path $token_file) {
+        $Token = (Get-Content $token_file -Raw).Trim()
+    }
+}
 
 function Fail([string]$message) {
     Write-Host "[失败] $message" -ForegroundColor Red

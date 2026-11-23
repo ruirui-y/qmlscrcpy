@@ -1,6 +1,6 @@
 # QmlScrcpy
 
-用 Qt Quick 重写的安卓投屏客户端，协议对齐 scrcpy 3.x（`third_party/scrcpy-server` 固定 3.3.3）。
+用 Qt Quick 重写的安卓投屏客户端，协议对齐 scrcpy 5.x（`third_party/scrcpy-server` 固定 5.0.1）。
 
 > 不是 [QtScrcpy](https://github.com/barry-ran/QtScrcpy) 的 fork。UI 和线程模型全部重写，
 > 只沿用协议事实：12 字节包头、控制消息布局、keymap JSON 格式。
@@ -390,7 +390,7 @@ QmlScrcpy/
 ├─ qml/                         控制窗（MainWindow）+ 投屏窗（VideoWindow）
 ├─ tests/                       QTest 单测，ctest 按名字跑
 ├─ docs/                        架构与各层文档
-└─ third_party/                 FFmpeg 4.4 + scrcpy-server 3.3.3
+└─ third_party/                 FFmpeg 8.1 + scrcpy-server 5.0.1
 ```
 
 ### 线程模型（读代码前先记住这个）
