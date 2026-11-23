@@ -610,17 +610,10 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
     }
 
     decoder_ = std::make_unique<qsc::stream::H264Decoder>();
-    QString error;
     // 配置里 [decode] hardware 决定走硬解还是软解
     decoder_->SetHardwareAllowed(AppSettings().DecodeHardware());
     decoder_->SetAsyncReadback(AppSettings().DecodeAsyncReadback());
     decoder_->SetSoftThreads(AppSettings().DecodeThreads());                                    // 软解线程数
-    if (!decoder_->Open(&error))
-    {
-        SetStatus(QStringLiteral("解码器打开失败：%1").arg(error));
-        TearDown();
-        return;
-    }
 
     QTcpSocket *video = session_->TakeVideoSocket();
     if (video == nullptr)
@@ -630,7 +623,8 @@ void DeviceController::ApplyConnected(const qsc::session::ConnectResult &result)
         return;
     }
 
-    reader_ = new qsc::stream::VideoReader(video, decoder_.get());
+    // 设备要等 RHI 初始化才有，把"取设备"的回调交给读线程，由它等到就绪再开硬解
+    reader_ = new qsc::stream::VideoReader(video, decoder_.get(), [this]() { return video_->Surface()->D3dDevice(); });
     // socket 在主线程建、却在视频线程读：先摘 parent 再搬过去
     video->setParent(nullptr);
     video->moveToThread(reader_);

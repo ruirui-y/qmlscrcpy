@@ -12,8 +12,9 @@ namespace qsc::stream
 
 using protocol::VideoPacketHeader;
 
-VideoReader::VideoReader(QTcpSocket *socket, H264Decoder *decoder, QObject *parent)
-    : QThread(parent), socket_(socket), decoder_(decoder)
+VideoReader::VideoReader(QTcpSocket *socket, H264Decoder *decoder, std::function<void *()> device_getter,
+                           QObject *parent)
+    : QThread(parent), socket_(socket), decoder_(decoder), device_getter_(std::move(device_getter))
 {
 }
 
@@ -61,6 +62,29 @@ void VideoReader::run()
     QByteArray buffer;                                                                          // 还没处理完的零碎字节，半帧就存在这儿，跨循环保留
     QVector<Frame> frames;                                                                      // 一次 Push 可能吐出多帧，所以用容器接
     QString error;                                                                              // 出错原因，往上传给界面
+
+    // 先等画布把 D3D12 设备交出来（RHI 初始化比连接晚，最多等 500ms）；
+    // 等不到就交空设备，解码器会退回自建 D3D11 或软解
+    void *device = nullptr;
+    for (int i = 0; i < 100 && device == nullptr && !stop_.load(); ++i)
+    {
+        if (device_getter_)
+        {
+            device = device_getter_();
+        }
+        if (device == nullptr)
+        {
+            msleep(5);
+        }
+    }
+    decoder_->SetExternalDevice(device);
+    if (!decoder_->Open(&error))
+    {
+        emit SigFailed(QStringLiteral("解码器打开失败：%1").arg(error));
+        emit SigEnded();
+        return;
+    }
+    qInfo() << "[decode] 硬解" << (decoder_->Hardware() ? (decoder_->D3d12() ? "d3d12va" : "d3d11va") : "关(软解)");
 
     // 死循环，只有出错或停机才靠 return 跳出
     for (;;)

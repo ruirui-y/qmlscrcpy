@@ -11,6 +11,7 @@
 #include <windows.h>
 
 #include <d3d11.h>
+#include <d3d12.h>
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 
@@ -21,6 +22,7 @@ extern "C"
 #include <libavutil/frame.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_d3d11va.h>
+#include <libavutil/hwcontext_d3d12va.h>
 #include <libavutil/pixfmt.h>
 }
 
@@ -159,9 +161,16 @@ bool CreateD3D11Device(ComPtr<ID3D11Device> &device, ComPtr<ID3D11DeviceContext>
     return false;
 }
 
-// 选像素格式：优先 D3D11（硬解纹理），没有就交给 FFmpeg 自己挑（会退回软解）
+// 选像素格式：d3d12va 和 d3d11va 都能用，但优先 d3d12（跟 Qt 同一个设备），都没有就交给 FFmpeg 自己挑（会退回软解）
 enum AVPixelFormat PickPixelFormat(AVCodecContext *, const enum AVPixelFormat *formats)
 {
+    for (const enum AVPixelFormat *format = formats; *format != AV_PIX_FMT_NONE; ++format)
+    {
+        if (*format == AV_PIX_FMT_D3D12)
+        {
+            return *format;
+        }
+    }
     for (const enum AVPixelFormat *format = formats; *format != AV_PIX_FMT_NONE; ++format)
     {
         if (*format == AV_PIX_FMT_D3D11)
@@ -232,7 +241,7 @@ bool H264Decoder::Open(QString *error)
     if (hardware_allowed_ && OpenHardware(&hardware_error))
     {
         hardware_ = true;
-        qInfo() << "[decode] 使用 D3D11VA 硬件解码";
+    qInfo() << "[decode] 硬解设备已就绪" << (d3d12_ ? "d3d12va（画布的 D3D12 设备）" : "d3d11va（自建）");
     }
     else
     {
@@ -261,8 +270,59 @@ bool H264Decoder::Open(QString *error)
     return true;
 }
 
-// 建 D3D11 设备并挂到解码器上下文：建不起来就返回 false，由调用方退回软解
+// 把画布给的 D3D12 设备挂到上下文上。FFmpeg 销毁硬件上下文时会 Release 这个设备，
+// 所以交出去之前要自己 AddRef，否则 Qt 的设备会被提前释放
+bool H264Decoder::OpenD3d12(QString *error)
+{
+    AVBufferRef *device_ref = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D12VA);
+    if (device_ref == nullptr)
+    {
+        *error = QStringLiteral("分配 d3d12va 设备上下文失败");
+        return false;
+    }
+
+    auto *hw_context = reinterpret_cast<AVHWDeviceContext *>(device_ref->data);
+    auto *d3d12 = static_cast<AVD3D12VADeviceContext *>(hw_context->hwctx);
+    d3d12->device = static_cast<ID3D12Device *>(external_device_);
+    reinterpret_cast<IUnknown *>(d3d12->device)->AddRef();                                      // 引用交给 FFmpeg 持有
+
+    if (av_hwdevice_ctx_init(device_ref) < 0)
+    {
+        av_buffer_unref(&device_ref);
+        *error = QStringLiteral("初始化 d3d12va 设备上下文失败");
+        return false;
+    }
+
+    hw_device_ = device_ref;
+    context_->hw_device_ctx = av_buffer_ref(hw_device_);
+    if (context_->hw_device_ctx == nullptr)
+    {
+        *error = QStringLiteral("引用 d3d12va 设备失败");
+        return false;
+    }
+
+    context_->get_format = PickPixelFormat;
+    d3d12_ = true;
+    return true;
+}
+
+// 硬解先试 d3d12va（跟 Qt 同一个设备），起不来再退回自建 D3D11 设备
 bool H264Decoder::OpenHardware(QString *error)
+{
+    if (external_device_ != nullptr)
+    {
+        QString d3d12_error;
+        if (OpenD3d12(&d3d12_error))
+        {
+            return true;
+        }
+        qWarning() << "[decode] d3d12va 起不来，退回 d3d11va：" << d3d12_error;
+    }
+    return OpenHardwareFallback(error);
+}
+
+// 建 D3D11 设备并挂到解码器上下文：建不起来就返回 false，由调用方退回软解
+bool H264Decoder::OpenHardwareFallback(QString *error)
 {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> device_context;
@@ -421,6 +481,12 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
 // 和 av_hwframe_transfer_data 的区别只有一个：暂存纹理是复用的，不是每帧新建。
 bool H264Decoder::DownloadFrame(AVFrame *hardware_frame, Frame &frame, QString *error)
 {
+    // d3d12va 的帧走另一条读回：FFmpeg 自己有 transfer 路径，省得我们录命令列表
+    if (d3d12_)
+    {
+        return DownloadD3d12(hardware_frame, frame, error);
+    }
+
     if (!d3d_ || d3d_->device == nullptr || d3d_->context == nullptr)
     {
         *error = QStringLiteral("没有自己的 D3D11 设备，无法下载");
@@ -541,6 +607,59 @@ bool H264Decoder::ReadStaging(int slot, UINT width, UINT height, Frame &frame, Q
     return true;
 }
 
+// d3d12va 的读回：让 FFmpeg 把硬解帧转成 NV12 的软件帧（它内部有自己的暂存纹理和围栏），
+// 再按行拷进缓冲池。这一步是第 2 步的过渡方案，第 3 步零拷贝做完整个删掉
+bool H264Decoder::DownloadD3d12(AVFrame *hardware_frame, Frame &frame, QString *error)
+{
+    AVFrame *software = av_frame_alloc();
+    if (software == nullptr)
+    {
+        *error = QStringLiteral("分配软件帧失败");
+        return false;
+    }
+    software->format = AV_PIX_FMT_NV12;                                                        // 跟 d3d12va 的原生格式一致，不做额外转换
+
+    const qint64 t0 = NowUs();
+    const int transfer_ret = av_hwframe_transfer_data(software, hardware_frame, 0);
+    if (transfer_ret < 0)
+    {
+        av_frame_free(&software);
+        *error = QStringLiteral("d3d12va 帧读回失败：%1").arg(AvErrorText(transfer_ret));
+        return false;
+    }
+    probe_.AddWait((NowUs() - t0) * 1000);                                                      // transfer 内部要等 GPU
+
+    const int width = software->width;
+    const int height = software->height;
+    const int chroma_height = (height + 1) / 2;
+    const int y_size = width * height;
+    const int uv_size = width * chroma_height;
+    const int total_size = y_size + uv_size;
+
+    auto pool = pool_;
+    std::shared_ptr<QByteArray> buffer(pool->Take(total_size), [pool](QByteArray *raw)
+    {
+        pool->Give(raw);
+    });
+
+    // NV12 两块：Y 在 data[0]，UV 交错在 data[1]，各自按自己的 linesize 走
+    const qint64 t1 = NowUs();
+    for (int row = 0; row < height; ++row)
+    {
+        memcpy(buffer->data() + row * width, software->data[0] + row * software->linesize[0], width);
+    }
+    for (int row = 0; row < chroma_height; ++row)
+    {
+        memcpy(buffer->data() + y_size + row * width, software->data[1] + row * software->linesize[1], width);
+    }
+    probe_.AddRead((NowUs() - t1) * 1000);
+    av_frame_free(&software);
+
+    const quint8 *base = reinterpret_cast<const quint8 *>(buffer->constData());
+    frame = Frame(QSize(width, height), PixelFormat::Nv12, base, base + y_size, nullptr, width, width, 0, buffer);
+    return true;
+}
+
 // 把解码器里已经解好的帧全取出来；硬解出来的纹理当场拷进暂存再读回内存
 bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
 {
@@ -571,21 +690,25 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
         if (!format_logged)
         {
             format_logged = true;
-            qInfo() << "[decode] 首帧格式" << av_frame->format << "（D3D11 = " << AV_PIX_FMT_D3D11 << "）";
+            qInfo() << "[decode] 首帧格式" << av_frame->format << "（D3D11 = " << AV_PIX_FMT_D3D11
+                      << " D3D12 = " << AV_PIX_FMT_D3D12 << "）";
         }
 
-        // 硬解给的是 D3D11 纹理，留到下一帧就可能被解码器池复用，必须当场拷走
-        if (av_frame->format == AV_PIX_FMT_D3D11)
+        // 硬解给的是显存纹理（D3D11 或 D3D12），留到下一帧就可能被解码器池复用，必须当场拷走
+        const bool is_hardware_frame =
+            av_frame->format == AV_PIX_FMT_D3D11 || av_frame->format == AV_PIX_FMT_D3D12;
+
+        // 硬解：读回内存，组装成 NV12 帧
+        if (is_hardware_frame)
         {
-            // 硬解：拷进复用的暂存纹理再读回内存，组装成 NV12 帧
             const qint64 download_start_us = probe_.Now();
             Frame frame;
             bool downloaded = false;
             QString download_error;
 
-            if (d3d_ && d3d_->device)
+            if (d3d12_ || (d3d_ && d3d_->device))
             {
-                // 快路径：复用暂存纹理，省掉每帧新建纹理的分配开销
+                // 快路径：d3d12va 走 FFmpeg 的 transfer，d3d11va 复用我们自己的暂存纹理
                 downloaded = DownloadFrame(av_frame, frame, &download_error);
             }
             else

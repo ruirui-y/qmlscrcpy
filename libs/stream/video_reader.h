@@ -26,7 +26,9 @@ class VideoReader : public QThread
     Q_OBJECT
 
 public:
-    VideoReader(QTcpSocket *socket, H264Decoder *decoder, QObject *parent = nullptr);
+    // device_getter：向画布要 D3D12 设备。RHI 初始化比连接晚，所以要等到设备就绪再开硬解
+    VideoReader(QTcpSocket *socket, H264Decoder *decoder, std::function<void *()> device_getter,
+                QObject *parent = nullptr);
 
     void Stop();                                                                                    // 置停止标志，最多等 1 秒
 
@@ -44,6 +46,7 @@ private:
 
     QTcpSocket *socket_;                                                                            // 已建好连接的视频 socket，本对象只读
     H264Decoder *decoder_;                                                                          // 解码器，和本线程一一对应，别跨线程共用
+    std::function<void *()> device_getter_;                                                         // 取画布的 D3D12 设备，可能返回空
     std::atomic<bool> stop_{false};
 };
 
