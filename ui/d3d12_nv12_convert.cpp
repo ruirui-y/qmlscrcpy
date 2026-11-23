@@ -39,8 +39,9 @@ VSOut VSMain(uint id : SV_VertexID)
 
 float4 PSMain(VSOut i) : SV_Target
 {
-    // 有限范围 BT.601：Y 先减 16/255，色度减 128/255
-    float y  = texY.Sample(samp, i.uv).r - 0.0625;
+    // 有限范围 BT.601：Y 先减 16/255，再乘 1.164 拉回全范围；色度减 128/255
+    // 1.164 这个系数漏了画面就会发灰发闷（对比度被压平），和 GLSL 那版必须一致
+    float y  = (texY.Sample(samp, i.uv).r - 0.0625) * 1.164;
     float2 uv = texUV.Sample(samp, i.uv) - 0.5;
     float3 rgb = float3(y + 1.596 * uv.y, y - 0.391 * uv.x - 0.813 * uv.y, y + 2.018 * uv.x);
     return float4(saturate(rgb), 1.0);
