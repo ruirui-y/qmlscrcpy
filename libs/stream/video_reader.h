@@ -1,13 +1,11 @@
 #pragma once
 
 #include <QByteArray>
-#include <QImage>
 #include <QString>
 #include <QThread>
 #include <atomic>
 
 #include "stream/frame.h"
-#include "stream/yuv_convert.h"
 
 class QTcpSocket;
 

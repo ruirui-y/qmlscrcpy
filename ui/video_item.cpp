@@ -72,7 +72,6 @@ bool ModifierDownNow(const QString &modifier)
     return down(VK_CONTROL);
 }
 
-
 } // namespace
 
 VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
@@ -168,13 +167,10 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
 // 视频线程调：存下最新一帧，不投递任何跨线程事件
 // 切换滚轮模式：scroll 发原生滚动事件，drag 模拟手指滑动
 
-
 // 视频线程调：存下最新一帧，等渲染线程来取
 // 滑动模式的手感：一格滚轮拖多少像素
 
-
 // 左键拖拽倍率：鼠标走 1 像素，设备上的手指走 scale 像素
-
 
 // 视频线程调：存下最新一帧，等渲染线程来取
 void VideoItem::Present(const Frame &frame)
@@ -240,7 +236,6 @@ void VideoItem::Present(const Frame &frame)
     }, Qt::QueuedConnection);
 }
 
-
 // 渲染线程调：取走最新一帧（连它的到达时刻和事件记录），没有就返回无效帧
 Frame VideoItem::TakePendingFrame(FrameTracePtr *trace_out, qint64 *arrive_us_out)
 {
@@ -269,8 +264,6 @@ QSize VideoItem::NotifiedFrameSize() const
     QMutexLocker locker(&mutex_);
     return notified_size_;
 }
-
-
 
 // 渲染线程调：把 Qt RHI 的 D3D12 设备存下来。FFmpeg 关闭硬件上下文时会 Release 这个设备，
 // 所以我们必须自己先 AddRef 留住一份，否则 Qt 的设备会被提前销毁。
@@ -377,20 +370,7 @@ void VideoItem::componentComplete()
     QObject::connect(window(), &QQuickWindow::frameSwapped, this, [this]() { MarkSwapped(); });
 
     // 渲染线程刚开始这一轮的时刻：它到 synchronize 之间的差就是 Qt 自己的准备工作
-    QObject::connect(window(), &QQuickWindow::beforeSynchronizing, this, [this]()
-    {
-    }, Qt::DirectConnection);
-
-    swap_hooked_ = true;
 }
-
-// 坐标换算器要用最新的画布尺寸和帧尺寸，每次事件前同步一次（都是几个赋值，开销可忽略）
-
-
-// 消息为空说明点在黑边上或者键没映射，不发
-
-
-// 鼠标按下：先拿焦点，再换算坐标发触摸按下
 
 #pragma region input // Qt 事件转发到 VideoInput
 void VideoItem::mousePressEvent(QMouseEvent *event) { input_->OnMousePress(event); }

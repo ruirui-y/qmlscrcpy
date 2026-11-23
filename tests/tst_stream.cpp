@@ -7,7 +7,6 @@
 #include "protocol/video_packet.h"
 #include "session/server_session.h"
 #include "stream/h264_decoder.h"
-#include "stream/yuv_convert.h"
 
 using namespace qsc::protocol;
 using namespace qsc::session;
@@ -135,12 +134,6 @@ void StreamTest::DecodeLiveStream()
     QVERIFY(first.StrideY() >= first.Size().width());
     QVERIFY(first.StrideU() >= first.Size().width() / 2);
 
-    // 走一遍 CPU 转换：这一步做的是 sws_scale，堆写坏的话在这里就会炸
-    YuvConvert convert;
-    const QImage rgb = convert.Convert(first);
-    QVERIFY(!rgb.isNull());
-    QCOMPARE(rgb.size(), first.Size());
-    qInfo() << "转换后" << rgb.size() << "格式" << rgb.format();
 
     video->close();
     delete video;

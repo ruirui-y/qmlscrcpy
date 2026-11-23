@@ -6,6 +6,7 @@ namespace qsc::app { class PlaybackSettings; class DeviceScanner; class WindowKe
 #include <QObject>
 #include <QSize>
 #include <QPointer>
+#include <QWindow>
 #include <QList>
 #include <QUrl>
 #include <QString>
