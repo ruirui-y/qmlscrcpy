@@ -201,7 +201,7 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *item)
         return;
     }
 
-    item_->AdvanceSyncPass();
+    item_->BeginSyncPass();
     const qint64 pass_start_us = item_->SyncStartUs();
     item_->SetPassArriveUs(0);
     item_->SetPassSyncUs(pass_start_us);
@@ -232,7 +232,7 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *item)
     item_->SetPassArriveUs(arrive_us);
     if (trace)
     {
-        trace->sync_us.store(item_->ClockUs() - pass_start_us);
+        trace->sync_us = item_->ClockUs() - pass_start_us;
     }
     trace_ = trace;
 }

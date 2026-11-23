@@ -244,7 +244,7 @@ void VideoItem::PinchBy(int notches, const QPointF &pos)
     {
         // 半径跨手势保留：滚得慢时每格都会新开一次手势，若每次重置回 40，
         // 上一格放大的效果就丢了，看起来像"每一格都在放大"
-        const qint64 now_us = clock_.nsecsElapsed() / 1000;
+        const qint64 now_us = ClockUs();
         if (pinch_last_us_ == 0 || (now_us - pinch_last_us_) > 2000000)
         {
             pinch_radius_ = 40;

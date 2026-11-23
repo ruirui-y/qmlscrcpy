@@ -74,18 +74,20 @@ bool ModifierDownNow(const QString &modifier)
 
 VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
 {
-    clock_.start();
+    probe_ = new FrameProbe();
     setFlag(QQuickItem::ItemHasContents, true);
     setAcceptedMouseButtons(Qt::LeftButton);                                                    // 只认左键：右键留给后面做菜单
 
     // 重绘由 Present 逐帧投递，尺寸变化也在 Present 里通知，GUI 线程不再有 8ms 轮询定时器
-    trace_enabled_ = qEnvironmentVariableIntValue("QS_TRACE_FRAMES") == 1;
-    qInfo() << "[perf] 逐帧追踪" << (trace_enabled_ ? "开" : "关");
 
     // 每秒结算一次：到达 / 上屏 / 丢帧率 / 延迟分布
     fps_timer_ = new QTimer(this);
     fps_timer_->setInterval(1000);
-    QObject::connect(fps_timer_, &QTimer::timeout, this, &VideoItem::ReportSecond);
+    QObject::connect(fps_timer_, &QTimer::timeout, this, [this]()
+    {
+        probe_->ReportSecond();
+        emit SigFpsChanged();
+    });
     fps_timer_->start();
 
     // 摇杆心跳：部分设备会把完全静止的触摸判成别的状态，每 100ms 补一条同样的 MOVE
@@ -135,7 +137,7 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
             return;
         }
 
-        const qint64 now_us = clock_.nsecsElapsed() / 1000;
+    const qint64 now_us = probe_->NowUs();
         if (clicker_next_us_ != 0 && now_us < clicker_next_us_)
         {
             return;
@@ -183,7 +185,7 @@ bool VideoItem::KeepAspect() const
 
 int VideoItem::Fps() const
 {
-    return fps_;
+    return probe_->Fps();
 }
 
 // 开关等比缩放，变了要重绘一次
@@ -226,14 +228,13 @@ void VideoItem::Present(const Frame &frame)
         return;
     }
 
-    const qint64 enqueue_us = clock_.nsecsElapsed() / 1000;
+    const qint64 enqueue_us = probe_->NowUs();
 
     // 到达间隔：分档计数在统计文件里
-    const qint64 prev_present_us = last_present_us_.fetchAndStoreRelaxed(enqueue_us);
-    const qint64 gap_us = prev_present_us > 0 ? (enqueue_us - prev_present_us) : 0;
-    AccountGap(gap_us);
+    const qint64 gap_us = probe_->TakeArrivalGap(enqueue_us);
+    probe_->AccountGap(gap_us);
 
-    const FrameTracePtr trace = MakeTrace(enqueue_us, gap_us);
+    const FrameTracePtr trace = probe_->BeginFrame(enqueue_us, gap_us);
 
     FrameTracePtr replaced_trace;
     qint64 replaced_alive_us = 0;
@@ -243,7 +244,7 @@ void VideoItem::Present(const Frame &frame)
         QMutexLocker locker(&mutex_);
         // 只留最新一帧：视频线程比渲染快的时候，旧帧直接覆盖，不排队
         replaced = has_pending_;
-        if (replaced && trace_enabled_)
+        if (replaced && probe_->Enabled())
         {
             replaced_trace = pending_trace_;
             replaced_alive_us = enqueue_us - pending_trace_->arrive_us;
@@ -251,17 +252,17 @@ void VideoItem::Present(const Frame &frame)
         size_changed = frame_size_ != frame.Size();
         pending_ = frame;
         pending_arrive_us_ = enqueue_us;
-        if (trace_enabled_)
+        if (probe_->Enabled())
         {
             pending_trace_ = trace;
         }
         has_pending_ = true;
         frame_size_ = frame.Size();
     }
-    frames_arrived_.ref();
+    probe_->MarkArrived();
     if (replaced)
     {
-        frames_dropped_.ref();
+        probe_->MarkDropped();
     }
 
     // 尺寸变了（设备旋转）才通知 QML；emit 只能在 GUI 线程做，投递一次
@@ -273,22 +274,13 @@ void VideoItem::Present(const Frame &frame)
     // 被顶掉的帧当场结算：它从到达到被覆盖活了多久
     if (replaced_trace)
     {
-        OnReplaced(replaced_trace, replaced_alive_us);
+        probe_->OnReplaced(replaced_trace, replaced_alive_us);
     }
 
     // 到帧就排队请求一次重绘：视频线程直接调 update() 不安全，投递到 GUI 线程执行
     QMetaObject::invokeMethod(this, [this, trace, enqueue_us]()
     {
-        const qint64 start_us = clock_.nsecsElapsed() / 1000;
-        if (trace)
-        {
-            trace->queue_us.store(start_us - trace->arrive_us);
-        }
         update();
-        if (trace)
-        {
-            trace->update_done_us.store(clock_.nsecsElapsed() / 1000);
-        }
     }, Qt::QueuedConnection);
 }
 
@@ -322,18 +314,7 @@ QSize VideoItem::NotifiedFrameSize() const
     return notified_size_;
 }
 
-// 记下本轮 synchronize 的起点，返回上一轮起点：两者相减就是渲染线程的轮次间隔
-qint64 VideoItem::AdvanceSyncPass()
-{
-    const qint64 now_us = clock_.nsecsElapsed() / 1000;
-    return sync_start_us_.fetchAndStoreRelaxed(now_us);
-}
 
-// 本轮 synchronize 的起始时刻
-qint64 VideoItem::SyncStartUs() const
-{
-    return sync_start_us_.loadRelaxed();
-}
 
 void VideoItem::Clear()
 {
@@ -344,7 +325,6 @@ void VideoItem::Clear()
     }
     // 断开时把按键重复计数一起清掉，下次连接不会从第 3 次重复开始
     keys_.Reset();
-    fps_last_arrived_ = 0;
     update();
 }
 
@@ -389,7 +369,6 @@ void VideoItem::componentComplete()
     // 渲染线程刚开始这一轮的时刻：它到 synchronize 之间的差就是 Qt 自己的准备工作
     QObject::connect(window(), &QQuickWindow::beforeSynchronizing, this, [this]()
     {
-        before_sync_us_.storeRelaxed(clock_.nsecsElapsed() / 1000);
     }, Qt::DirectConnection);
 
     swap_hooked_ = true;
