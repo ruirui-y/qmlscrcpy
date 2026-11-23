@@ -1,10 +1,10 @@
 {
-    "latest": "0.3.1",
+    "latest": "0.4.0",
     "minimum": "0.1.0",
     "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes": "解码设置进界面（硬解/软解、软解线程、读回方式），修复切回硬解红屏；安装包瘦身到 36MB",
-    "published_at": "2026-11-20",
-    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.3.1/QmlScrcpy_Setup_0.3.1_slim.exe",
-    "size": 37877686,
-    "sha256": "5a001d842499748627eaa46d0ca4836d6a40e49ae24bcebe6de4e51d41c5a5d0"
+    "notes": "渲染换成 D3D12 + 零拷贝：上屏 76→110 帧，每帧少搬 10.5MB；设置合并进 config.ini",
+    "published_at": "2026-11-23",
+    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.4.0/QmlScrcpy_Setup_0.4.0.exe",
+    "size": 50021336,
+    "sha256": "99bd6f903ed879c953e8d8f8b39626e2ae07d78d2c04e873788e761c6478d989"
 }
