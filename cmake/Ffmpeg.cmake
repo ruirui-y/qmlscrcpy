@@ -1,11 +1,11 @@
-# FFmpeg 预编译包（6.1.3，avcodec 60）放在 third_party/ffmpeg：
+# FFmpeg 预编译包（8.1，avcodec 62）放在 third_party/ffmpeg：
 #   include/      头文件
 #   lib/x64/      导入库
 #   bin/x64/      运行时 DLL
 #
 # 4.4 那份没有编 d3d11va（avutil 只导入 bcrypt/KERNEL32，没有 d3d11/dxgi），
-# 硬解根本建不出设备，所以换成 BtbN 的 6.1.3 lgpl-shared，它带 d3d11va/dxva2/qsv/cuda。
-# 旧版备份在 .refs/ffmpeg-4.4-backup（不入库）。
+# 硬解根本建不出设备，所以换成 BtbN 的 lgpl-shared 构建，它带 d3d11va/d3d12va/dxva2/qsv/cuda/vulkan。
+# 8.1 为 D3D12 改造升级（d3d12va）；6.1.3 备份在 .refs/ffmpeg-6.1.3-backup（不入库）。
 #
 # 用 INTERFACE 目标包起来，谁链接谁继承头文件路径和导入库，不用每个 target 重复写。
 set(QS_FFMPEG_ROOT "${PROJECT_SOURCE_DIR}/third_party/ffmpeg")
