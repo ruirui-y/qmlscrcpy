@@ -73,7 +73,7 @@ void VideoItem::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton)
     {
-        QQuickFramebufferObject::mousePressEvent(event);
+        QQuickRhiItem::mousePressEvent(event);
         return;
     }
 
@@ -90,7 +90,7 @@ void VideoItem::mouseMoveEvent(QMouseEvent *event)
     // 只有按着左键才发移动，否则设备会当成悬停乱跳
     if ((event->buttons() & Qt::LeftButton) == 0)
     {
-        QQuickFramebufferObject::mouseMoveEvent(event);
+        QQuickRhiItem::mouseMoveEvent(event);
         return;
     }
 
@@ -104,7 +104,7 @@ void VideoItem::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton)
     {
-        QQuickFramebufferObject::mouseReleaseEvent(event);
+        QQuickRhiItem::mouseReleaseEvent(event);
         return;
     }
 
@@ -120,7 +120,7 @@ void VideoItem::wheelEvent(QWheelEvent *event)
     const int notches = event->angleDelta().y() / 120;
     if (notches == 0)
     {
-        QQuickFramebufferObject::wheelEvent(event);
+        QQuickRhiItem::wheelEvent(event);
         return;
     }
 
@@ -177,7 +177,7 @@ void VideoItem::keyPressEvent(QKeyEvent *event)
     const QByteArray message = keys_.Press(event->key(), event->modifiers(), event->isAutoRepeat());
     if (message.isEmpty())
     {
-        QQuickFramebufferObject::keyPressEvent(event);
+        QQuickRhiItem::keyPressEvent(event);
         return;
     }
     EmitControlMessage(message);
@@ -202,7 +202,7 @@ void VideoItem::keyReleaseEvent(QKeyEvent *event)
     const QByteArray message = keys_.Release(event->key(), event->modifiers());
     if (message.isEmpty())
     {
-        QQuickFramebufferObject::keyReleaseEvent(event);
+        QQuickRhiItem::keyReleaseEvent(event);
         return;
     }
     EmitControlMessage(message);

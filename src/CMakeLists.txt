@@ -30,8 +30,8 @@ add_executable(QmlScrcpy ${qs_subsystem}
     control_writer.h
     update_checker.cpp
     update_checker.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_renderer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_renderer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_rhi_renderer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item_input.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item_trace.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/video_item.cpp
@@ -56,7 +56,8 @@ target_link_libraries(QmlScrcpy PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Network
-    Qt6::OpenGL                                                                                 # video_item 里的 QOpenGLShaderProgram / FBO 都在这个模块
+    Qt6::GuiPrivate                                                                              # QQuickRhiItem 的 QRhi 类型在私有头里
+    Qt6::OpenGL                                                                                 # 保留：调试用 GL 渲染器还在仓库里
 )
 
 # 多配置生成器会在 bin 下再套一层 Debug/，实际产物在 bin/<Config>/
@@ -116,3 +117,12 @@ add_custom_command(TARGET QmlScrcpy POST_BUILD
 )
 
 qs_deploy_ffmpeg(QmlScrcpy)
+
+# QSB 着色器拷到 exe 旁边的 shaders/：渲染器运行时按 appDir/shaders/*.qsb 加载
+add_custom_command(TARGET QmlScrcpy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:QmlScrcpy>/shaders"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/ui/shaders/quad.vert.qsb"
+        "${PROJECT_SOURCE_DIR}/ui/shaders/nv12.frag.qsb"
+        "$<TARGET_FILE_DIR:QmlScrcpy>/shaders"
+    COMMENT "拷贝 QSB 着色器到输出目录")

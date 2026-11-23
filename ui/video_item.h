@@ -5,7 +5,7 @@
 #include <QElapsedTimer>
 #include <QEvent>
 #include <QMutex>
-#include <QQuickFramebufferObject>
+#include <QQuickRhiItem>
 #include <QSize>
 
 #include <atomic>
@@ -56,7 +56,7 @@ using FrameTracePtr = std::shared_ptr<FrameTrace>;
 // 逐帧追踪打印：画布的丢帧路径和统计文件都要用
 void PrintTrace(const FrameTracePtr &trace, bool swapped, qint64 alive_us);
 
-class VideoItem : public QQuickFramebufferObject
+class VideoItem : public QQuickRhiItem
 {
     Q_OBJECT
     Q_PROPERTY(QSize frameSize READ FrameSize NOTIFY SigFrameSizeChanged)
@@ -66,7 +66,7 @@ class VideoItem : public QQuickFramebufferObject
 public:
     explicit VideoItem(QQuickItem *parent = nullptr);
 
-    Renderer *createRenderer() const override;
+    QQuickRhiItemRenderer *createRenderer() override;
 
     QSize FrameSize() const;                                                                    // 最近一帧的尺寸，QML 里用来显示和算宽高比
     bool KeepAspect() const;

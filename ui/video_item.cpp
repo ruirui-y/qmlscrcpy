@@ -1,7 +1,7 @@
 #include "ui/video_item.h"
 
 #include "stream/video_traffic.h"
-#include "ui/video_renderer.h"
+#include "ui/video_rhi_renderer.h"
 
 #include <QDebug>
 #include <QGuiApplication>
@@ -76,7 +76,7 @@ bool ModifierDownNow(const QString &modifier)
 
 } // namespace
 
-VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
+VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
 {
     clock_.start();
     setFlag(QQuickItem::ItemHasContents, true);
@@ -169,9 +169,9 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickFramebufferObject(parent)
     pinch_watch_timer_->start();
 }
 
-QQuickFramebufferObject::Renderer *VideoItem::createRenderer() const
+QQuickRhiItemRenderer *VideoItem::createRenderer()
 {
-    return new qsc::ui::YuvRenderer;
+    return new VideoRhiRenderer(const_cast<VideoItem *>(this));
 }
 
 QSize VideoItem::FrameSize() const
@@ -379,7 +379,7 @@ void VideoItem::geometryChange(const QRectF &new_geometry, const QRectF &old_geo
 // 之前放在每帧的队列回调里，Qt6 下 update() 会同步进渲染循环再回到这里，栈直接爆掉
 void VideoItem::componentComplete()
 {
-    QQuickFramebufferObject::componentComplete();
+    QQuickRhiItem::componentComplete();
 
     if (window() == nullptr)
     {
