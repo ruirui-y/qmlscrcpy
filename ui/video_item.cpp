@@ -1,6 +1,7 @@
 #include "ui/video_item.h"
 
 #include "stream/video_traffic.h"
+#include "ui/video_input.h"
 #include "ui/video_rhi_renderer.h"
 
 #include <QDebug>
@@ -75,6 +76,12 @@ bool ModifierDownNow(const QString &modifier)
 VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
 {
     probe_ = new FrameProbe();
+    input_ = new VideoInput(this);
+    QObject::connect(input_, &VideoInput::SigControlMessage, this, &VideoItem::SigControlMessageReady);
+    QObject::connect(input_, &VideoInput::SigPinchingChanged, this, &VideoItem::SigPinchingChanged);
+    QObject::connect(input_, &VideoInput::SigMapModeChanged, this, &VideoItem::SigMapModeChanged);
+    QObject::connect(input_, &VideoInput::SigKeyMapChanged, this, &VideoItem::SigKeyMapChanged);
+    QObject::connect(input_, &VideoInput::SigRecordingChanged, this, &VideoItem::SigRecordingChanged);
     setFlag(QQuickItem::ItemHasContents, true);
     setAcceptedMouseButtons(Qt::LeftButton);                                                    // 只认左键：右键留给后面做菜单
 
@@ -93,77 +100,25 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
     // 摇杆心跳：部分设备会把完全静止的触摸判成别的状态，每 100ms 补一条同样的 MOVE
     keymap_tick_timer_ = new QTimer(this);
     keymap_tick_timer_->setInterval(100);
-    QObject::connect(keymap_tick_timer_, &QTimer::timeout, this, [this]()
-    {
-        if (map_mode_ != 1)
-        {
-            return;
-        }
-        for (const qsc::input::KeyMapAction &action : key_map_engine_.Tick())
-        {
-            EmitControlMessage(touch_.NormalizedTouch(action.pointer_id_, ActionCode(action.kind_), action.pos_));
-        }
-    });
+    QObject::connect(keymap_tick_timer_, &QTimer::timeout, this, [this]() { input_->TickKeymap(); });
     keymap_tick_timer_->start();
 
     // 映射键用轮询判断按下/松开：Qt 的自动重复事件在 Windows 上不可信，成对的 Press/Release 会互相干扰
     keymap_poll_timer_ = new QTimer(this);
     keymap_poll_timer_->setInterval(16);
-    QObject::connect(keymap_poll_timer_, &QTimer::timeout, this, &VideoItem::SlotKeyMapPoll);
+    QObject::connect(keymap_poll_timer_, &QTimer::timeout, this, [this]() { input_->TickKeymapPoll(); });
     keymap_poll_timer_->start();
 
     // 连点：按住空格时按设定间隔在鼠标位置连续点击
     clicker_timer_ = new QTimer(this);
     clicker_timer_->setInterval(10);
-    QObject::connect(clicker_timer_, &QTimer::timeout, this, [this]()
-    {
-        if (clicker_interval_ms_ <= 0 || map_mode_ == 2 || width() <= 0 || height() <= 0)
-        {
-            return;
-        }
-
-        // 位置直接查全局光标：不做 hover 跟踪，避免影响滚轮和拖动
-        const QPointF local = mapFromGlobal(QCursor::pos());
-        if (local.x() < 0 || local.y() < 0 || local.x() >= width() || local.y() >= height())
-        {
-            return;
-        }
-        clicker_pos_ = QPointF(local.x() / width(), local.y() / height());
-
-        // 空格没按着就什么都不做，按下去的瞬间重新计时
-        if ((::GetAsyncKeyState(VK_SPACE) & 0x8000) == 0)
-        {
-            clicker_next_us_ = 0;
-            return;
-        }
-
-    const qint64 now_us = probe_->NowUs();
-        if (clicker_next_us_ != 0 && now_us < clicker_next_us_)
-        {
-            return;
-        }
-        clicker_next_us_ = now_us + static_cast<qint64>(clicker_interval_ms_) * 1000;
-
-        // 用和鼠标点击相同的通道发：按下 + 20ms 后抬起
-        EmitControlMessage(touch_.NormalizedTouch(kClickerPointerId, 0, clicker_pos_));
-        const QPointF pos = clicker_pos_;
-        QTimer::singleShot(20, this, [this, pos]()
-        {
-            EmitControlMessage(touch_.NormalizedTouch(kClickerPointerId, 1, pos));
-        });
-    });
+    QObject::connect(clicker_timer_, &QTimer::timeout, this, [this]() { input_->TickClicker(); });
     clicker_timer_->start();
 
     // 松开修饰键时要抬两指，但窗口没焦点时收不到 keyRelease，所以每 250ms 问一次键盘状态兜底
     pinch_watch_timer_ = new QTimer(this);
     pinch_watch_timer_->setInterval(250);
-    QObject::connect(pinch_watch_timer_, &QTimer::timeout, this, [this]()
-    {
-        if (pinch_active_ && !ModifierDownNow(pinch_modifier_))
-        {
-            EndPinch();
-        }
-    });
+    QObject::connect(pinch_watch_timer_, &QTimer::timeout, this, [this]() { input_->TickPinchWatch(); });
     pinch_watch_timer_->start();
 }
 
@@ -201,24 +156,14 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
 
 // 视频线程调：存下最新一帧，不投递任何跨线程事件
 // 切换滚轮模式：scroll 发原生滚动事件，drag 模拟手指滑动
-void VideoItem::SetWheelMode(const QString &mode)
-{
-    touch_.SetWheelMode(mode == QStringLiteral("drag") ? qsc::input::WheelMode::Drag
-                                                       : qsc::input::WheelMode::Scroll);
-}
+
 
 // 视频线程调：存下最新一帧，等渲染线程来取
 // 滑动模式的手感：一格滚轮拖多少像素
-void VideoItem::SetDragPixels(int pixels)
-{
-    touch_.SetDragPixels(pixels);
-}
+
 
 // 左键拖拽倍率：鼠标走 1 像素，设备上的手指走 scale 像素
-void VideoItem::SetDragScale(double scale)
-{
-    touch_.SetDragScale(scale);
-}
+
 
 // 视频线程调：存下最新一帧，等渲染线程来取
 void VideoItem::Present(const Frame &frame)
@@ -324,7 +269,7 @@ void VideoItem::Clear()
         has_pending_ = false;
     }
     // 断开时把按键重复计数一起清掉，下次连接不会从第 3 次重复开始
-    keys_.Reset();
+    input_->ResetKeys();
     update();
 }
 
@@ -375,23 +320,18 @@ void VideoItem::componentComplete()
 }
 
 // 坐标换算器要用最新的画布尺寸和帧尺寸，每次事件前同步一次（都是几个赋值，开销可忽略）
-void VideoItem::SyncMapper()
-{
-    mapper_.SetFrameSize(FrameSize());
-    mapper_.SetItemSize(QSizeF(width(), height()));
-    mapper_.SetKeepAspect(KeepAspect());
-}
+
 
 // 消息为空说明点在黑边上或者键没映射，不发
-void VideoItem::EmitControlMessage(const QByteArray &message)
-{
-    if (message.isEmpty())
-    {
-        qCDebug(qsc::base::lcInput) << "消息为空，丢掉（点在黑边上或键没映射）";
-        return;
-    }
-    qCDebug(qsc::base::lcInput) << "发出消息" << message.size() << "字节" << message.left(2).toHex();
-    emit SigControlMessageReady(message);
-}
+
 
 // 鼠标按下：先拿焦点，再换算坐标发触摸按下
+
+#pragma region input // Qt 事件转发到 VideoInput
+void VideoItem::mousePressEvent(QMouseEvent *event) { input_->OnMousePress(event); }
+void VideoItem::mouseMoveEvent(QMouseEvent *event) { input_->OnMouseMove(event); }
+void VideoItem::mouseReleaseEvent(QMouseEvent *event) { input_->OnMouseRelease(event); }
+void VideoItem::wheelEvent(QWheelEvent *event) { input_->OnWheel(event); }
+void VideoItem::keyPressEvent(QKeyEvent *event) { input_->OnKeyPress(event); }
+void VideoItem::keyReleaseEvent(QKeyEvent *event) { input_->OnKeyRelease(event); }
+#pragma endregion

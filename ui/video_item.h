@@ -11,20 +11,16 @@
 #include <atomic>
 #include <memory>
 
-#include "input/coordinate_mapper.h"
-#include "input/key_controller.h"
 #include <QSet>
 #include <QVariantList>
 
-#include "input/keymap.h"
-#include "input/keymap_engine.h"
-#include "input/touch_controller.h"
 #include "stream/frame.h"
 
 
 class QTimer;
 
 #include "ui/frame_probe.h"
+#include "ui/video_input.h"
 
 class VideoItem : public QQuickRhiItem
 {
@@ -43,28 +39,41 @@ public:
     int Fps() const;
 
     void SetKeepAspect(bool keep_aspect);
-    void SetWheelMode(const QString &mode);                                                     // "scroll" 发滚动事件，"drag" 模拟滑动
-    void SetDragPixels(int pixels);                                                             // 滑动模式下一格滚轮拖多少像素
-    void SetDragScale(double scale);                                                            // 左键拖拽倍率，1.0 = 原样
-    void SetPinchModifier(const QString &modifier);                                             // 捏合缩放的修饰键：ctrl / alt / shift / ctrl_alt / none
-    bool IsPinching() const { return pinch_active_; }                                           // 现在是不是两指按着
-
-    // 映射模式：0 关（键盘照旧转发）/ 1 玩（映射生效）/ 2 编辑（叠加层，键盘不转发）
-    void SetMapMode(int mode);
-    int MapMode() const { return map_mode_; }
-    void SetKeyMapPath(const QString &path);                                                    // 换设备时给新的键位文件路径
-    QVariantList KeyMapItems() const;                                                            // 给 QML 叠加层读键位列表
-    int AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label);   // 新增键位，返回下标
-    void MoveKeyMapItem(int index, double x, double y);                                          // 拖动键位
-    void RemoveKeyMapItem(int index);                                                            // 删除键位
-    void SetSteerKeys(int index, const QString &up, const QString &down, const QString &left,
-                      const QString &right);                                                     // 改摇杆四个方向键
-    void SetClickerInterval(int ms);                                                             // 连点间隔，0 = 关闭
-    int ClickerInterval() const { return clicker_interval_ms_; }
-    void BeginKeyRecord(int index);                                                              // 进入录制：下一个按下的键绑到这个键位
-    bool Recording() const { return record_index_ >= 0; }
-    void BindRecordedKey(int qt_key);                                                            // QML 收到按键后调它完成绑定
-    void SaveKeyMap();                                                                           // 写回 JSON，编辑退出时调
+#pragma region input // 输入：全部转发到 VideoInput，别在这里加逻辑
+    void SetWheelMode(const QString &mode) { input_->SetWheelMode(mode); }
+    void SetDragPixels(int pixels) { input_->SetDragPixels(pixels); }
+    void SetDragScale(double scale) { input_->SetDragScale(scale); }
+    void SetPinchModifier(const QString &modifier) { input_->SetPinchModifier(modifier); }
+    bool IsPinching() const { return input_->IsPinching(); }
+    void SetMapMode(int mode) { input_->SetMapMode(mode); }
+    int MapMode() const { return input_->MapMode(); }
+    void SetKeyMapPath(const QString &path) { input_->SetKeyMapPath(path); }
+    QVariantList KeyMapItems() const { return input_->KeyMapItems(); }
+    int AddKeyMapItem(int type, const QString &key, double x, double y, const QString &label)
+    {
+        return input_->AddKeyMapItem(type, key, x, y, label);
+    }
+    void MoveKeyMapItem(int index, double x, double y) { input_->MoveKeyMapItem(index, x, y); }
+    void RemoveKeyMapItem(int index) { input_->RemoveKeyMapItem(index); }
+    void SetSteerKeys(int index, const QString &up, const QString &down, const QString &left, const QString &right)
+    {
+        input_->SetSteerKeys(index, up, down, left, right);
+    }
+    void SetClickerInterval(int ms) { input_->SetClickerInterval(ms); }
+    int ClickerInterval() const { return input_->ClickerInterval(); }
+    void BeginKeyRecord(int index) { input_->BeginKeyRecord(index); }
+    bool Recording() const { return input_->Recording(); }
+    void BindRecordedKey(int qt_key) { input_->BindRecordedKey(qt_key); }
+    void SaveKeyMap() { input_->SaveKeyMap(); }
+    // 基类事件转发：VideoInput 不是 QQuickItem 的子类，只能通过画布调回基类实现
+    void BaseMousePress(QMouseEvent *event) { QQuickRhiItem::mousePressEvent(event); }
+    void BaseMouseMove(QMouseEvent *event) { QQuickRhiItem::mouseMoveEvent(event); }
+    void BaseMouseRelease(QMouseEvent *event) { QQuickRhiItem::mouseReleaseEvent(event); }
+    void BaseWheel(QWheelEvent *event) { QQuickRhiItem::wheelEvent(event); }
+    void BaseKeyPress(QKeyEvent *event) { QQuickRhiItem::keyPressEvent(event); }
+    void BaseKeyRelease(QKeyEvent *event) { QQuickRhiItem::keyReleaseEvent(event); }
+    void TakeFocus() { forceActiveFocus(); }
+#pragma endregion
 
     // 视频线程调：把最新一帧放进来（引用计数，不拷像素），旧的直接丢掉
     void Present(const qsc::stream::Frame &frame);
@@ -107,18 +116,8 @@ protected:
     void keyReleaseEvent(QKeyEvent *event) override;
 
 private:
-    bool PinchModifierHeld(Qt::KeyboardModifiers modifiers) const;                              // 当前修饰键是不是捏合键
-    void PinchBy(int notches, const QPointF &pos);                                              // 按一格滚轮做一次捏合
-    void SlotKeyMapPoll();                                                                       // 轮询物理按键，状态变化才发触摸
-    void DispatchKeyMapActions(const QVector<qsc::input::KeyMapAction> &actions);                // 把动作翻成控制消息
-    void EndPinch();                                                                             // 抬起两指，结束捏合
     void NotifyFrameSize();                                                                     // GUI 线程：帧尺寸变了才发信号
-    void SyncMapper();                                                                          // 把画布尺寸、帧尺寸、缩放模式同步给坐标换算器
-    void EmitControlMessage(const QByteArray &message);                                         // 空消息直接丢，非空才发信号
 
-    qsc::input::CoordinateMapper mapper_;                                                       // 窗口坐标 → 视频帧坐标
-    qsc::input::TouchController touch_{&mapper_};                                               // 鼠标 → 触摸/滚轮消息
-    qsc::input::KeyController keys_;                                                            // 键盘 → 按键消息
 
     mutable QMutex mutex_;                                                                      // 视频线程写 pending_，渲染线程取走
     qsc::stream::Frame pending_;                                                                // 最新一帧，等渲染线程取走
@@ -129,25 +128,12 @@ private:
     QSize notified_size_;                                                                       // 已经通知给 QML 的尺寸
     std::atomic<bool> keep_aspect_{false};                                                      // true 保持宽高比居中，false 拉满
     FrameProbe *probe_ = nullptr;                                                                // 埋点：帧序号、分档、每秒统计
+    VideoInput *input_ = nullptr;                                                                // 输入：鼠标/键盘/键位映射/连点
 
     bool swap_hooked_ = false;                                                                  // frameSwapped 只接一次
-    QTimer *fps_timer_ = nullptr;                                                               // 每秒触发一次，负责结算统计
-    QTimer *keymap_tick_timer_ = nullptr;                                                        // 摇杆心跳：按住期间每 100ms 补一条 MOVE
-    QTimer *pinch_watch_timer_ = nullptr;                                                        // 100ms 轮询修饰键，兜住松手时窗口没焦点
-    QString pinch_modifier_ = QStringLiteral("ctrl");                                           // 当前捏合修饰键
-    bool pinch_active_ = false;                                                                 // 两根手指是否按着
-    QPointF pinch_center_;                                                                      // 捏合中心（画布坐标）
-    int pinch_radius_ = 40;                                                                     // 两指间距的一半，单位帧像素，跨手势保留
-    qsc::input::KeyMap key_map_;                                                                 // 当前设备的键位配置
-    qsc::input::KeyMapEngine key_map_engine_;                                                    // 按键 → 触摸动作
-    QString key_map_path_;                                                                       // config/keymap/<串号>.json
-    QTimer *clicker_timer_ = nullptr;                                                            // 连点：按住空格时按间隔在鼠标位置连点
-    int clicker_interval_ms_ = 0;                                                                // 0 = 关闭
-    qint64 clicker_next_us_ = 0;                                                                 // 下一次该点的时刻
-    QPointF clicker_pos_;                                                                        // 最近一次算出的连点位置（归一化）
-    int record_index_ = -1;                                                                      // 正在录制的键位下标，-1 表示没在录
-    int map_mode_ = 0;                                                                           // 0 关 / 1 玩 / 2 编辑
-    QSet<QString> polled_keys_;                                                                  // 轮询到的"当前按着"的键名
-    QTimer *keymap_poll_timer_ = nullptr;                                                        // 16ms 轮询物理按键，绕开 Qt 的重复事件
-    qint64 pinch_last_us_ = 0;                                                                  // 上一次捏合的时刻，用来判断要不要重置半径
+    QTimer *fps_timer_ = nullptr;                                                               // 每秒结算统计
+    QTimer *keymap_tick_timer_ = nullptr;                                                       // 摇杆心跳，100ms
+    QTimer *keymap_poll_timer_ = nullptr;                                                       // 16ms 轮询物理按键
+    QTimer *clicker_timer_ = nullptr;                                                           // 连点，10ms
+    QTimer *pinch_watch_timer_ = nullptr;                                                       // 250ms 捏合兜底
 };
