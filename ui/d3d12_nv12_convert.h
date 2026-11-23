@@ -28,6 +28,9 @@ public:
 
     bool Ready() const { return device_ != nullptr && pipeline_ != nullptr; }
 
+    qint64 LastRecordUs() const { return last_record_us_; }                                          // 录命令 + 提交花的时间
+    qint64 LastWaitUs() const { return last_wait_us_; }                                              // CPU 等围栏花的时间
+
 private:
     bool EnsurePipeline(QString *error);
     bool EnsureViews(void *nv12, int subresource, QString *error);
@@ -39,6 +42,9 @@ private:
     void *device_ = nullptr;                                                                    // ID3D12Device*，不持有引用
     void *pipeline_ = nullptr;                                                                  // ID3D12PipelineState*
     void *root_signature_ = nullptr;                                                            // ID3D12RootSignature*
+
+    qint64 last_record_us_ = 0;
+    qint64 last_wait_us_ = 0;
 };
 
 } // namespace qsc::ui

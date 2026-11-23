@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <windows.h>
 #include <QElapsedTimer>
 #include <QString>
 #include <QVector>
@@ -12,6 +13,7 @@ struct AVBufferRef;
 struct AVCodecContext;
 struct AVFrame;
 struct AVPacket;
+struct AVD3D12VASyncContext;
 
 namespace qsc::stream
 {
@@ -47,6 +49,7 @@ private:
     bool OpenHardware(QString *error);                                                          // 先试 d3d12va（用画布的设备），再试自建 D3D11 设备
     bool OpenD3d12(QString *error);                                                             // 把画布给的设备挂到上下文上，走 d3d12va
     bool DownloadD3d12(AVFrame *hardware_frame, Frame &frame, QString *error);                  // d3d12va 的读回交给 FFmpeg 的 transfer，再按行拷进缓冲池
+    bool WaitForDecodeFence(const AVD3D12VASyncContext &sync);                                     // 解码线程里等 GPU 写完
 
     AVCodecContext *context_ = nullptr;                                                         // 解码器上下文，Close 后置空
     AVPacket *packet_ = nullptr;                                                                // 复用一个包，避免每帧都分配
@@ -55,6 +58,7 @@ private:
     bool hardware_ = false;                                                                     // 下面 Push 的分支要看它
     bool d3d12_ = false;                                                                        // true = d3d12va（用外部设备），false = 自建 d3d11va
     void *external_device_ = nullptr;                                                           // 画布给的 ID3D12Device，不持有引用
+    void *fence_event_ = nullptr;                                                               // 等解码围栏用的事件对象
     QByteArray pending_config_;                                                                 // 还没拼出去的那份 SPS/PPS
 
     std::shared_ptr<FrameBufferPool> pool_;                                                     // 缓冲池（跨线程引用计数归还）

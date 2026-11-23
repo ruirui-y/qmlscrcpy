@@ -4,6 +4,7 @@
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -261,6 +262,7 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *item)
         {
             trace->sync_us = item_->ClockUs() - pass_start_us;
         }
+        trace_ = trace;                                                                         // 不赋值的话 render 那边拿不到这笔记录，逐帧追踪会整个断掉
         return;
     }
     frame_has_native_ = false;
@@ -376,6 +378,29 @@ void VideoRhiRenderer::RenderNativeFrame(QRhiCommandBuffer *cb)
 
     has_frame_ = false;
     native_frame_ = qsc::stream::Frame();                                                       // 画完就松掉，别一直占着 DPB
+
+    // 转色耗时拆开看：录命令+提交 vs CPU 等围栏，只在 QS_TRACE_FRAMES=1 时每 2 秒打一行
+    static const bool report_convert = qEnvironmentVariableIntValue("QS_TRACE_FRAMES") == 1;
+    static qint64 acc_record_us = 0;
+    static qint64 acc_wait_us = 0;
+    static int acc_frames = 0;
+    static QElapsedTimer report_timer;
+    if (!report_timer.isValid())
+    {
+        report_timer.start();
+    }
+    acc_record_us += convert_.LastRecordUs();
+    acc_wait_us += convert_.LastWaitUs();
+    ++acc_frames;
+    if (report_convert && report_timer.elapsed() >= 2000 && acc_frames > 0)
+    {
+        qInfo().nospace() << "[convert] " << acc_frames << " 帧：录命令+提交 " << (acc_record_us / acc_frames)
+                          << " us，等围栏 " << (acc_wait_us / acc_frames) << " us";
+        acc_record_us = 0;
+        acc_wait_us = 0;
+        acc_frames = 0;
+        report_timer.restart();
+    }
 
     const QRhiCommandBuffer::VertexInput input(vertex_buffer_, 0);
     cb->beginPass(renderTarget(), QColor::fromRgbF(0.0f, 0.0f, 0.0f, 1.0f), {1.0f, 0});

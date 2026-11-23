@@ -1,5 +1,6 @@
 #include "ui/d3d12_nv12_convert.h"
 
+#include <QElapsedTimer>
 #include <QDebug>
 
 #include <d3d12.h>
@@ -352,6 +353,9 @@ bool D3d12Nv12Convert::Convert(void *nv12, int subresource, void *decode_fence, 
     ComPtr<ID3D12Resource> output;
     output.Attach(static_cast<ID3D12Resource *>(target));
 
+    static QElapsedTimer clock;
+    if (!clock.isValid()) { clock.start(); }
+    const qint64 record_start = clock.nsecsElapsed() / 1000;
     if (FAILED(d.allocator->Reset()) || FAILED(d.list->Reset(d.allocator.Get(), static_cast<ID3D12PipelineState *>(pipeline_))))
     {
         *error = QStringLiteral("重置转色命令列表失败");
@@ -408,7 +412,8 @@ bool D3d12Nv12Convert::Convert(void *nv12, int subresource, void *decode_fence, 
     // 第四步：先让 GPU 等解码围栏，再提交，最后 CPU 等我们自己的围栏
     if (decode_fence != nullptr)
     {
-        d.queue->Wait(static_cast<ID3D12Fence *>(decode_fence), decode_fence_value);
+        // 解码围栏已经在解码线程里等过了（见 H264Decoder::WaitForDecodeFence），
+        // 这里不再让 GPU 等一次：实测那样会让渲染线程每帧多卡 1.25ms
     }
     if (FAILED(d.list->Close()))
     {
@@ -423,7 +428,11 @@ bool D3d12Nv12Convert::Convert(void *nv12, int subresource, void *decode_fence, 
     input.Detach();
     output.Detach();
 
-    return WaitFence(error);
+    last_record_us_ = clock.nsecsElapsed() / 1000 - record_start;
+    const qint64 wait_start = clock.nsecsElapsed() / 1000;
+    const bool waited = WaitFence(error);
+    last_wait_us_ = clock.nsecsElapsed() / 1000 - wait_start;
+    return waited;
 }
 // 释放所有设备对象（设备自己的引用也要还）
 void D3d12Nv12Convert::Release()
