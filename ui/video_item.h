@@ -31,6 +31,7 @@ class VideoItem : public QQuickRhiItem
 
 public:
     explicit VideoItem(QQuickItem *parent = nullptr);
+    ~VideoItem() override;                                                                      // 放掉设备那份引用
 
     QQuickRhiItemRenderer *createRenderer() override;
 
@@ -91,6 +92,10 @@ public:
     void SetPassArriveUs(qint64 arrive_us) { probe_->SetPassArrive(arrive_us); }
     void SetPassSyncUs(qint64 sync_us) { probe_->SetPassSync(sync_us); }
 
+    // 渲染线程调：把 Qt RHI 的 D3D12 设备交过来（内部 AddRef，画布持有一份）
+    void ProvideDevice(void *device);
+    void *D3dDevice() const;                                                                     // 渲染线程与解码线程共用：没就绪返回空
+
 signals:
     void SigFrameSizeChanged();
     void SigKeepAspectChanged();
@@ -129,6 +134,9 @@ private:
     std::atomic<bool> keep_aspect_{false};                                                      // true 保持宽高比居中，false 拉满
     FrameProbe *probe_ = nullptr;                                                                // 埋点：帧序号、分档、每秒统计
     VideoInput *input_ = nullptr;                                                                // 输入：鼠标/键盘/键位映射/连点
+
+    mutable QMutex device_mutex_;                                                                // d3d_device_ 跨线程读写
+    void *d3d_device_ = nullptr;                                                                 // Qt RHI 的 D3D12 设备，我们自己持有一份引用
 
     bool swap_hooked_ = false;                                                                  // frameSwapped 只接一次
     QTimer *fps_timer_ = nullptr;                                                               // 每秒结算统计

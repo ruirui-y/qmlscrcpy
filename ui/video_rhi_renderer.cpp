@@ -5,6 +5,8 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
 
 #include <atomic>
 
@@ -104,6 +106,19 @@ void VideoRhiRenderer::initialize(QRhiCommandBuffer *cb)
     QRhiResourceUpdateBatch *batch = rhi_->nextResourceUpdateBatch();
     batch->uploadStaticBuffer(vertex_buffer_, kQuadVertices);
     cb->resourceUpdate(batch);
+
+    // 把 Qt 的 D3D12 设备转交给画布，解码器之后从这里取（见 docs/03-视频与解码/零拷贝架构.md）
+    if (item_ != nullptr && item_->window() != nullptr)
+    {
+        QSGRendererInterface *iface = item_->window()->rendererInterface();
+        if (iface != nullptr)
+        {
+            void *device = iface->getResource(item_->window(), QSGRendererInterface::DeviceResource);
+            void *queue = iface->getResource(item_->window(), QSGRendererInterface::CommandQueueResource);
+            qInfo() << "[rhi] 原生句柄 设备" << device << "队列" << queue;
+            item_->ProvideDevice(device);
+        }
+    }
 }
 
 // 按帧尺寸建/重建两张平面纹理，以及绑定和管线

@@ -19,6 +19,7 @@
 #include <QTimer>
 #include <QQuickWindow>
 #include <windows.h>
+#include <unknwn.h>                                                                              // IUnknown：设备引用计数
 
 #include <cstring>
 
@@ -120,6 +121,15 @@ VideoItem::VideoItem(QQuickItem *parent) : QQuickRhiItem(parent)
     pinch_watch_timer_->setInterval(250);
     QObject::connect(pinch_watch_timer_, &QTimer::timeout, this, [this]() { input_->TickPinchWatch(); });
     pinch_watch_timer_->start();
+}
+
+VideoItem::~VideoItem()
+{
+    if (d3d_device_ != nullptr)
+    {
+        reinterpret_cast<IUnknown *>(d3d_device_)->Release();
+        d3d_device_ = nullptr;
+    }
 }
 
 QQuickRhiItemRenderer *VideoItem::createRenderer()
@@ -260,6 +270,37 @@ QSize VideoItem::NotifiedFrameSize() const
 }
 
 
+
+// 渲染线程调：把 Qt RHI 的 D3D12 设备存下来。FFmpeg 关闭硬件上下文时会 Release 这个设备，
+// 所以我们必须自己先 AddRef 留住一份，否则 Qt 的设备会被提前销毁。
+void VideoItem::ProvideDevice(void *device)
+{
+    if (device == nullptr)
+    {
+        return;
+    }
+
+    QMutexLocker locker(&device_mutex_);
+    if (d3d_device_ == device)
+    {
+        return;                                                                                 // 同一个设备只留一份引用
+    }
+
+    if (d3d_device_ != nullptr)
+    {
+        reinterpret_cast<IUnknown *>(d3d_device_)->Release();                                    // 换设备了，先放掉旧的
+    }
+    d3d_device_ = device;
+    reinterpret_cast<IUnknown *>(d3d_device_)->AddRef();
+    qInfo() << "[rhi] 设备已交给画布" << device;
+}
+
+// 解码线程与渲染线程都会问：设备还没就绪时返回空，调用方自己决定要不要等
+void *VideoItem::D3dDevice() const
+{
+    QMutexLocker locker(&device_mutex_);
+    return d3d_device_;
+}
 
 void VideoItem::Clear()
 {
