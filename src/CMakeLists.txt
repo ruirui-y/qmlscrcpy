@@ -57,7 +57,6 @@ target_link_libraries(QmlScrcpy PRIVATE
     Qt6::QuickControls2
     Qt6::Network
     Qt6::GuiPrivate                                                                              # QQuickRhiItem 的 QRhi 类型在私有头里
-    Qt6::OpenGL                                                                                 # 保留：调试用 GL 渲染器还在仓库里
 )
 
 # 多配置生成器会在 bin 下再套一层 Debug/，实际产物在 bin/<Config>/

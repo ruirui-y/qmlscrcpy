@@ -7,9 +7,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerOptions)
 include(Ffmpeg)
 
-# 6.5 是底线：VideoItem 是 QQuickFramebufferObject，Qt6 起它只能挂在 OpenGL 后端上，
+# 6.8 起：VideoItem 是 QQuickRhiItem，渲染后端由 RHI 决定（当前 D3D12），
 # 而"指定后端"这件事要有 RHI（6.0 才有），6.5 之后 API 才稳定
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network OpenGL)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network)
 message(STATUS "[QmlScrcpy] Qt ${Qt6_VERSION} @ ${Qt6_DIR}")
 
 # 当前这套 Qt 的根目录，部署时要用（Qt6_DIR 是 <root>/lib/cmake/Qt6，退三级回到 root）

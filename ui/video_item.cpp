@@ -11,10 +11,6 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QMutexLocker>
-#include <QOpenGLContext>
-#include <QOpenGLFramebufferObject>
-#include <QOpenGLFunctions>
-#include <QOpenGLShaderProgram>
 #include <QDir>
 #include <QFileInfo>
 #include <QKeySequence>
