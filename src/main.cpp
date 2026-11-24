@@ -1,4 +1,9 @@
 #include <QDebug>
+#ifdef _WIN32
+#    define WIN32_LEAN_AND_MEAN
+#    define NOMINMAX
+#    include <windows.h>
+#endif
 #include <QGuiApplication>
 #include <QQuickStyle>
 #include <QIcon>
@@ -281,5 +286,12 @@ int main(int argc, char *argv[])
     const int exit_code = app.exec();
 
     CleanupOnExit(controller);
+
+#ifdef _WIN32
+    // 场景图和 RHI 的析构会卡死：GUI 线程等渲染线程，等了 60 秒也不返回（见 docs/开发日志 P45）。
+    // 要做的清理都做完了，直接结束进程 —— ExitProcess 仍会跑 DLL 卸载，只是跳过 C++ 栈对象的析构
+    ::ExitProcess(static_cast<unsigned int>(exit_code));
+#else
     return exit_code;
+#endif
 }
