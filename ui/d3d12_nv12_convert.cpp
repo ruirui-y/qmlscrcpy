@@ -420,12 +420,7 @@ bool D3d12Nv12Convert::Convert(void *nv12, int subresource, void *decode_fence, 
     barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;             // 还给 RHI
     d.list->ResourceBarrier(2, barriers);
 
-    // 第四步：先让 GPU 等解码围栏，再提交，最后 CPU 等我们自己的围栏
-    if (decode_fence != nullptr)
-    {
-        // 解码围栏已经在解码线程里等过了（见 H264Decoder::WaitForDecodeFence），
-        // 这里不再让 GPU 等一次：实测那样会让渲染线程每帧多卡 1.25ms
-    }
+    // 第四步：提交，最后 CPU 等我们自己的围栏
     if (FAILED(d.list->Close()))
     {
         input.Detach();
@@ -433,6 +428,19 @@ bool D3d12Nv12Convert::Convert(void *nv12, int subresource, void *decode_fence, 
         *error = QStringLiteral("关闭转色命令列表失败");
         return false;
     }
+
+    // 解码围栏在解码线程里已经等过一次；那次是 CPU 侧等值到，万一超时或围栏没到，
+    // 采样就可能读到解了一半的纹理（表现为偶发半帧新半帧旧、色度发绿）。
+    // 这里用 GPU 侧兜底：围栏已完成就什么都不做，正常路径零开销，异常路径才排队等
+    if (decode_fence != nullptr)
+    {
+        auto *fence = static_cast<ID3D12Fence *>(decode_fence);
+        if (fence->GetCompletedValue() < decode_fence_value)
+        {
+            d.queue->Wait(fence, decode_fence_value);
+        }
+    }
+
     ID3D12CommandList *lists[] = {d.list.Get()};
     d.queue->ExecuteCommandLists(1, lists);
 
