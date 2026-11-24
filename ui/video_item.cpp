@@ -164,14 +164,6 @@ void VideoItem::SetKeepAspect(bool keep_aspect)
     update();
 }
 
-// 视频线程调：存下最新一帧，不投递任何跨线程事件
-// 切换滚轮模式：scroll 发原生滚动事件，drag 模拟手指滑动
-
-// 视频线程调：存下最新一帧，等渲染线程来取
-// 滑动模式的手感：一格滚轮拖多少像素
-
-// 左键拖拽倍率：鼠标走 1 像素，设备上的手指走 scale 像素
-
 // 视频线程调：存下最新一帧，等渲染线程来取
 void VideoItem::Present(const Frame &frame)
 {
