@@ -502,6 +502,7 @@ build\windows-debug\bin\Debug\QmlScrcpy.exe
 | [GPU 渲染改造](docs/03-视频与解码/GPU渲染改造.md) | D3D11 RHI 路线：spike 验证、8 个坑、设备握手、零拷贝三次失败的完整证据 |
 | [D3D12 迁移](docs/03-视频与解码/D3D12迁移.md) | 从 FBO+OpenGL 换到 RHI+D3D12：FFmpeg 升级、五个坑、埋点与输入拆分 |
 | [零拷贝架构](docs/03-视频与解码/零拷贝架构.md) | 线程模型定稿、现在与未来的逐环节耗时对照、四个同步点 |
+| [视频链路与图形API演进全景图](docs/经验知识/视频链路与图形API演进全景图.md) | 四代演进一条因果链：软解 → D3D11 读回 → D3D11 零拷贝失败 → D3D12 + RHI 零拷贝，含对比表与各代卡点 |
 | [Git 使用](docs/04-构建与发布/git使用.md) | 分支模型、回退与找回、实验分支保命顺序、draft PR、本项目踩过的 git 坑 |
 | [开发环境](docs/04-构建与发布/开发环境.md) | VS 文件夹视图丢 Git 图标：冷启动时序竞态，含 ActivityLog 取证与桌面脚本绕过 |
 | [Qt6 迁移](docs/03-视频与解码/Qt6迁移.md) | Qt5.15 → Qt6.8 全过程：断言崩溃、栈溢出、OpenGL 后端、部署布局、adb 路径 |
