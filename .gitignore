@@ -36,3 +36,6 @@ third_party/scrcpy-server-*
 
 # drawio 打开文件时自动生成的锁文件，不入库
 drawio/.$*
+# 代码走读导出产物（临时生成的合并 Markdown）与本地打好的 zip，都不进仓库
+export_part*.md
+QmlScrcpy.zip
