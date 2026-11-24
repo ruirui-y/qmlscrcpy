@@ -398,7 +398,7 @@ bool AppSettings::ShowConsole() const
 // 记下用户的选择，下次启动照这个来
 void AppSettings::SetShowConsole(bool show)
 {
-    QSettings &store = WindowStore();
+    QSettings &store = ConfigStore();                                                           // 读在 ConfigStore，写也必须写这里，否则重启就丢
     store.setValue(QStringLiteral("ui/show_console"), show);
     store.sync();
 }
