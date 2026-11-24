@@ -20,7 +20,6 @@ void DecodeProbe::BeginPush()
     timer_.start();
     pack_ns_ = 0;
     send_ns_ = 0;
-    download_ns_ = 0;
     mark_us_ = 0;
 }
 
@@ -45,19 +44,6 @@ void DecodeProbe::MarkSend()
     mark_us_ = now_us;
 }
 
-qint64 DecodeProbe::Now()
-{
-    return enabled_ ? timer_.nsecsElapsed() : 0;
-}
-
-void DecodeProbe::AddDownload(qint64 ns)
-{
-    if (enabled_)
-    {
-        download_ns_ += ns;
-    }
-}
-
 void DecodeProbe::EndFrame(bool hardware)
 {
     if (!enabled_)
@@ -65,13 +51,12 @@ void DecodeProbe::EndFrame(bool hardware)
         return;
     }
 
-    const qint64 drain_ns = timer_.nsecsElapsed() - mark_us_;                                   // 收帧：包含硬解下载
+    const qint64 drain_ns = timer_.nsecsElapsed() - mark_us_;                                   // 收帧：送包之后到这里的差
 
     ++frames_;
     stat_pack_ns_ += pack_ns_;
     stat_send_ns_ += send_ns_;
     stat_drain_ns_ += drain_ns;
-    stat_download_ns_ += download_ns_;
 
     const qint64 total_ns = pack_ns_ + send_ns_ + drain_ns;
     if (total_ns > stat_max_total_ns_)
@@ -92,7 +77,7 @@ void DecodeProbe::EndFrame(bool hardware)
     const qint64 total_avg_ns = (stat_pack_ns_ + stat_send_ns_ + stat_drain_ns_) / n;
     qInfo().nospace() << "[decode] 秒结 " << n << " 帧" << (hardware ? "（硬解）" : "（软解）")
                       << "：拼包 " << stat_pack_ns_ / n / 1000 << "us / 送包 " << stat_send_ns_ / n / 1000
-                      << "us / 收帧 " << stat_drain_ns_ / n / 1000 << "us"
+                      << "us / 收帧 " << stat_drain_ns_ / n / 1000 << "us / 合计 "
                       << total_avg_ns / 1000 << "us / 最慢 " << stat_max_total_ns_ / 1000 << "us";
 
     Reset();
@@ -105,8 +90,8 @@ void DecodeProbe::Reset()
     stat_pack_ns_ = 0;
     stat_send_ns_ = 0;
     stat_drain_ns_ = 0;
-    stat_download_ns_ = 0;
     stat_max_total_ns_ = 0;
 }
 
 } // namespace qsc::stream
+

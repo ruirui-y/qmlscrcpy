@@ -84,7 +84,7 @@ void VideoReader::run()
         emit SigEnded();
         return;
     }
-    qInfo() << "[decode] 硬解" << (decoder_->Hardware() ? (decoder_->D3d12() ? "d3d12va" : "d3d11va") : "关(软解)");
+    qInfo() << "[decode] 硬解" << (decoder_->Hardware() ? "d3d12va" : "关(软解)");
 
     // 死循环，只有出错或停机才靠 return 跳出
     for (;;)
@@ -158,3 +158,4 @@ void VideoReader::run()
 }
 
 } // namespace qsc::stream
+

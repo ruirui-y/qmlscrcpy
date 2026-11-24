@@ -21,58 +21,12 @@ extern "C"
 #include <libavutil/pixfmt.h>
 }
 
-
 namespace qsc::stream
 {
-
-// 帧缓冲池：复用渲染器画完的 QByteArray，避免每帧分配 5MB（缺页是主要成本）
-struct FrameBufferPool
-{
-    QByteArray *Take(int size);
-    void Give(QByteArray *buffer);
-
-    QMutex mutex;                                                                               // 解码线程取、渲染线程还，必须加锁
-    QVector<QByteArray *> free_list;                                                            // 空闲缓冲，最多留 3 个
-};
-
-QByteArray *FrameBufferPool::Take(int size)
-{
-    QMutexLocker lock(&mutex);
-    if (!free_list.isEmpty())
-    {
-        QByteArray *buffer = free_list.takeLast();
-        if (buffer->capacity() >= size)
-        {
-            return buffer;
-        }
-        delete buffer;
-    }
-    return new QByteArray(size, Qt::Uninitialized);
-}
-
-// 渲染线程画完那一帧时调用：引用计数归零 → 缓冲回到池子
-void FrameBufferPool::Give(QByteArray *buffer)
-{
-    QMutexLocker lock(&mutex);
-    if (free_list.size() < 3)
-    {
-        free_list.append(buffer);
-        return;
-    }
-    delete buffer;
-}
 
 namespace
 {
 
-// 单调时钟，微秒：只给临时探针用
-qint64 NowUs()
-{
-    using namespace std::chrono;
-    return duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
-}
-
-// 把 FFmpeg 的负错误码翻成能看懂的文字
 QString AvErrorText(int code)
 {
     char buffer[256] = {0};
@@ -86,13 +40,6 @@ enum AVPixelFormat PickPixelFormat(AVCodecContext *, const enum AVPixelFormat *f
     for (const enum AVPixelFormat *format = formats; *format != AV_PIX_FMT_NONE; ++format)
     {
         if (*format == AV_PIX_FMT_D3D12)
-        {
-            return *format;
-        }
-    }
-    for (const enum AVPixelFormat *format = formats; *format != AV_PIX_FMT_NONE; ++format)
-    {
-        if (*format == AV_PIX_FMT_D3D11)
         {
             return *format;
         }
@@ -118,14 +65,15 @@ Frame WrapFrame(AVFrame *av_frame)
 
 } // namespace
 
-H264Decoder::H264Decoder()
-    : pool_(std::make_shared<FrameBufferPool>())
-{
-}
+H264Decoder::H264Decoder() = default;
 
 H264Decoder::~H264Decoder()
 {
-    Close();
+    if (fence_event_ != nullptr)
+    {
+        ::CloseHandle(fence_event_);
+        fence_event_ = nullptr;
+    }
 }
 
 // 打开 H.264 解码器：先试 d3d12va 硬解，失败就退回软解
@@ -225,7 +173,6 @@ bool H264Decoder::OpenD3d12(QString *error)
     }
 
     context_->get_format = PickPixelFormat;
-    d3d12_ = true;
     return true;
 }
 
@@ -244,7 +191,6 @@ bool H264Decoder::OpenHardware(QString *error)
     *error = QStringLiteral("没有可用的 D3D12 设备，退回软解");
     return false;
 }
-
 
 // 关掉解码器并释放所有缓冲
 void H264Decoder::Close()
@@ -271,7 +217,7 @@ void H264Decoder::Close()
 
 // 送一个包进去，把解出来的帧追加到 frames（解码链路的总入口）
 // 【架构】线程：解码线程｜输入：裸 Annex-B 字节（含 SPS/PPS 的配置包）
-// 输出：Frame 列表，硬解时是「NV12 纹理 + 围栏」、软解时是三个 CPU 平面｜同步：见 DownloadD3d12
+// 输出：Frame 列表，硬解时是「NV12 纹理 + 围栏」、软解时是三个 CPU 平面｜同步：见 WrapHardwareFrame
 bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
                        QVector<Frame> &frames, QString *error)
 {
@@ -343,16 +289,12 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
     return true;
 }
 
-
-
-// d3d12va 的读回：让 FFmpeg 把硬解帧转成 NV12 的软件帧（它内部有自己的暂存纹理和围栏），
-// 再按行拷进缓冲池。这一步是第 2 步的过渡方案，第 3 步零拷贝做完整个删掉
-// d3d12va 的零拷贝：不读回内存，只把纹理和围栏交出去。
+// 硬解帧的包装：和软解的 WrapFrame 对称，只是这次交出去的是显存里的纹理而不是 CPU 平面
 // owner 持有 AVFrame 的一份引用，保证渲染期间这张纹理不会被解码器拿去解下一帧
 // 【架构】线程：解码线程｜输入：AV_PIX_FMT_D3D12 的 AVFrame（NV12 纹理，ID3D12Resource*）
 // 输出：Frame{ texture + subresource + fence + fence_value + owner }，像素不出显存
 // 同步：交出去之前 CPU 等一次 sync_ctx.fence（约 1.1ms），渲染线程拿到就是写完的
-bool H264Decoder::DownloadD3d12(AVFrame *hardware_frame, Frame &frame, QString *error)
+bool H264Decoder::WrapHardwareFrame(AVFrame *hardware_frame, Frame &frame, QString *error)
 {
     // AV_PIX_FMT_D3D12 的约定：data[0] 指向 AVD3D12VAFrame
     auto *native = static_cast<AVD3D12VAFrame *>(reinterpret_cast<void *>(hardware_frame->data[0]));
@@ -424,7 +366,7 @@ bool H264Decoder::WaitForDecodeFence(const AVD3D12VASyncContext &sync)
 
 // 把解码器里已经解好的帧全取出来
 // 【架构】线程：解码线程｜输入：AVCodecContext 里积压的 AVFrame
-// 输出：硬解交给 DownloadD3d12（不读回），软解直接包成 Frame 走 CPU 三平面
+// 输出：硬解交给 WrapHardwareFrame（不读回），软解直接包成 Frame 走 CPU 三平面
 // 同步：无额外同步，解出来的帧按返回顺序就是显示顺序
 bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
 {
@@ -459,22 +401,18 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
                       << " D3D12 = " << AV_PIX_FMT_D3D12 << "）";
         }
 
-        // 硬解帧只有 d3d12va 一种，留到下一帧就可能被解码器池复用，必须当场把引用转出去
-        // 不读回：只交纹理和解码围栏
-        const bool is_hardware_frame =
-            av_frame->format == AV_PIX_FMT_D3D11 || av_frame->format == AV_PIX_FMT_D3D12;
+        // 硬解帧只有 d3d12va 一种；留到下一帧就可能被解码器池复用，必须当场把纹理转出去
+        const bool is_hardware_frame = av_frame->format == AV_PIX_FMT_D3D12;
         if (is_hardware_frame)
         {
-            const qint64 download_start_us = probe_.Now();
             Frame frame;
-            QString download_error;
-            const bool downloaded = DownloadD3d12(av_frame, frame, &download_error);
-            probe_.AddDownload(probe_.Now() - download_start_us);
+            QString wrap_error;
+            const bool wrapped = WrapHardwareFrame(av_frame, frame, &wrap_error);
             av_frame_free(&av_frame);                                                       // 纹理引用已经转给 Frame 的 owner
 
-            if (!downloaded)
+            if (!wrapped)
             {
-                *error = download_error;
+                *error = wrap_error;
                 return false;
             }
 
@@ -496,3 +434,4 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
 }
 
 } // namespace qsc::stream
+
