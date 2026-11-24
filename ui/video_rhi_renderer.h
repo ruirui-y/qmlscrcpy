@@ -32,7 +32,10 @@ private:
     bool EnsureShaders();
     bool EnsurePipeline(const QSize &size);
     bool EnsureRgbaPipeline(const QSize &size);                                                 // 零拷贝：采样转色后的 RGBA 纹理
-    void RenderNativeFrame(QRhiCommandBuffer *cb);                                                   // 零拷贝那一趟：转色 + 画
+    void SyncNativeFrame(const qsc::stream::Frame &frame);                                       // 硬解：只存纹理结构体
+    void SyncSoftwareFrame(const qsc::stream::Frame &frame);                                     // 软解：逐行拷 Y/UV 两平面
+    void RenderNativeFrame(QRhiCommandBuffer *cb);                                               // 零拷贝那一趟：转色 + 画
+    void RenderSoftwareFrame(QRhiCommandBuffer *cb);                                             // 软解那一趟：上传两平面 + 画
     void ReleaseResources();
 
     VideoItem *item_ = nullptr;                                                                 // 画布，render 里回报埋点用

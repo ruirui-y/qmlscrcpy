@@ -4,7 +4,6 @@
 
 #include <QCoreApplication>
 #include <QDebug>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -255,22 +254,34 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *item)
         return;
     }
 
+    // 两条路径对称：硬解只搬结构体（像素留显存），软解逐行搬两个平面
     if (frame.HasNative())
     {
-        // 零拷贝：只搬结构体，像素留在显存
-        native_frame_ = frame;
-        frame_has_native_ = true;
-        frame_size_ = frame.Size();
-        has_frame_ = true;
-        item_->SetPassArriveUs(arrive_us);
-        if (trace)
-        {
-            trace->sync_us = item_->ClockUs() - pass_start_us;
-        }
-        trace_ = trace;                                                                         // 不赋值的话 render 那边拿不到这笔记录，逐帧追踪会整个断掉
-        return;
+        SyncNativeFrame(frame);
     }
+    else
+    {
+        SyncSoftwareFrame(frame);
+    }
+
+    item_->EndSyncPass(pass_start_us, arrive_us, trace);
+    trace_ = trace;                                                                             // 不赋值的话 render 那边拿不到这笔记录，逐帧追踪会整个断掉
+}
+
+// 硬解路径的同步：32 字节结构体搬过去就行，像素还在显存里
+void VideoRhiRenderer::SyncNativeFrame(const qsc::stream::Frame &frame)
+{
+    native_frame_ = frame;
+    frame_has_native_ = true;
+    frame_size_ = frame.Size();
+    has_frame_ = true;
+}
+
+// 软解路径的同步：Y/UV 逐行拷成紧凑缓冲（去掉行填充），像素得靠上传
+void VideoRhiRenderer::SyncSoftwareFrame(const qsc::stream::Frame &frame)
+{
     frame_has_native_ = false;
+    native_frame_ = qsc::stream::Frame();                                                       // 从硬解切软解时把上一张纹理放掉
 
     const QSize size = frame.Size();
     const int chroma_height = (size.height() + 1) / 2;
@@ -280,19 +291,13 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *item)
     {
         memcpy(plane_y_.data() + row * size.width(), frame.Y() + row * frame.StrideY(), size.width());
     }
-    for (int row = 0; row < chroma_height; ++row)
+    for (int chroma_row = 0; chroma_row < chroma_height; ++chroma_row)
     {
-        memcpy(plane_uv_.data() + row * size.width(), frame.U() + row * frame.StrideU(), size.width());
+        memcpy(plane_uv_.data() + chroma_row * size.width(), frame.U() + chroma_row * frame.StrideU(), size.width());
     }
 
     frame_size_ = size;
     has_frame_ = true;
-    item_->SetPassArriveUs(arrive_us);
-    if (trace)
-    {
-        trace->sync_us = item_->ClockUs() - pass_start_us;
-    }
-    trace_ = trace;
 }
 
 // 每帧的绘制入口：零拷贝走 RenderNativeFrame，软解走 CPU 两平面路径
@@ -305,30 +310,32 @@ void VideoRhiRenderer::render(QRhiCommandBuffer *cb)
         return;
     }
 
-    // 零拷贝：解码纹理在显存里，先转成 RGBA 写进 RHI 纹理，再走 rgba 管线
+    // 两条路径对称：解码纹理已经在显存就直接转色 + 画，否则先把 CPU 平面传上去
     if (frame_has_native_)
     {
         RenderNativeFrame(cb);
         return;
     }
+    RenderSoftwareFrame(cb);
+}
 
+// 软解那一趟：上传 Y/UV 两平面，再用 nv12 管线画到画布
+// 【架构】线程：渲染线程｜输入：plane_y_ / plane_uv_（CPU 上的紧凑 NV12，synchronize 里拷好）
+// 输出：画进 Qt 的画布纹理（RGBA8）｜同步：上传走 resourceUpdate，与后续 beginPass 由 RHI 排序
+void VideoRhiRenderer::RenderSoftwareFrame(QRhiCommandBuffer *cb)
+{
     if (!EnsurePipeline(frame_size_))
     {
         return;
     }
-    if (item_ == nullptr || !has_frame_ || !EnsurePipeline(frame_size_))
-    {
-        return;
-    }
 
-    const QSize target_size_for_log = renderTarget()->pixelSize();
+    const QSize target_size = renderTarget()->pixelSize();
     static QSize last_target;
-    if (last_target != target_size_for_log)
+    if (last_target != target_size)
     {
-        qInfo() << "[rhi] 渲染目标尺寸" << target_size_for_log;
-        last_target = target_size_for_log;
+        qInfo() << "[rhi] 渲染目标尺寸" << target_size;
+        last_target = target_size;
     }
-
 
     const qint64 draw_start_us = item_->ClockUs();
     // 上传必须发生在 beginPass 之前
@@ -343,7 +350,6 @@ void VideoRhiRenderer::render(QRhiCommandBuffer *cb)
     has_frame_ = false;
 
     const QRhiCommandBuffer::VertexInput input(vertex_buffer_, 0);
-    const QSize target_size = renderTarget()->pixelSize();
     cb->beginPass(renderTarget(), QColor::fromRgbF(0.0f, 0.0f, 0.0f, 1.0f), {1.0f, 0});
     cb->setGraphicsPipeline(pipeline_);
     cb->setViewport({0, 0, static_cast<float>(target_size.width()), static_cast<float>(target_size.height())});
@@ -389,28 +395,8 @@ void VideoRhiRenderer::RenderNativeFrame(QRhiCommandBuffer *cb)
     has_frame_ = false;
     native_frame_ = qsc::stream::Frame();                                                       // 画完就松掉，别一直占着 DPB
 
-    // 转色耗时拆开看：录命令+提交 vs CPU 等围栏，只在 QS_TRACE_FRAMES=1 时每 2 秒打一行
-    static const bool report_convert = qEnvironmentVariableIntValue("QS_TRACE_FRAMES") == 1;
-    static qint64 acc_record_us = 0;
-    static qint64 acc_wait_us = 0;
-    static int acc_frames = 0;
-    static QElapsedTimer report_timer;
-    if (!report_timer.isValid())
-    {
-        report_timer.start();
-    }
-    acc_record_us += convert_.LastRecordUs();
-    acc_wait_us += convert_.LastWaitUs();
-    ++acc_frames;
-    if (report_convert && report_timer.elapsed() >= 2000 && acc_frames > 0)
-    {
-        qInfo().nospace() << "[convert] " << acc_frames << " 帧：录命令+提交 " << (acc_record_us / acc_frames)
-                          << " us，等围栏 " << (acc_wait_us / acc_frames) << " us";
-        acc_record_us = 0;
-        acc_wait_us = 0;
-        acc_frames = 0;
-        report_timer.restart();
-    }
+    // 转色耗时交给探针累计（每 2 秒一行，只在 QS_TRACE_FRAMES=1 时打）
+    item_->RecordConvert(convert_.LastRecordUs(), convert_.LastWaitUs());
 
     const QRhiCommandBuffer::VertexInput input(vertex_buffer_, 0);
     cb->beginPass(renderTarget(), QColor::fromRgbF(0.0f, 0.0f, 0.0f, 1.0f), {1.0f, 0});

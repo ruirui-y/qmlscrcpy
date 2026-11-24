@@ -30,6 +30,14 @@ struct FrameTrace
 
 using FrameTracePtr = std::shared_ptr<FrameTrace>;
 
+// 一帧到画布时的公共前置结果：调用方不用再自己取时刻、算间隔
+struct FrameArrival
+{
+    qint64 now_us = 0;                                                                          // 这一帧到达的时刻
+    qint64 gap_us = 0;                                                                          // 与上一帧的到达间隔
+    FrameTracePtr trace;                                                                        // 没开逐帧追踪时为空
+};
+
 class FrameProbe
 {
 public:
@@ -40,20 +48,20 @@ public:
     qint64 NowUs() const { return clock_.nsecsElapsed() / 1000; }
 
     // ---- 视频线程 ----
-    FrameTracePtr BeginFrame(qint64 arrive_us, qint64 gap_us);                                  // 建追踪记录（未开追踪返回空）
-    qint64 TakeArrivalGap(qint64 now_us);                                                       // 算与上一帧的到达间隔
-    void AccountGap(qint64 gap_us);                                                             // 到达间隔分档
-    void OnReplaced(const FrameTracePtr &trace, qint64 alive_us);                               // 被新帧顶掉的旧帧
+    FrameArrival OnFrameArrived();                                                              // 到帧统一入口：取时刻、算间隔、分档、建追踪记录
     void MarkArrived();
     void MarkDropped();
+    void OnReplaced(const FrameTracePtr &trace, qint64 alive_us);                               // 被新帧顶掉的旧帧
 
     // ---- 渲染线程 ----
     void BeginSyncPass();                                                                       // 一轮 synchronize 开始
     qint64 SyncStartUs() const { return sync_start_us_; }
     void SetPassArrive(qint64 arrive_us) { pass_arrive_us_.storeRelaxed(arrive_us); }
     void SetPassSync(qint64 sync_us) { pass_sync_us_.storeRelaxed(sync_us); }
+    void EndSyncPass(qint64 sync_start_us, qint64 arrive_us, const FrameTracePtr &trace);        // 一轮 synchronize 收尾：记到达时刻与耗时
     void OnRenderEnd(qint64 draw_start_us, const FrameTracePtr &trace);
     void OnSwapped();                                                                           // frameSwapped
+    void RecordConvert(qint64 record_us, qint64 wait_us);                                       // 转色耗时累计，每 2 秒打一行
 
     // ---- 每秒结算（GUI 线程）----
     void ReportSecond();
@@ -62,10 +70,21 @@ public:
     int Fps() const { return fps_; }
 
 private:
+    // 上面三个入口的零件：只有 OnFrameArrived / EndSyncPass 会用
+    FrameTracePtr BeginFrame(qint64 arrive_us, qint64 gap_us);                                  // 建追踪记录（未开追踪返回空）
+    qint64 TakeArrivalGap(qint64 now_us);                                                       // 算与上一帧的到达间隔
+    void AccountGap(qint64 gap_us);                                                             // 到达间隔分档
+
     QElapsedTimer clock_;
 
     bool trace_enabled_ = false;
+    bool convert_report_ = false;                                                               // 转色统计是否打印（QS_TRACE_FRAMES=1）
     quint64 next_frame_id_ = 0;
+
+    qint64 convert_record_us_ = 0;                                                              // 累计：录命令 + 提交
+    qint64 convert_wait_us_ = 0;                                                                // 累计：CPU 等自己的围栏
+    int convert_frames_ = 0;                                                                    // 这一轮统计了几帧
+    QElapsedTimer convert_timer_;                                                               // 距上次打印过了多久
 
     FrameTracePtr swapped_trace_;                                                               // 刚提交完、等着打印的那一帧
 

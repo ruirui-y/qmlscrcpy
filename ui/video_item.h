@@ -91,8 +91,10 @@ public:
     QSize NotifiedFrameSize() const;                                                            // 已经报给渲染线程的帧尺寸
     void BeginSyncPass() { probe_->BeginSyncPass(); }                                                // 一轮 synchronize 开始
     qint64 SyncStartUs() const { return probe_->SyncStartUs(); }
+    void EndSyncPass(qint64 sync_start_us, qint64 arrive_us, const FrameTracePtr &trace) { probe_->EndSyncPass(sync_start_us, arrive_us, trace); }
     void MarkRenderEnd(qint64 draw_start_us, const FrameTracePtr &trace) { probe_->OnRenderEnd(draw_start_us, trace); }
     void MarkSwapped() { probe_->OnSwapped(); }
+    void RecordConvert(qint64 record_us, qint64 wait_us) { probe_->RecordConvert(record_us, wait_us); } // 转色耗时交给探针统计
     qint64 ClockUs() const { return probe_->NowUs(); }
     void SetPassArriveUs(qint64 arrive_us) { probe_->SetPassArrive(arrive_us); }
     void SetPassSyncUs(qint64 sync_us) { probe_->SetPassSync(sync_us); }

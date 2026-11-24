@@ -180,13 +180,8 @@ void VideoItem::Present(const Frame &frame)
         return;
     }
 
-    const qint64 enqueue_us = probe_->NowUs();
-
-    // 到达间隔：分档计数在统计文件里
-    const qint64 gap_us = probe_->TakeArrivalGap(enqueue_us);
-    probe_->AccountGap(gap_us);
-
-    const FrameTracePtr trace = probe_->BeginFrame(enqueue_us, gap_us);
+    const FrameArrival arrival = probe_->OnFrameArrived();
+    const FrameTracePtr trace = arrival.trace;
 
     FrameTracePtr replaced_trace;
     qint64 replaced_alive_us = 0;
@@ -199,11 +194,11 @@ void VideoItem::Present(const Frame &frame)
         if (replaced && probe_->Enabled())
         {
             replaced_trace = pending_trace_;
-            replaced_alive_us = enqueue_us - pending_trace_->arrive_us;
+            replaced_alive_us = arrival.now_us - pending_trace_->arrive_us;
         }
         size_changed = frame_size_ != frame.Size();
         pending_ = frame;
-        pending_arrive_us_ = enqueue_us;
+        pending_arrive_us_ = arrival.now_us;
         if (probe_->Enabled())
         {
             pending_trace_ = trace;
@@ -230,7 +225,7 @@ void VideoItem::Present(const Frame &frame)
     }
 
     // 到帧就排队请求一次重绘：视频线程直接调 update() 不安全，投递到 GUI 线程执行
-    QMetaObject::invokeMethod(this, [this, trace, enqueue_us]()
+    QMetaObject::invokeMethod(this, [this]()
     {
         update();
     }, Qt::QueuedConnection);

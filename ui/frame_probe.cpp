@@ -39,10 +39,22 @@ FrameProbe::FrameProbe()
 {
     clock_.start();
     trace_enabled_ = qEnvironmentVariableIntValue("QS_TRACE_FRAMES") == 1;
+    convert_report_ = trace_enabled_;
     qInfo() << "[perf] 逐帧追踪" << (trace_enabled_ ? "开" : "关");
 }
 
 FrameProbe::~FrameProbe() = default;
+
+// 到帧统一入口：把"取时刻 → 算间隔 → 分档 → 建追踪记录"收成一次调用
+FrameArrival FrameProbe::OnFrameArrived()
+{
+    FrameArrival arrival;
+    arrival.now_us = NowUs();
+    arrival.gap_us = TakeArrivalGap(arrival.now_us);
+    AccountGap(arrival.gap_us);
+    arrival.trace = BeginFrame(arrival.now_us, arrival.gap_us);
+    return arrival;
+}
 
 // 建这一帧的追踪记录：没开逐帧追踪时返回空，调用方不用判断
 FrameTracePtr FrameProbe::BeginFrame(qint64 arrive_us, qint64 gap_us)
@@ -110,6 +122,45 @@ void FrameProbe::BeginSyncPass()
 {
     const qint64 now_us = NowUs();
     sync_start_us_.storeRelaxed(now_us);
+}
+
+// 一轮 synchronize 收尾：这一轮取走那帧的到达时刻，以及 synchronize 本身花了多久
+void FrameProbe::EndSyncPass(qint64 sync_start_us, qint64 arrive_us, const FrameTracePtr &trace)
+{
+    pass_arrive_us_.storeRelaxed(arrive_us);
+    if (trace)
+    {
+        trace->sync_us = NowUs() - sync_start_us;
+    }
+}
+
+// 转色耗时：录命令/提交与 CPU 等围栏分开累计，每 2 秒打一行（只在 QS_TRACE_FRAMES=1 时打）
+void FrameProbe::RecordConvert(qint64 record_us, qint64 wait_us)
+{
+    if (!convert_report_)
+    {
+        return;
+    }
+    if (!convert_timer_.isValid())
+    {
+        convert_timer_.start();
+    }
+
+    convert_record_us_ += record_us;
+    convert_wait_us_ += wait_us;
+    ++convert_frames_;
+    if (convert_timer_.elapsed() < 2000 || convert_frames_ <= 0)
+    {
+        return;
+    }
+
+    qInfo().nospace() << "[convert] " << convert_frames_ << " 帧：录命令+提交 "
+                      << (convert_record_us_ / convert_frames_) << " us，等围栏 "
+                      << (convert_wait_us_ / convert_frames_) << " us";
+    convert_record_us_ = 0;
+    convert_wait_us_ = 0;
+    convert_frames_ = 0;
+    convert_timer_.restart();
 }
 
 // render() 画完：把绘制耗时写进这一帧的记录，等 frameSwapped 再结算
