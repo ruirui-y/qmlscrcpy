@@ -69,6 +69,7 @@ H264Decoder::H264Decoder() = default;
 
 H264Decoder::~H264Decoder()
 {
+    Close();                                                                                    // 兜底：没走 CloseDecoder 时，context/packet/hw_device 也不能漏
     if (fence_event_ != nullptr)
     {
         ::CloseHandle(fence_event_);
