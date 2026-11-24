@@ -77,6 +77,8 @@ bool VideoRhiRenderer::EnsureShaders()
 }
 
 // 首次初始化：拿到 RHI、建采样器和顶点缓冲（纹理等尺寸确定后在 render 里建）
+// 【架构】线程：渲染线程（Qt 会重复调，靠成员判空保证只做一次）｜输入：QRhiCommandBuffer
+// 输出：采样器 + 顶点缓冲 + 转色器初始化；顺手把 RHI 的 D3D12 设备交给画布｜同步：无
 void VideoRhiRenderer::initialize(QRhiCommandBuffer *cb)
 {
     if (rhi_ != nullptr && sampler_ != nullptr && vertex_buffer_ != nullptr)
@@ -229,6 +231,9 @@ void VideoRhiRenderer::ReleaseResources()
 }
 
 // Qt 在 GUI 线程调：只做内存拷贝和状态记录，不碰 GPU
+// 【架构】线程：GUI 线程（参数是 QQuickRhiItem*，QQuickItem 只能在这条线程碰）
+// 输入：画布取走的最新一帧——零拷贝时只有 32 字节结构体，CPU 路径是 NV12 两平面
+// 输出：native_frame_ 或 plane_y_/plane_uv_｜同步：靠 Qt 保证 synchronize 先于 render
 void VideoRhiRenderer::synchronize(QQuickRhiItem *item)
 {
     item_ = static_cast<VideoItem *>(item);
@@ -290,7 +295,9 @@ void VideoRhiRenderer::synchronize(QQuickRhiItem *item)
     trace_ = trace;
 }
 
-// 渲染线程：上传两平面 → 画一个铺满画布的矩形
+// 每帧的绘制入口：零拷贝走 RenderNativeFrame，软解走 CPU 两平面路径
+// 【架构】线程：渲染线程｜输入：native_frame_（NV12 纹理）或 plane_*_（CPU 平面）
+// 输出：画进 Qt 的画布纹理（RGBA8）｜同步：零拷贝路径的 fence 在 RenderNativeFrame 里等，这里不额外同步
 void VideoRhiRenderer::render(QRhiCommandBuffer *cb)
 {
     if (item_ == nullptr || !has_frame_)
@@ -350,6 +357,9 @@ void VideoRhiRenderer::render(QRhiCommandBuffer *cb)
 
 
 // 零拷贝那一趟：先让 GPU 把 NV12 转成 RGBA 写进 RHI 纹理，再走 rgba 管线把它画到画布
+// 【架构】线程：渲染线程｜输入：ID3D12Resource（NV12，解码器产出，交过来前已在解码线程等过围栏）
+// 输出：rgba_texture_（RGBA8，尺寸 = 渲染目标），再被 rgba 管线采样画进画布
+// 同步：转色命令在 D3d12Nv12Convert 自己的队列上，CPU 等它的 fence（约 0.17ms）后才交给 RHI 采样
 void VideoRhiRenderer::RenderNativeFrame(QRhiCommandBuffer *cb)
 {
     const QSize target_size = renderTarget()->pixelSize();
@@ -415,6 +425,8 @@ void VideoRhiRenderer::RenderNativeFrame(QRhiCommandBuffer *cb)
 }
 
 // 采样「已转色 RGBA 纹理」的管线。画布尺寸变了要重建纹理和绑定
+// 【架构】线程：渲染线程｜输入：rgba_texture_（RGBA8，由 D3d12Nv12Convert 写入）
+// 输出：rgba 管线 + 资源绑定 + 与画布同尺寸的纹理｜同步：依赖 Convert 返回时已经等过围栏
 bool VideoRhiRenderer::EnsureRgbaPipeline(const QSize &size)
 {
     if (rgba_pipeline_ != nullptr && rgba_texture_ != nullptr && rgba_texture_->pixelSize() == size)

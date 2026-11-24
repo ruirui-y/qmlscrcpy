@@ -154,6 +154,8 @@ bool D3d12Nv12Convert::PrepareQueue(QString *error)
 }
 
 // 建根签名和渲染管线。两个 SRV 走描述符表，采样器用静态采样器省一个堆
+// 【架构】线程：渲染线程（首次 Convert 前调一次）｜输入：HLSL 源码（运行时 D3DCompile 编译）
+// 输出：PSO + 根签名，目标格式按 Qt 的 RGBA8 走｜同步：无
 bool D3d12Nv12Convert::EnsurePipeline(QString *error)
 {
     if (pipeline_ != nullptr)
@@ -244,6 +246,9 @@ bool D3d12Nv12Convert::EnsurePipeline(QString *error)
 }
 
 // 给 Y 和 UV 两个平面各建一个 SRV：同一个资源，靠 PlaneSlice 区分
+// 【架构】线程：渲染线程｜输入：NV12 纹理（DXGI_FORMAT_NV12）+ 层号
+// 输出：描述符堆里两个 SRV（R8_UNORM PlaneSlice 0 是 Y，R8G8_UNORM PlaneSlice 1 是 UV）
+// 同步：无，只是建视图；同一个资源同一个层会复用，避免每帧重建
 bool D3d12Nv12Convert::EnsureViews(void *nv12, int subresource, QString *error)
 {
     Impl &d = *impl_;
@@ -310,6 +315,8 @@ bool D3d12Nv12Convert::WaitFence(QString *error)
 }
 
 // 初始化：拿到设备，建队列与管线
+// 【架构】线程：渲染线程（VideoRhiRenderer::initialize 里调）｜输入：Qt RHI 的 ID3D12Device
+// 输出：自己的 CommandQueue / Allocator / Fence / 描述符堆 / PSO｜同步：只用不做，Convert 时才提交
 bool D3d12Nv12Convert::Initialize(void *device, QString *error)
 {
     if (device == nullptr)
@@ -334,7 +341,10 @@ bool D3d12Nv12Convert::Initialize(void *device, QString *error)
     return true;
 }
 
-// 一趟 GPU 转色：等解码围栏 → 采样 NV12 写进目标纹理 → 等自己围栏
+// 一趟 GPU 转色：采样 NV12 写进目标纹理 → 等自己围栏
+// 【架构】线程：渲染线程｜输入：ID3D12Resource（DXGI_FORMAT_NV12，解码器产出，已由解码线程等过围栏）
+// 输出：写进 target（Qt 的 RGBA8 纹理），退出时资源状态已切回 PIXEL_SHADER_RESOURCE
+// 同步：① barrier 声明资源状态 ② 提交后 CPU 等自己的 fence（约 0.17ms）③ 解码围栏已在上游等过
 bool D3d12Nv12Convert::Convert(void *nv12, int subresource, void *decode_fence, quint64 decode_fence_value,
                               void *target, int width, int height, QString *error)
 {

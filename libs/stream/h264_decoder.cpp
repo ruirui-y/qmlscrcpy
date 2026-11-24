@@ -129,6 +129,8 @@ H264Decoder::~H264Decoder()
 }
 
 // 打开 H.264 解码器：先试 d3d12va 硬解，失败就退回软解
+// 【架构】线程：解码线程（VideoReader::run）｜输入：画布给的 ID3D12Device（第 1 步交出）
+// 输出：AVCodecContext，硬解时 hw_device_ctx 指向 d3d12va｜同步：无，Open 之前要 SetExternalDevice
 bool H264Decoder::Open(QString *error)
 {
     if (context_ != nullptr)
@@ -191,6 +193,8 @@ bool H264Decoder::Open(QString *error)
 
 // 把画布给的 D3D12 设备挂到上下文上。FFmpeg 销毁硬件上下文时会 Release 这个设备，
 // 所以交出去之前要自己 AddRef，否则 Qt 的设备会被提前释放
+// 【架构】线程：解码线程｜输入：VideoItem::D3dDevice() 取到的同一个 ID3D12Device
+// 输出：AV_HWDEVICE_TYPE_D3D12VA 上下文｜同步：AddRef 交接，谁持有谁释放
 bool H264Decoder::OpenD3d12(QString *error)
 {
     AVBufferRef *device_ref = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D12VA);
@@ -265,6 +269,9 @@ void H264Decoder::Close()
     probe_ = DecodeProbe();                                                                     // 重连后从零开始算
 }
 
+// 送一个包进去，把解出来的帧追加到 frames（解码链路的总入口）
+// 【架构】线程：解码线程｜输入：裸 Annex-B 字节（含 SPS/PPS 的配置包）
+// 输出：Frame 列表，硬解时是「NV12 纹理 + 围栏」、软解时是三个 CPU 平面｜同步：见 DownloadD3d12
 bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
                        QVector<Frame> &frames, QString *error)
 {
@@ -342,6 +349,9 @@ bool H264Decoder::Push(const QByteArray &data, bool is_config, qint64 pts_us,
 // 再按行拷进缓冲池。这一步是第 2 步的过渡方案，第 3 步零拷贝做完整个删掉
 // d3d12va 的零拷贝：不读回内存，只把纹理和围栏交出去。
 // owner 持有 AVFrame 的一份引用，保证渲染期间这张纹理不会被解码器拿去解下一帧
+// 【架构】线程：解码线程｜输入：AV_PIX_FMT_D3D12 的 AVFrame（NV12 纹理，ID3D12Resource*）
+// 输出：Frame{ texture + subresource + fence + fence_value + owner }，像素不出显存
+// 同步：交出去之前 CPU 等一次 sync_ctx.fence（约 1.1ms），渲染线程拿到就是写完的
 bool H264Decoder::DownloadD3d12(AVFrame *hardware_frame, Frame &frame, QString *error)
 {
     // AV_PIX_FMT_D3D12 的约定：data[0] 指向 AVD3D12VAFrame
@@ -412,7 +422,10 @@ bool H264Decoder::WaitForDecodeFence(const AVD3D12VASyncContext &sync)
     return ::WaitForSingleObject(fence_event_, 50) == WAIT_OBJECT_0;
 }
 
-// 把解码器里已经解好的帧全取出来；硬解出来的纹理当场拷进暂存再读回内存
+// 把解码器里已经解好的帧全取出来
+// 【架构】线程：解码线程｜输入：AVCodecContext 里积压的 AVFrame
+// 输出：硬解交给 DownloadD3d12（不读回），软解直接包成 Frame 走 CPU 三平面
+// 同步：无额外同步，解出来的帧按返回顺序就是显示顺序
 bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
 {
     for (;;)
