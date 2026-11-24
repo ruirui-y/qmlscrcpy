@@ -1,10 +1,10 @@
 {
-    "latest": "0.4.1",
+    "latest": "0.4.2",
     "minimum": "0.1.0",
     "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes": "修复 0.4.0 画面发灰（转色漏了 1.164）；上屏延迟再降 1ms，中位 1.5~2.5ms",
-    "published_at": "2026-11-23",
-    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.4.1/QmlScrcpy_Setup_0.4.1.exe",
-    "size": 50022809,
-    "sha256": "265fc1c84969466eb9ec6d0564a9b40552cd636f157758ee55bdab8122db7602"
+    "notes": "修复「命令行」开关重启失效、偶发一帧撕裂；清掉 OpenGL 时代残留代码",
+    "published_at": "2026-11-24",
+    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.4.2/QmlScrcpy_Setup_0.4.2.exe",
+    "size": 50027332,
+    "sha256": "9e699137b4925fa9018bd7b04aa7dfe1c695a5c77772519ddfc7d7fff81108b0"
 }
