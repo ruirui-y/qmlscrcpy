@@ -64,7 +64,7 @@ void VideoReader::run()
     QString error;                                                                              // 出错原因，往上传给界面
 
     // 先等画布把 D3D12 设备交出来（RHI 初始化比连接晚，最多等 500ms）；
-    // 等不到就交空设备，解码器会退回自建 D3D11 或软解
+    // 等不到就交空设备，解码器直接退软解（D3D11 那条路早就删了）
     void *device = nullptr;
     for (int i = 0; i < 100 && device == nullptr && !stop_.load(); ++i)
     {

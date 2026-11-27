@@ -52,7 +52,7 @@ public:
     int DragPixels() const;                                                                     // 滑动模式下一格滚轮手指移动多少像素，window.ini 里调过的优先
     void SetDragPixels(int pixels);
     bool DecodeHardware() const;                                                                // 是否走 GPU 硬解
-    void SetDecodeHardware(bool hardware);                                                       // 界面切换硬解/软解
+    void SetDecodeHardware(bool hardware);                                                      // 界面切换硬解/软解
     int DecodeThreads() const;                                                                  // 软解线程数（1~8）
     void SetDecodeThreads(int threads);                                                         // 界面调整软解线程数
     int ClickerInterval() const;                                                                // 连点间隔毫秒，0 = 关闭
@@ -88,15 +88,13 @@ public:
                                          const QString &geom_key, int width, int height);       // 后台线程落盘，不卡 UI
 
 private:
-    // 所有配置读写只有这三个入口：键名合法性、默认值、范围钳制都在这里管
+    // 所有配置读写只有这五个入口：键名合法性、默认值、类型解析、范围钳制都在这里管
     QString GetText(const char *key) const;
     int GetInt(const char *key) const;
     double GetDouble(const char *key) const;
     bool GetBool(const char *key) const;
     void SetValue(const char *key, const QVariant &value);
 
-    void EnsureDefaultConfig();
-    void EnsureDefaultWindow();                                                                 // 第一次运行写一份带注释的模板，免得用户对着空文件猜
-    void MigrateLegacyKeys();                                                                   // 老版本写在 window.ini 的设置搬到 config.ini
-    void RenderConfigFile();                                                                     // 按 settings_schema.h 重写整份 config.ini，注释与键始终齐全
+    void EnsureDefaultWindow();                                                                 // 第一次运行写一份模板，免得用户对着空文件猜
+    void RenderConfigFile();                                                                    // 按 settings_schema.h 重写整份 config.ini，注释与键始终齐全
 };

@@ -3,8 +3,6 @@
 #include <QDebug>
 
 #ifdef _WIN32
-#    define WIN32_LEAN_AND_MEAN
-#    define NOMINMAX
 #    include <windows.h>
 #endif
 
@@ -59,11 +57,6 @@ void BossKey::Unbind()
     }
 #endif
     bound_ = false;
-}
-
-bool BossKey::IsBound() const
-{
-    return bound_;
 }
 
 // WM_HOTKEY 到了就发信号；其余消息不管

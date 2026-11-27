@@ -22,7 +22,6 @@ public:
 
     void Unbind();
 
-    bool IsBound() const;
 
 signals:
     // 用户按下了热键（不管哪个线程装的，都在 GUI 线程发出来）

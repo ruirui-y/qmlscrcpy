@@ -398,8 +398,7 @@ bool H264Decoder::DrainFrames(QVector<Frame> &frames, QString *error)
         if (!format_logged)
         {
             format_logged = true;
-            qInfo() << "[decode] 首帧格式" << av_frame->format << "（D3D11 = " << AV_PIX_FMT_D3D11
-                      << " D3D12 = " << AV_PIX_FMT_D3D12 << "）";
+            qInfo() << "[decode] 首帧格式" << av_frame->format << "（D3D12 = " << AV_PIX_FMT_D3D12 << "）";
         }
 
         // 硬解帧只有 d3d12va 一种；留到下一帧就可能被解码器池复用，必须当场把纹理转出去

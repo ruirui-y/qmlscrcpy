@@ -22,7 +22,6 @@ public:
     QString ProposedSerial() const { return proposed_serial_; }                                 // 扫描后默认建议连哪台
     void SetProposedSerial(const QString &serial);
 
-    bool Contains(const QString &serial) const { return online_serials_.contains(serial); }
     QString FirstOnline() const;
     QString PickStartupSerial(const QString &fallback) const;                                   // 上次连过且还在线的优先
 

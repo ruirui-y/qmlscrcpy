@@ -246,12 +246,6 @@ Frame VideoItem::TakePendingFrame(FrameTracePtr *trace_out, qint64 *arrive_us_ou
     return frame;
 }
 
-QSize VideoItem::NotifiedFrameSize() const
-{
-    QMutexLocker locker(&mutex_);
-    return notified_size_;
-}
-
 // 渲染线程调：把 Qt RHI 的 D3D12 设备存下来。FFmpeg 关闭硬件上下文时会 Release 这个设备，
 // 所以我们必须自己先 AddRef 留住一份，否则 Qt 的设备会被提前销毁。
 void VideoItem::ProvideDevice(void *device)

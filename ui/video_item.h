@@ -88,7 +88,6 @@ public:
 
     // 渲染线程 synchronize() 里调：取走最新一帧，没有就返回无效帧
     qsc::stream::Frame TakePendingFrame(FrameTracePtr *trace_out, qint64 *arrive_us_out);
-    QSize NotifiedFrameSize() const;                                                            // 已经报给渲染线程的帧尺寸
     void BeginSyncPass() { probe_->BeginSyncPass(); }                                                // 一轮 synchronize 开始
     qint64 SyncStartUs() const { return probe_->SyncStartUs(); }
     void EndSyncPass(qint64 sync_start_us, qint64 arrive_us, const FrameTracePtr &trace) { probe_->EndSyncPass(sync_start_us, arrive_us, trace); }

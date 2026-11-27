@@ -508,12 +508,5 @@ bool ServerSession::SendControl(const QByteArray &message)
     control_socket_->flush();
     return true;
 }
-// 交出控制 socket，之后归发送方管
-QTcpSocket *ServerSession::TakeControlSocket()
-{
-    QTcpSocket *socket = control_socket_;
-    control_socket_ = nullptr;
-    return socket;
-}
 
 } // namespace qsc::session

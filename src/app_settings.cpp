@@ -5,7 +5,6 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QRegularExpression>
 #include <QSettings>
 #include "base/task_runner.h"
 
@@ -125,14 +124,6 @@ AppSettings::AppSettings(QObject *parent) : QObject(parent)
     // 两个 ini 都要在读写之前就位：config.ini 是用户配置，window.ini 是程序状态
     QDir().mkpath(ConfigDirPath());
     EnsureDefaultWindow();
-    MigrateLegacyKeys();
-    RenderConfigFile();
-}
-
-// 首次运行写一份带注释的 config.ini。内容由 RenderConfigFile 生成，
-// 这里只在文件不存在时兜底，避免构造函数里两条路径写同一个文件
-void AppSettings::EnsureDefaultConfig()
-{
     RenderConfigFile();
 }
 
@@ -152,109 +143,6 @@ void AppSettings::EnsureDefaultWindow()
     }
     file.write(kDefaultWindow);
     file.close();
-}
-
-// 一次性迁移：老版本把"界面改过的设置"写在 window.ini 里，现在统一放 config.ini。
-// 规则：config.ini 里没有这个键才搬（别覆盖用户手改的值），搬完从 window.ini 删掉
-void AppSettings::MigrateLegacyKeys()
-{
-    // 这些前缀属于"设置"，应该待在 config.ini；其余（device、几何）本来就是状态，留在 window.ini
-    // decode/ 只删不搬：老 window.ini 里的 hardware 是死键，config.ini 里的那份才是真的
-    static const char *const kSettingPrefixes[] = {
-        "input/", "keys/", "transfer/", "ui/boss_key", "ui/show_console", "video_wired/", "video_wireless/",
-    };
-    static const char *const kDroppedPrefixes[] = {"decode/"};
-
-    QSettings &window = WindowStore();
-    QSettings &config = ConfigStore();
-    bool moved = false;
-
-    // 先把 window.ini 里的设置搬走
-    const QStringList window_keys = window.allKeys();
-    for (const QString &key : window_keys)
-    {
-        bool is_setting = false;
-        for (const char *prefix : kSettingPrefixes)
-        {
-            if (key.startsWith(QLatin1String(prefix)))
-            {
-                is_setting = true;
-                break;
-            }
-        }
-        if (!is_setting)
-        {
-            continue;
-        }
-
-        const QVariant value = window.value(key);
-        const QString existing = config.value(key).toString();
-        if (existing.isEmpty())
-        {
-            config.setValue(key, value);
-        }
-        window.remove(key);
-        moved = true;
-    }
-
-    // 死键直接删掉（config.ini 里那份才是生效的）
-    for (const QString &key : window.allKeys())
-    {
-        for (const char *prefix : kDroppedPrefixes)
-        {
-            if (key.startsWith(QLatin1String(prefix)))
-            {
-                window.remove(key);
-                moved = true;
-                break;
-            }
-        }
-    }
-
-    // 老的 [video] 段改名成 [video_wired]，和 wireless 那套对齐
-    const QStringList config_keys = config.allKeys();
-    for (const QString &key : config_keys)
-    {
-        if (!key.startsWith(QLatin1String("video/")))
-        {
-            continue;
-        }
-        const QString renamed = QStringLiteral("video_wired/") + key.mid(6);
-        if (!config.contains(renamed))
-        {
-            config.setValue(renamed, config.value(key));
-        }
-        config.remove(key);
-        moved = true;
-    }
-
-    // 清垃圾键：0.4.x 之前的模板用 '#' 写注释，QSettings 把它当键名，sync 时转义成
-    // %23%20%U6EDA... 这种行（用户打开配置看到一堆乱码）。
-    // 真正的键都是 ASCII 的 snake_case，叶子名里出现别的字符就一定是那种垃圾
-    for (const QString &key : config.allKeys())
-    {
-        const QString leaf = key.section(QLatin1Char('/'), -1);
-        static const QRegularExpression kPlainKey(QStringLiteral("^[A-Za-z0-9_]+$"));
-        if (!kPlainKey.match(leaf).hasMatch())
-        {
-            config.remove(key);
-            moved = true;
-        }
-    }
-
-    // async_readback 是读回时代的死键，代码已经不读它了，留着只会让人以为还有这个选项
-    if (config.contains(QStringLiteral("decode/async_readback")))
-    {
-        config.remove(QStringLiteral("decode/async_readback"));
-        moved = true;
-    }
-
-    if (moved)
-    {
-        config.sync();
-        window.sync();
-        qInfo() << "[app] 配置已迁移/清理：设置集中到 config.ini，window.ini 只留窗口状态";
-    }
 }
 
 // 按 schema 重写整份 config.ini：分节、注释、默认值全部来自 settings_schema.h，
