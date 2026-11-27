@@ -6,6 +6,7 @@
 #include "base/task_runner.h"
 
 #include <QSettings>
+#include <QRegularExpression>
 #include <QThread>
 
 namespace
@@ -69,59 +70,63 @@ x=-1
 y=-1
 )";
 
-// 默认配置模板，带注释；只在文件不存在时写一次。所有用户设置都在这里
-const char *const kDefaultConfig = R"(# QmlScrcpy 配置，改完重启生效
-# 日志级别：debug / info / warning / critical
+// 默认配置模板，只在文件不存在时写一次。所有用户设置都在这里
+// 注释只能用分号：QSettings 的 INI 格式认 ';' 不认 '#'，写 '#' 会被当成键名，
+// 下次 sync 时整行变成 %23%20%U6EDA... 这种垃圾键（见 docs/开发日志 P46）
+const char *const kDefaultConfig = R"(; QmlScrcpy 配置，改完重启生效
+; 日志级别：debug / info / warning / critical
 [log]
 level=info
 to_file=true
 keep_days=15
 
-# 滚轮模式：scroll = 发滚动事件（微信这类原生列表），drag = 模拟手指滑动（阅读器、地图）
+; 滚轮模式：scroll = 发滚动事件（微信这类原生列表），drag = 模拟手指滑动（阅读器、地图）
 [input]
 wheel_mode=scroll
-# 滑动模式下一格滚轮手指移动多少像素（太小会被当点击，太大一下翻过头）
+; 滑动模式下一格滚轮手指移动多少像素（太小会被当点击，太大一下翻过头）
 drag_pixels=60
 drag_scale=1.0
 click_interval=0
 pinch_modifier=ctrl
-# 电脑剪贴板一变就自动推到设备（会同步敏感内容，默认关）
+; 电脑剪贴板一变就自动推到设备（会同步敏感内容，默认关）
 clipboard_autosync=false
 
-# 老板键：一键隐藏/恢复所有窗口，格式 Ctrl+Alt+B
-# 控制台开关：1 = 显示命令行窗口
+; 老板键：一键隐藏/恢复所有窗口，格式 Ctrl+Alt+B
+; 控制台开关：1 = 显示命令行窗口
 [ui]
 boss_key=Ctrl+Alt+B
 show_console=false
 
-# 窗口快捷键（空值表示禁用这个键）
+; 窗口快捷键（空值表示禁用这个键）
 [keys]
 back=Esc
 home=Home
 screenshot=Ctrl+Shift+S
 fullscreen=F11
 
-# 拖文件传到设备上的哪个目录
+; 拖文件传到设备上的哪个目录
 [transfer]
 upload_dir=/sdcard/Download/QmlScrcpy
 
-# 视频采集（有线）：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
+; 视频采集（有线）：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
 [video_wired]
 max_size=0
 bit_rate=8000000
-# 帧率上限：0 = 不限。它只是上限，能不能跑到看应用自己：
-#   应用锁 60Hz 时设 120 也只有 58 帧；抖音切到 120Hz 后能到 97 帧
+; 帧率上限：0 = 不限。它只是上限，能不能跑到看应用自己：
+;   应用锁 60Hz 时设 120 也只有 58 帧；抖音切到 120Hz 后能到 97 帧
 max_fps=0
 
-# 无线连接单独一套（串号里带冒号就用这组）：6M 在局域网下够用且不排队
-# 码率同时也约束帧率：实测 2M 只出 72 帧、6M 94 帧、12M 114 帧
+; 无线连接单独一套（串号里带冒号就用这组）：6M 在局域网下够用且不排队
+; 码率同时也约束帧率：实测 2M 只出 72 帧、6M 94 帧、12M 114 帧
 [video_wireless]
 bit_rate=6000000
 max_fps=0
 
-# 硬解：1 = d3d12va 硬解，0 = 软解
+; 硬解：1 = d3d12va 硬解，0 = 软解
+; 软解线程数：1~8，只在软解时生效
 [decode]
-hardware=1)";
+hardware=1
+threads=4)";
 
 } // namespace
 
@@ -245,11 +250,32 @@ void AppSettings::MigrateLegacyKeys()
         moved = true;
     }
 
+    // 清垃圾键：0.4.x 之前的模板用 '#' 写注释，QSettings 把它当键名，sync 时转义成
+    // %23%20%U6EDA... 这种行（用户打开配置看到一堆乱码）。
+    // 真正的键都是 ASCII 的 snake_case，叶子名里出现别的字符就一定是那种垃圾
+    for (const QString &key : config.allKeys())
+    {
+        const QString leaf = key.section(QLatin1Char('/'), -1);
+        static const QRegularExpression kPlainKey(QStringLiteral("^[A-Za-z0-9_]+$"));
+        if (!kPlainKey.match(leaf).hasMatch())
+        {
+            config.remove(key);
+            moved = true;
+        }
+    }
+
+    // async_readback 是读回时代的死键，代码已经不读它了，留着只会让人以为还有这个选项
+    if (config.contains(QStringLiteral("decode/async_readback")))
+    {
+        config.remove(QStringLiteral("decode/async_readback"));
+        moved = true;
+    }
+
     if (moved)
     {
         config.sync();
         window.sync();
-        qInfo() << "[app] 配置已迁移：设置集中到 config.ini，window.ini 只留窗口状态";
+        qInfo() << "[app] 配置已迁移/清理：设置集中到 config.ini，window.ini 只留窗口状态";
     }
 }
 
