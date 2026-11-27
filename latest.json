@@ -1,10 +1,10 @@
 {
-    "latest": "0.4.2",
+    "latest": "0.4.3",
     "minimum": "0.1.0",
     "url": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases",
-    "notes": "修复「命令行」开关重启失效、偶发一帧撕裂；清掉 OpenGL 时代残留代码",
-    "published_at": "2026-11-24",
-    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.4.2/QmlScrcpy_Setup_0.4.2.exe",
-    "size": 50027332,
-    "sha256": "9e699137b4925fa9018bd7b04aa7dfe1c695a5c77772519ddfc7d7fff81108b0"
+    "notes": "修复关掉主窗口后进程不退、配置文件出现 %23 乱码；配置写错会明确告警",
+    "published_at": "2026-11-27",
+    "exe": "https://gitee.com/bai-maxifeng/qmlscrcpy/releases/download/v0.4.3/QmlScrcpy_Setup_0.4.3.exe",
+    "size": 50024641,
+    "sha256": "443585beabc495f516475dfbc22958e9518b5afa7a616000937afa5293abdc35"
 }
