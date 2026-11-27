@@ -19,6 +19,7 @@ add_executable(QmlScrcpy ${qs_subsystem}
     playback_settings.h
     app_settings.cpp
     app_settings.h
+    settings_schema.h
     boss_key.cpp
     boss_key.h
     device_controller.cpp

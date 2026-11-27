@@ -1,13 +1,13 @@
 #include "app_settings.h"
 
+#include "settings_schema.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include "base/task_runner.h"
-
-#include <QSettings>
 #include <QRegularExpression>
-#include <QThread>
+#include <QSettings>
+#include "base/task_runner.h"
 
 namespace
 {
@@ -24,7 +24,7 @@ QString FilePathInConfigDir(const char *file_name)
     return ConfigDirPath() + QLatin1Char('/') + QString::fromLatin1(file_name);
 }
 
-// 用户配置：只读，绝不让 QSettings 改写，否则注释会被转义成 %23 之类
+// 用户配置：程序只在用户改设置时写它，平时只读
 QSettings &ConfigStore()
 {
     static QSettings settings(FilePathInConfigDir("config.ini"), QSettings::IniFormat);
@@ -36,6 +36,54 @@ QSettings &WindowStore()
 {
     static QSettings settings(FilePathInConfigDir("window.ini"), QSettings::IniFormat);
     return settings;
+}
+
+// 按 key 找一条 schema；拼错键名时返回空，调用方打一条警告
+const qsc::app::SettingEntry *FindEntry(const QString &key)
+{
+    for (const qsc::app::SettingEntry &entry : qsc::app::kSettings)
+    {
+        if (key == QLatin1String(entry.key))
+        {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+// schema 里的默认值统一是字符串，读的时候按类型解析
+QVariant ParseFallback(const qsc::app::SettingEntry &entry)
+{
+    const QString text = QString::fromLatin1(entry.fallback);
+    switch (entry.kind)
+    {
+    case qsc::app::SettingKind::Int:
+        return text.toInt();
+    case qsc::app::SettingKind::Double:
+        return text.toDouble();
+    case qsc::app::SettingKind::Bool:
+        return text == QLatin1String("true");
+    case qsc::app::SettingKind::Text:
+    default:
+        return text;
+    }
+}
+
+// 把值序列化成 ini 里写的文本；bool 统一写 true/false，别写成 1/0
+QString FormatValue(const qsc::app::SettingEntry &entry, const QVariant &value)
+{
+    switch (entry.kind)
+    {
+    case qsc::app::SettingKind::Bool:
+        return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    case qsc::app::SettingKind::Int:
+        return QString::number(value.toInt());
+    case qsc::app::SettingKind::Double:
+        return QString::number(value.toDouble(), 'g', 6);
+    case qsc::app::SettingKind::Text:
+    default:
+        return value.toString();
+    }
 }
 
 // window.ini 的模板：只放"这台机器上的状态"，所有用户设置都在 config.ini
@@ -70,95 +118,25 @@ x=-1
 y=-1
 )";
 
-// 默认配置模板，只在文件不存在时写一次。所有用户设置都在这里
-// 注释只能用分号：QSettings 的 INI 格式认 ';' 不认 '#'，写 '#' 会被当成键名，
-// 下次 sync 时整行变成 %23%20%U6EDA... 这种垃圾键（见 docs/开发日志 P46）
-const char *const kDefaultConfig = R"(; QmlScrcpy 配置，改完重启生效
-; 日志级别：debug / info / warning / critical
-[log]
-level=info
-to_file=true
-keep_days=15
-
-; 滚轮模式：scroll = 发滚动事件（微信这类原生列表），drag = 模拟手指滑动（阅读器、地图）
-[input]
-wheel_mode=scroll
-; 滑动模式下一格滚轮手指移动多少像素（太小会被当点击，太大一下翻过头）
-drag_pixels=60
-drag_scale=1.0
-click_interval=0
-pinch_modifier=ctrl
-; 电脑剪贴板一变就自动推到设备（会同步敏感内容，默认关）
-clipboard_autosync=false
-
-; 老板键：一键隐藏/恢复所有窗口，格式 Ctrl+Alt+B
-; 控制台开关：1 = 显示命令行窗口
-[ui]
-boss_key=Ctrl+Alt+B
-show_console=false
-
-; 窗口快捷键（空值表示禁用这个键）
-[keys]
-back=Esc
-home=Home
-screenshot=Ctrl+Shift+S
-fullscreen=F11
-
-; 拖文件传到设备上的哪个目录
-[transfer]
-upload_dir=/sdcard/Download/QmlScrcpy
-
-; 视频采集（有线）：长边上限，0 = 设备原生分辨率（更清晰，码率也要跟着涨）
-[video_wired]
-max_size=0
-bit_rate=8000000
-; 帧率上限：0 = 不限。它只是上限，能不能跑到看应用自己：
-;   应用锁 60Hz 时设 120 也只有 58 帧；抖音切到 120Hz 后能到 97 帧
-max_fps=0
-
-; 无线连接单独一套（串号里带冒号就用这组）：6M 在局域网下够用且不排队
-; 码率同时也约束帧率：实测 2M 只出 72 帧、6M 94 帧、12M 114 帧
-[video_wireless]
-bit_rate=6000000
-max_fps=0
-
-; 硬解：1 = d3d12va 硬解，0 = 软解
-; 软解线程数：1~8，只在软解时生效
-[decode]
-hardware=1
-threads=4)";
-
 } // namespace
 
 AppSettings::AppSettings(QObject *parent) : QObject(parent)
 {
     // 两个 ini 都要在读写之前就位：config.ini 是用户配置，window.ini 是程序状态
     QDir().mkpath(ConfigDirPath());
-    EnsureDefaultConfig();
     EnsureDefaultWindow();
     MigrateLegacyKeys();
+    RenderConfigFile();
 }
 
-// config.ini 不存在时写一份带注释的模板
+// 首次运行写一份带注释的 config.ini。内容由 RenderConfigFile 生成，
+// 这里只在文件不存在时兜底，避免构造函数里两条路径写同一个文件
 void AppSettings::EnsureDefaultConfig()
 {
-    // 已经存在就不动，用户改过的值不能被覆盖
-    if (QFile::exists(ConfigPath()))
-    {
-        return;
-    }
-
-    QDir().mkpath(ConfigDirPath());
-    QFile file(ConfigPath());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-    {
-        return;
-    }
-    file.write(kDefaultConfig);
-    file.close();
+    RenderConfigFile();
 }
 
-// window.ini 不存在时写一份带注释的模板，和 config.ini 一样
+// window.ini 不存在时写一份模板；存在的就别动
 void AppSettings::EnsureDefaultWindow()
 {
     if (QFile::exists(WindowPath()))
@@ -279,6 +257,77 @@ void AppSettings::MigrateLegacyKeys()
     }
 }
 
+// 按 schema 重写整份 config.ini：分节、注释、默认值全部来自 settings_schema.h，
+// 值取当前文件里的（没有就用默认值）。表里没登记的键原样保留在原来的段里
+void AppSettings::RenderConfigFile()
+{
+    QSettings &config = ConfigStore();
+    config.sync();                                                                              // 先把内存里的改动落盘，免得下面重写时丢掉
+
+    QStringList lines;
+    QByteArray section;
+    bool first_section = true;
+    for (const qsc::app::SettingEntry &entry : qsc::app::kSettings)
+    {
+        if (entry.in_window)
+        {
+            continue;                                                                           // window.ini 的条目不进 config.ini
+        }
+        if (section != QByteArray(entry.section))
+        {
+            section = entry.section;
+            if (!first_section)
+            {
+                lines << QString();
+            }
+            first_section = false;
+            lines << QStringLiteral("[%1]").arg(QString::fromLatin1(entry.section));
+        }
+        if (entry.comment[0] != '\0')
+        {
+            lines << QStringLiteral("; %1").arg(QString::fromUtf8(entry.comment));
+        }
+
+        const QString key = QString::fromLatin1(entry.key);
+        const QString leaf = key.section(QLatin1Char('/'), -1);
+        const QVariant raw = config.value(key);
+        const QVariant value = raw.isValid() ? raw : ParseFallback(entry);
+        lines << QStringLiteral("%1=%2").arg(leaf, FormatValue(entry, value));
+    }
+
+    // 表里没有的键：按原段名原样附在最后，不丢用户手加的条目
+    QMap<QString, QStringList> unknown;
+    for (const QString &key : config.allKeys())
+    {
+        if (FindEntry(key) != nullptr)
+        {
+            continue;
+        }
+        const int slash = key.indexOf(QLatin1Char('/'));
+        const QString group = slash > 0 ? key.left(slash) : QStringLiteral("misc");
+        const QString leaf = slash > 0 ? key.mid(slash + 1) : key;
+        unknown[group] << QStringLiteral("%1=%2").arg(leaf, config.value(key).toString());
+    }
+    for (auto it = unknown.cbegin(); it != unknown.cend(); ++it)
+    {
+        lines << QString();
+        lines << QStringLiteral("; 下面这个段不在配置表里，原样保留")
+              << QStringLiteral("[%1]").arg(it.key());
+        lines << it.value();
+    }
+
+    QFile file(ConfigPath());
+    // 不能用 QIODevice::Text：它会把我们写的 \r\n 再翻一次，变成 \r\r\n（文件里每行之间多一个空行）
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+        qWarning() << "[app] 写不了配置文件" << ConfigPath();
+        return;
+    }
+    file.write(lines.join(QStringLiteral("\r\n")).toUtf8());
+    file.write("\r\n");
+    file.close();
+}
+
 QString AppSettings::ConfigPath() const
 {
     return FilePathInConfigDir("config.ini");
@@ -289,227 +338,326 @@ QString AppSettings::WindowPath() const
     return FilePathInConfigDir("window.ini");
 }
 
+QString AppSettings::GetText(const char *key) const
+{
+    const qsc::app::SettingEntry *entry = FindEntry(QString::fromLatin1(key));
+    if (entry == nullptr)
+    {
+        qWarning() << "[settings] 配置表里没有这个键" << key;
+        return QString();
+    }
+    QSettings &store = entry->in_window ? WindowStore() : ConfigStore();
+    const QVariant raw = store.value(QString::fromLatin1(entry->key));
+    return raw.isValid() ? raw.toString() : ParseFallback(*entry).toString();
+}
+
+int AppSettings::GetInt(const char *key) const
+{
+    const qsc::app::SettingEntry *entry = FindEntry(QString::fromLatin1(key));
+    if (entry == nullptr)
+    {
+        qWarning() << "[settings] 配置表里没有这个键" << key;
+        return 0;
+    }
+    QSettings &store = entry->in_window ? WindowStore() : ConfigStore();
+    bool ok = true;
+    const QVariant raw = store.value(QString::fromLatin1(entry->key));
+    int value = raw.isValid() ? raw.toInt(&ok) : ParseFallback(*entry).toInt();
+    if (!ok)
+    {
+        // 用户手改成了 abc 这种：报一条明确警告，回落到默认值，别静默给 0
+        qWarning() << "[settings]" << entry->key << "不是整数（当前" << raw.toString() << "），按默认值"
+                   << entry->fallback << "处理";
+        value = ParseFallback(*entry).toInt();
+    }
+    if (entry->min_value != qsc::app::kNoLimit || entry->max_value != qsc::app::kNoLimit)
+    {
+        const int clamped = qBound(entry->min_value, value, entry->max_value);
+        if (clamped != value)
+        {
+            qWarning() << "[settings]" << entry->key << "超出范围" << entry->min_value << "~" << entry->max_value
+                       << "，按" << clamped << "处理";
+            value = clamped;
+        }
+    }
+    return value;
+}
+
+double AppSettings::GetDouble(const char *key) const
+{
+    const qsc::app::SettingEntry *entry = FindEntry(QString::fromLatin1(key));
+    if (entry == nullptr)
+    {
+        qWarning() << "[settings] 配置表里没有这个键" << key;
+        return 0.0;
+    }
+    QSettings &store = entry->in_window ? WindowStore() : ConfigStore();
+    bool ok = true;
+    const QVariant raw = store.value(QString::fromLatin1(entry->key));
+    double value = raw.isValid() ? raw.toDouble(&ok) : ParseFallback(*entry).toDouble();
+    if (!ok)
+    {
+        qWarning() << "[settings]" << entry->key << "不是小数（当前" << raw.toString() << "），按默认值"
+                   << entry->fallback << "处理";
+        value = ParseFallback(*entry).toDouble();
+    }
+    return value;
+}
+
+bool AppSettings::GetBool(const char *key) const
+{
+    const qsc::app::SettingEntry *entry = FindEntry(QString::fromLatin1(key));
+    if (entry == nullptr)
+    {
+        qWarning() << "[settings] 配置表里没有这个键" << key;
+        return false;
+    }
+    QSettings &store = entry->in_window ? WindowStore() : ConfigStore();
+    const QVariant raw = store.value(QString::fromLatin1(entry->key));
+    if (!raw.isValid())
+    {
+        return ParseFallback(*entry).toBool();
+    }
+    // QVariant::toBool 会把任何非零/非空当 true，这里只认明确的几种写法
+    const QString text = raw.toString().trimmed().toLower();
+    if (text == QLatin1String("true") || text == QLatin1String("1"))
+    {
+        return true;
+    }
+    if (text == QLatin1String("false") || text == QLatin1String("0"))
+    {
+        return false;
+    }
+    qWarning() << "[settings]" << entry->key << "不是 true/false（当前" << raw.toString() << "），按默认值"
+               << entry->fallback << "处理";
+    return ParseFallback(*entry).toBool();
+}
+
+void AppSettings::SetValue(const char *key, const QVariant &value)
+{
+    const qsc::app::SettingEntry *entry = FindEntry(QString::fromLatin1(key));
+    if (entry == nullptr)
+    {
+        qWarning() << "[settings] 配置表里没有这个键" << key;
+        return;
+    }
+
+    QVariant stored = value;
+    const bool has_range = entry->min_value != qsc::app::kNoLimit || entry->max_value != qsc::app::kNoLimit;
+    if (entry->kind == qsc::app::SettingKind::Int && has_range)
+    {
+        stored = qBound(entry->min_value, value.toInt(), entry->max_value);
+    }
+
+    QSettings &store = entry->in_window ? WindowStore() : ConfigStore();
+    store.setValue(QString::fromLatin1(entry->key), stored);
+    store.sync();
+}
+
 // 日志级别：配置里写字符串，解析交给调用方
 QString AppSettings::LogLevelText() const
 {
-    return ConfigStore().value(QStringLiteral("log/level"), QStringLiteral("info")).toString();
+    return GetText("log/level");
 }
 
 bool AppSettings::LogToFile() const
 {
-    return ConfigStore().value(QStringLiteral("log/to_file"), true).toBool();
+    return GetBool("log/to_file");
 }
 
 int AppSettings::LogKeepDays() const
 {
-    return ConfigStore().value(QStringLiteral("log/keep_days"), 15).toInt();
+    return GetInt("log/keep_days");
 }
 
-// 滚轮模式：只在 config.ini，界面改过就直接覆盖默认值
 QString AppSettings::WheelMode() const
 {
-    return ConfigStore().value(QStringLiteral("input/wheel_mode"), QStringLiteral("scroll")).toString();
+    return GetText("input/wheel_mode");
 }
 
 void AppSettings::SetWheelMode(const QString &mode)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("input/wheel_mode"), mode);
-    store.sync();
+    SetValue("input/wheel_mode", mode);
 }
 
 // 拖动模式一格滚轮拖多少像素：太小会被当点击，太大一下翻过头
 int AppSettings::DragPixels() const
 {
-    const int pixels = ConfigStore().value(QStringLiteral("input/drag_pixels"), 60).toInt();
-    return pixels > 0 ? pixels : 60;
+    return GetInt("input/drag_pixels");
 }
 
-// 记下界面里调过的滑动像素
 void AppSettings::SetDragPixels(int pixels)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("input/drag_pixels"), pixels);
-    store.sync();
+    SetValue("input/drag_pixels", pixels);
 }
 
 // 左键拖拽倍率：1.0 = 保持 1:1 手感
 double AppSettings::DragScale() const
 {
-    return ConfigStore().value(QStringLiteral("input/drag_scale"), 1.0).toDouble();
+    return GetDouble("input/drag_scale");
 }
 
-// 记下拖拽倍率，改完立即生效
 void AppSettings::SetDragScale(double scale)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("input/drag_scale"), scale);
-    store.sync();
+    SetValue("input/drag_scale", scale);
 }
 
 // 捏合修饰键：Ctrl 默认；填 none 关掉这个功能
 QString AppSettings::PinchModifier() const
 {
-    return ConfigStore().value(QStringLiteral("input/pinch_modifier"), QStringLiteral("ctrl")).toString();
+    return GetText("input/pinch_modifier");
 }
 
-// 记下捏合修饰键，立即生效
 void AppSettings::SetPinchModifier(const QString &modifier)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("input/pinch_modifier"), modifier);
-    store.sync();
+    SetValue("input/pinch_modifier", modifier);
 }
 
 // 电脑剪贴板一变就推到设备（默认关：某些场景会把敏感内容同步过去）
 bool AppSettings::ClipboardAutoSync() const
 {
-    return ConfigStore().value(QStringLiteral("input/clipboard_autosync"), false).toBool();
+    return GetBool("input/clipboard_autosync");
 }
 
 // 版本检查地址：留空表示走内置源列表（Gitee → jsDelivr → GitHub）
 QString AppSettings::UpdateUrl() const
 {
-    return ConfigStore().value(QStringLiteral("update/url")).toString();
+    return GetText("update/url");
 }
+
 // 拖文件上传的目标目录：默认 Download/QmlScrcpy
 QString AppSettings::UploadDir() const
 {
-    const QString value = ConfigStore().value(QStringLiteral("transfer/upload_dir")).toString();
-    return value.isEmpty() ? QStringLiteral("/sdcard/Download/QmlScrcpy") : value;
+    const QString dir = GetText("transfer/upload_dir");
+    return dir.isEmpty() ? QStringLiteral("/sdcard/Download/QmlScrcpy") : dir;
 }
 
-// 记下界面里改的上传目录
 void AppSettings::SetUploadDir(const QString &dir)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("transfer/upload_dir"), dir);
-    store.sync();
+    SetValue("transfer/upload_dir", dir);
 }
 
-// 窗口快捷键：空字符串表示禁用这个键
+// 窗口快捷键：name 取 back / home / screenshot / fullscreen
 QString AppSettings::Shortcut(const QString &name) const
 {
-    return ConfigStore().value(QStringLiteral("keys/%1").arg(name)).toString();
+    const QByteArray key = QStringLiteral("keys/%1").arg(name).toLatin1();
+    return GetText(key.constData());
 }
 
-// 记下界面里改的快捷键（空字符串表示禁用）
 void AppSettings::SetShortcut(const QString &name, const QString &sequence)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("keys/%1").arg(name), sequence);
-    store.sync();
+    const QByteArray key = QStringLiteral("keys/%1").arg(name).toLatin1();
+    SetValue(key.constData(), sequence);
 }
 
 // 老板键的组合：只在 config.ini
 QString AppSettings::BossKeyText() const
 {
-    return ConfigStore().value(QStringLiteral("ui/boss_key")).toString();
+    return GetText("ui/boss_key");
 }
 
-// 记下界面里改的老板键
 void AppSettings::SetBossKeyText(const QString &text)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("ui/boss_key"), text);
-    store.sync();
+    SetValue("ui/boss_key", text);
 }
 
 // 控制台窗口要不要显示：默认不显示，只有用户在界面上打开过才显示
 bool AppSettings::ShowConsole() const
 {
-    return ConfigStore().value(QStringLiteral("ui/show_console")).toBool();
+    return GetBool("ui/show_console");
 }
 
-// 记下用户的选择，下次启动照这个来
 void AppSettings::SetShowConsole(bool show)
 {
-    QSettings &store = ConfigStore();                                                           // 读在 ConfigStore，写也必须写这里，否则重启就丢
-    store.setValue(QStringLiteral("ui/show_console"), show);
-    store.sync();
+    SetValue("ui/show_console", show);
 }
+
 // 上次连上的设备串号（有线是序列号，无线是 IP:端口）
 QString AppSettings::LastSerial() const
 {
-    return WindowStore().value(QStringLiteral("device/last_serial")).toString();
+    return GetText("device/last_serial");
 }
 
-// 记下这次连的设备串号，下次启动优先连它
 void AppSettings::SetLastSerial(const QString &serial)
 {
-    QSettings &store = WindowStore();
-    store.setValue(QStringLiteral("device/last_serial"), serial);
-    store.sync();
+    SetValue("device/last_serial", serial);
 }
 
-// 采集长边上限：0 表示不缩放
-int AppSettings::VideoMaxSize() const
-{
-    return ConfigStore().value(QStringLiteral("video_wired/max_size"), 0).toInt();
-}
-
-// 串号里带冒号（IP:端口）就算无线连接，用来选哪一套画质参数
+// 串号里带冒号（IP:端口）就算无线，两套画质参数分开存
 QString AppSettings::VideoProfile(const QString &serial)
 {
     return serial.contains(QLatin1Char(':')) ? QStringLiteral("wireless") : QStringLiteral("wired");
 }
 
-// 码率只在 config.ini，界面改过就直接覆盖默认值
 int AppSettings::VideoBitRate(const QString &profile) const
 {
-    const QString key = QStringLiteral("video_%1/bit_rate").arg(profile.isEmpty() ? QStringLiteral("wired") : profile);
-    const int configured = ConfigStore().value(key, -1).toInt();
-    return configured > 0 ? configured : ConfigStore().value(QStringLiteral("video_wired/bit_rate"), 8000000).toInt();
+    const QByteArray key = QStringLiteral("video_%1/bit_rate")
+                               .arg(profile.isEmpty() ? QStringLiteral("wired") : profile)
+                               .toLatin1();
+    return GetInt(key.constData());
 }
 
-// 记下界面里调的码率
 void AppSettings::SetVideoBitRate(int bit_rate, const QString &profile)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("video_%1/bit_rate").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), bit_rate);
-    store.sync();
+    const QByteArray key = QStringLiteral("video_%1/bit_rate")
+                               .arg(profile.isEmpty() ? QStringLiteral("wired") : profile)
+                               .toLatin1();
+    SetValue(key.constData(), bit_rate);
 }
 
-// 采集帧率上限：0 表示不限，120Hz 屏设备能跑到 120fps
 int AppSettings::VideoMaxFps(const QString &profile) const
 {
-    const QString key = QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile);
-    // 用 -1 当"没调过"的哨兵：0 是合法值（不限帧），不能拿 0 当默认
-    const int configured = ConfigStore().value(key, -1).toInt();
-    if (configured >= 0)
-    {
-        return configured;
-    }
-    return ConfigStore().value(QStringLiteral("video_wired/max_fps"), 0).toInt();
+    const QByteArray key = QStringLiteral("video_%1/max_fps")
+                               .arg(profile.isEmpty() ? QStringLiteral("wired") : profile)
+                               .toLatin1();
+    return GetInt(key.constData());
 }
 
-// 记下界面里调的帧率上限
 void AppSettings::SetVideoMaxFps(int max_fps, const QString &profile)
 {
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("video_%1/max_fps").arg(profile.isEmpty() ? QStringLiteral("wired") : profile), max_fps);
-    store.sync();
+    const QByteArray key = QStringLiteral("video_%1/max_fps")
+                               .arg(profile.isEmpty() ? QStringLiteral("wired") : profile)
+                               .toLatin1();
+    SetValue(key.constData(), max_fps);
 }
 
-// 删掉某个姿势的窗口尺寸记录：下次定尺寸时就回到默认值（横屏 900x400、竖屏按帧比例）
-void AppSettings::ResetVideoGeometry(const QString &key)
+// 长边上限，0 = 设备原生分辨率
+int AppSettings::VideoMaxSize() const
 {
-    QSettings &store = WindowStore();
-    store.remove(key);
-    store.sync();
+    return GetInt("video_wired/max_size");
 }
 
-// 恢复默认配置：window.ini 清空、config.ini 删掉（下次启动会重新生成带注释的模板）
-bool AppSettings::ResetAllConfig()
+// 是否走 GPU 硬解
+bool AppSettings::DecodeHardware() const
 {
-    // 先把 QSettings 里的内容清掉并落盘，否则对象析构时会把旧值写回去
-    QSettings &window_store = WindowStore();
-    window_store.clear();
-    window_store.sync();
+    return GetBool("decode/hardware");
+}
 
-    const bool removed = QFile::remove(ConfigPath());
-    EnsureDefaultConfig();
-    return removed;
+void AppSettings::SetDecodeHardware(bool hardware)
+{
+    SetValue("decode/hardware", hardware);
+}
+
+// 软解线程数：1~8，范围钳制在 schema 里
+int AppSettings::DecodeThreads() const
+{
+    return GetInt("decode/threads");
+}
+
+void AppSettings::SetDecodeThreads(int threads)
+{
+    SetValue("decode/threads", threads);
+}
+
+// 连点间隔：0 表示关闭，按住空格时按这个间隔在鼠标位置连点
+int AppSettings::ClickerInterval() const
+{
+    return GetInt("input/click_interval");
+}
+
+void AppSettings::SetClickerInterval(int ms)
+{
+    SetValue("input/click_interval", ms);
 }
 
 // 读窗口尺寸；没记录过返回空矩形
@@ -547,6 +695,14 @@ void AppSettings::SaveVideoGeometry(const QString &key, int x, int y, int width,
     store.endGroup();
     // 不调 sync()：本函数在"拖动/缩放停手"后触发，同步落盘会在 GUI 线程卡一下。
     // QSettings 自己会批次写盘，程序正常退出时也会 flush。
+}
+
+// 删掉某个姿势的窗口尺寸记录：下次定尺寸时就回到默认值
+void AppSettings::ResetVideoGeometry(const QString &key)
+{
+    QSettings &store = WindowStore();
+    store.remove(key);
+    store.sync();
 }
 
 // 位置和尺寸一起丢到后台线程写盘。
@@ -605,40 +761,18 @@ void AppSettings::SaveVideoPosition(const QString &key, int x, int y)
     // 同上：位置保存也在拖动结束时触发，别同步落盘
 }
 
-// 是否走 GPU 硬解：1 硬解（默认），0 软解
-bool AppSettings::DecodeHardware() const
+// 恢复默认配置：window.ini 清空、config.ini 重写成模板
+bool AppSettings::ResetAllConfig()
 {
-    return ConfigStore().value(QStringLiteral("decode/hardware"), 1).toInt() != 0;
-}
+    // 先把 QSettings 里的内容清掉并落盘，否则对象析构时会把旧值写回去
+    QSettings &window_store = WindowStore();
+    window_store.clear();
+    window_store.sync();
 
-void AppSettings::SetDecodeHardware(bool hardware)
-{
-    ConfigStore().setValue(QStringLiteral("decode/hardware"), hardware ? 1 : 0);
-}
+    QSettings &config = ConfigStore();
+    config.clear();
+    config.sync();
 
-// 软解线程数：1~8，默认 4（少了送包会阻塞，多了攒帧变多）
-int AppSettings::DecodeThreads() const
-{
-    const int value = ConfigStore().value(QStringLiteral("decode/threads"), 4).toInt();
-    return qBound(1, value, 8);
-}
-
-void AppSettings::SetDecodeThreads(int threads)
-{
-    ConfigStore().setValue(QStringLiteral("decode/threads"), qBound(1, threads, 8));
-}
-
-
-
-// 连点间隔：0 表示关闭，按住空格时按这个间隔在鼠标位置连点
-int AppSettings::ClickerInterval() const
-{
-    return ConfigStore().value(QStringLiteral("input/click_interval"), 0).toInt();
-}
-
-void AppSettings::SetClickerInterval(int ms)
-{
-    QSettings &store = ConfigStore();
-    store.setValue(QStringLiteral("input/click_interval"), ms);
-    store.sync();
+    RenderConfigFile();
+    return true;
 }
